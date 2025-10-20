@@ -1,0 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&family=Playfair+Display:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-background: 276 30% 18%;
+    --color-foreground: 50 30% 92%;
+    --color-primary: 276 30% 18%;
+    --color-primary-foreground: 50 30% 92%;
+    --color-secondary: 45 63% 52%;
+    --color-secondary-foreground: 276 30% 18%;
+    --color-tertiary: 50 30% 92%;
+    --color-tertiary-foreground: 276 30% 18%;
+    --color-neutral: 280 12% 25%;
+    --color-neutral-foreground: 45 63% 52%;
+    --color-muted: 280 12% 25%;
+    --color-muted-foreground: 276 10% 70%;
+    --color-accent: 45 63% 52%;
+    --color-accent-foreground: 276 30% 18%;
+    --color-destructive: 0 84% 60%;
+    --color-destructive-foreground: 50 30% 92%;
+    --color-success: 145 38% 45%;
+    --color-success-foreground: 50 30% 92%;
+    --color-warning: 35 90% 55%;
+    --color-warning-foreground: 276 30% 18%;
+    --color-border: 280 12% 25%;
+    --color-input: 280 12% 25%;
+    --color-ring: 45 63% 52%;
+    --color-card: 276 35% 24%;
+    --color-card-foreground: 50 30% 92%;
+    --color-popover: 276 30% 18%;
+    --color-popover-foreground: 50 30% 92%;
+    --font-sans: "Lato", sans-serif;
+    --font-serif: "Playfair", serif;
+    --radius: 0.75rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-serif);
+    @apply text-foreground;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
