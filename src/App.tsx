@@ -17,6 +17,7 @@ import Payouts from './components/creator/Payouts';
 import ProfilePage from './components/profile/ProfilePage';
 import { Toaster } from './components/ui/toaster';
 
+
 function App() {
   const { isAuthenticated, initialize } = useAuthStore();
   const { hasCompletedOnboarding } = useAppStore();
