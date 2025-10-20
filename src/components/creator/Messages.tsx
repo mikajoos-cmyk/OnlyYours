@@ -54,6 +54,42 @@ export default function Messages() {
       sender: 'user',
       timestamp: '14:35',
     },
+{
+      id: '4',
+      text: 'Hallo! Ich bin ein großer Fan!',
+      sender: 'user',
+      timestamp: '14:30',
+    },
+    {
+      id: '5',
+      text: 'Vielen Dank für deine Unterstützung! 💛',
+      sender: 'creator',
+      timestamp: '14:32',
+    },
+    {
+      id: '6',
+      text: 'Danke für die tollen Inhalte!',
+      sender: 'user',
+      timestamp: '14:35',
+    },
+{
+      id: '7',
+      text: 'Hallo! Ich bin ein großer Fan!',
+      sender: 'user',
+      timestamp: '14:30',
+    },
+    {
+      id: '8',
+      text: 'Vielen Dank für deine Unterstützung! 💛',
+      sender: 'creator',
+      timestamp: '14:32',
+    },
+    {
+      id: '9',
+      text: 'Danke für die tollen Inhalte!',
+      sender: 'user',
+      timestamp: '14:35',
+    },
   ];
 
   const handleSend = () => {
@@ -77,11 +113,11 @@ export default function Messages() {
   const selectedChatData = chats.find((c) => c.id === selectedChat);
 
   return (
-    <div className="h-[calc(100vh-4rem)] md:h-[calc(100vh-8rem)] py-8 px-4">
-      <div className="max-w-6xl mx-auto h-full">
+    <div className="h-[calc(100vh-9rem)] md:h-[calc(100vh-4rem)] py-8 px-4 flex flex-col">
+      <div className="max-w-6xl mx-auto h-full flex flex-col flex-1">
         <h1 className="text-3xl font-serif text-foreground mb-8 hidden lg:block">Nachrichten</h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100%-5rem)] lg:h-[calc(100%-4rem)]">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
           {/* Chat List */}
           <Card className={`bg-card border-border lg:col-span-1 overflow-hidden ${selectedChat ? 'hidden lg:block' : 'block'}`}>
             <div className="h-full overflow-y-auto">

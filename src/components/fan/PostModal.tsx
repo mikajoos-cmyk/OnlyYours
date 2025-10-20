@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Dialog, DialogContent } from '../ui/dialog';
+import { useState, useEffect } from 'react';
+// import { Dialog, DialogContent } from '../ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -15,13 +15,26 @@ interface PostModalProps {
 }
 
 export default function PostModal({ isOpen, onClose, post: initialPost, creator, allPosts }: PostModalProps) {
-  const [currentPostIndex, setCurrentPostIndex] = useState(allPosts.findIndex(p => p.id === initialPost.id));
-  const [isLiked, setIsLiked] = useState(false);
-  const [likes, setLikes] = useState(initialPost.likes);
+//   const [currentPostIndex, setCurrentPostIndex] = useState(allPosts.findIndex(p => p.id === initialPost.id));
+//   const [isLiked, setIsLiked] = useState(false);
+//   const [likes, setLikes] = useState(initialPost.likes);
+const [currentPostIndex, setCurrentPostIndex] = useState(0);
+const [isLiked, setIsLiked] = useState(false);
+const [likes, setLikes] = useState(0);
   const [comment, setComment] = useState('');
   const [showComments, setShowComments] = useState(false);
 
-  const currentPost = allPosts[currentPostIndex];
+useEffect(() => {
+  if (isOpen && initialPost) {
+    const newIndex = allPosts.findIndex(p => p.id === initialPost.id);
+    if (newIndex !== -1) {
+      setCurrentPostIndex(newIndex);
+      setIsLiked(allPosts[newIndex].isLiked || false);
+      setLikes(allPosts[newIndex].likes || 0);
+      setShowComments(false);
+    }
+  }
+}, [isOpen, initialPost, allPosts]);
 
   const comments = [
     {
@@ -75,11 +88,13 @@ export default function PostModal({ isOpen, onClose, post: initialPost, creator,
       setComment('');
     }
   };
+  const currentPost = allPosts[currentPostIndex];
 
+if (!isOpen || !currentPost) {
+  return null;
+}
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-transparent border-0 max-w-full w-full h-[calc(100vh-8rem)] p-0 m-0 top-16 md:top-20 translate-y-0">
-        <div className="relative w-full h-full overflow-hidden bg-background rounded-lg max-w-7xl mx-auto">
+    <div className="fixed inset-0 top-16 z-40 bg-background md:left-64 pb-16 md:pb-0">        <div className="relative w-full h-full overflow-hidden bg-background rounded-lg max-w-7xl mx-auto">
           {/* Background Image */}
           <img
             src={currentPost.thumbnail}
@@ -303,7 +318,6 @@ export default function PostModal({ isOpen, onClose, post: initialPost, creator,
             )}
           </AnimatePresence>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
   );
 }

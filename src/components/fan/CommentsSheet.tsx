@@ -63,11 +63,11 @@ export default function CommentsSheet({ isOpen, onClose, post }: CommentsSheetPr
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed bottom-16 md:bottom-0 left-0 right-0 bg-card/95 backdrop-blur-md border-t border-border max-h-[70vh] flex flex-col rounded-t-3xl z-50"
+          initial={{ y: '100%' }}
+          animate={{ y: 0 }}
+          exit={{ y: '100%' }}
+          transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+          className="fixed bottom-16 md:bottom-0 left-0 md:left-64 right-0 bg-card/95 backdrop-blur-md border-t border-border max-h-[70vh] flex flex-col rounded-t-3xl z-50"
       >
         <div className="p-4 border-b border-border flex-shrink-0 flex items-center justify-between">
           <h3 className="text-foreground text-center font-medium flex-1">
