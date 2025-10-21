@@ -41,7 +41,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/discover" replace />} />
           <Route path="/discover" element={<DiscoveryFeed />} />
-          <Route path="/creator/:id" element={<CreatorProfile />} />
+          <Route path="/profile/:username" element={<CreatorProfile />} />
           <Route path="/feed" element={<SubscriberFeed />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/profile" element={<ProfilePage />} />

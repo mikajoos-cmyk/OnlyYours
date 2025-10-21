@@ -11,16 +11,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 export default function CreatorProfile() {
   const { username } = useParams();
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-  const [selectedPost, setSelectedPost] = useState<any>(null);
+  const [selectedPostIndex, setSelectedPostIndex] = useState<number | null>(null);
 
   const creator = {
     id: '1',
     name: 'Sophia Laurent',
-    avatar: 'https://placehold.co/100x100',
-    banner: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
+    avatarUrl: 'https://placehold.co/100x100',
+    bannerUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
     bio: 'Fashion & Lifestyle Creator | Exklusive Inhalte nur für Abonnenten ✨',
-    followers: 125000,
-    subscriptionPrice: 19.99,
+    subscriberCount: 125000,
+    monthlyPrice: 19.99,
     isVerified: true,
     username: username || 'sophialaurent',
   };
@@ -28,7 +28,7 @@ export default function CreatorProfile() {
   const posts = [
     { 
       id: '1', 
-      thumbnail: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
+      thumbnailUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       type: 'image',
       caption: 'Exclusive behind the scenes from today\'s photoshoot ✨',
       hashtags: ['fashion', 'luxury', 'exclusive'],
@@ -38,7 +38,7 @@ export default function CreatorProfile() {
     },
     { 
       id: '2', 
-      thumbnail: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
+      thumbnailUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       type: 'video',
       caption: 'Morning routine secrets revealed 💫',
       hashtags: ['fitness', 'wellness', 'lifestyle'],
@@ -48,7 +48,7 @@ export default function CreatorProfile() {
     },
     { 
       id: '3', 
-      thumbnail: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
+      thumbnailUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       type: 'image',
       caption: 'New collection preview 🌟',
       hashtags: ['fashion', 'style'],
@@ -58,7 +58,7 @@ export default function CreatorProfile() {
     },
     { 
       id: '4', 
-      thumbnail: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
+      thumbnailUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       type: 'video',
       caption: 'Behind the scenes vlog 🎬',
       hashtags: ['vlog', 'behindthescenes'],
@@ -68,7 +68,7 @@ export default function CreatorProfile() {
     },
     { 
       id: '5', 
-      thumbnail: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
+      thumbnailUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       type: 'image',
       caption: 'Sunset vibes ☀️',
       hashtags: ['sunset', 'photography'],
@@ -78,7 +78,7 @@ export default function CreatorProfile() {
     },
     { 
       id: '6', 
-      thumbnail: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
+      thumbnailUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       type: 'video',
       caption: 'Q&A Session 💬',
       hashtags: ['qanda', 'community'],
@@ -89,7 +89,20 @@ export default function CreatorProfile() {
   ];
 
   const handlePostClick = (post: any) => {
-    setSelectedPost(post);
+    const postIndex = posts.findIndex((p) => p.id === post.id);
+    setSelectedPostIndex(postIndex);
+  };
+
+  const handleNextPost = () => {
+    if (selectedPostIndex !== null && selectedPostIndex < posts.length - 1) {
+      setSelectedPostIndex(selectedPostIndex + 1);
+    }
+  };
+
+  const handlePreviousPost = () => {
+    if (selectedPostIndex !== null && selectedPostIndex > 0) {
+      setSelectedPostIndex(selectedPostIndex - 1);
+    }
   };
 
   const filterPosts = (type?: string) => {
@@ -102,7 +115,7 @@ export default function CreatorProfile() {
       <div className="min-h-screen">
         <div className="relative h-64 md:h-80">
           <img
-            src={creator.banner}
+            src={creator.bannerUrl}
             alt="Banner"
             className="w-full h-full object-cover"
             loading="lazy"
@@ -113,7 +126,7 @@ export default function CreatorProfile() {
         <div className="max-w-4xl mx-auto px-4 -mt-20 relative z-10">
           <div className="flex flex-col items-center text-center space-y-4">
             <Avatar className="w-32 h-32 border-4 border-secondary">
-              <AvatarImage src={creator.avatar} alt={creator.name} />
+              <AvatarImage src={creator.avatarUrl} alt={creator.name} />
               <AvatarFallback className="bg-secondary text-secondary-foreground text-3xl">
                 {creator.name.charAt(0)}
               </AvatarFallback>
@@ -131,7 +144,7 @@ export default function CreatorProfile() {
               <p className="text-muted-foreground max-w-md">{creator.bio}</p>
               <div className="flex items-center justify-center gap-2 text-foreground">
                 <UsersIcon className="w-5 h-5" strokeWidth={1.5} />
-                <span>{creator.followers.toLocaleString()} Follower</span>
+                <span>{creator.subscriberCount.toLocaleString()} Abonnenten</span>
               </div>
             </div>
 
@@ -139,7 +152,7 @@ export default function CreatorProfile() {
               onClick={() => setShowSubscriptionModal(true)}
               className="bg-secondary text-secondary-foreground hover:bg-secondary/90 px-8 py-6 text-base font-normal"
             >
-              Abonnieren für {creator.subscriptionPrice}€/Monat
+              Abonnieren für {creator.monthlyPrice}€/Monat
             </Button>
           </div>
 
@@ -169,7 +182,7 @@ export default function CreatorProfile() {
                       onClick={() => handlePostClick(post)}
                     >
                       <img
-                        src={post.thumbnail}
+                        src={post.thumbnailUrl}
                         alt="Post"
                         className="w-full h-full object-cover"
                         loading="lazy"
@@ -201,7 +214,7 @@ export default function CreatorProfile() {
                       onClick={() => handlePostClick(post)}
                     >
                       <img
-                        src={post.thumbnail}
+                        src={post.thumbnailUrl}
                         alt="Post"
                         className="w-full h-full object-cover"
                         loading="lazy"
@@ -228,7 +241,7 @@ export default function CreatorProfile() {
                       onClick={() => handlePostClick(post)}
                     >
                       <img
-                        src={post.thumbnail}
+                        src={post.thumbnailUrl}
                         alt="Post"
                         className="w-full h-full object-cover"
                         loading="lazy"
@@ -259,13 +272,16 @@ export default function CreatorProfile() {
         creator={creator}
       />
 
-      {selectedPost && (
+      {selectedPostIndex !== null && (
         <PostModal
-          isOpen={!!selectedPost}
-          onClose={() => setSelectedPost(null)}
-          post={selectedPost}
+          isOpen={selectedPostIndex !== null}
+          onClose={() => setSelectedPostIndex(null)}
+          post={posts[selectedPostIndex]}
           creator={creator}
           allPosts={posts}
+          currentIndex={selectedPostIndex}
+          onNext={handleNextPost}
+          onPrevious={handlePreviousPost}
         />
       )}
     </>
