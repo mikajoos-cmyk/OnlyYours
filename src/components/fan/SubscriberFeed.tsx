@@ -76,8 +76,10 @@ export default function SubscriberFeed() {
     setLikes(initialLikes);
   }, []);
 
+  const scrollThreshold = 50; // Adjust this value as needed for sensitivity
+
   const handleScroll = (e: React.WheelEvent) => {
-    if (isScrolling.current) return;
+    if (isScrolling.current || Math.abs(e.deltaY) < scrollThreshold) return;
 
     isScrolling.current = true;
     
@@ -135,7 +137,7 @@ export default function SubscriberFeed() {
     <>
       <div
         ref={containerRef}
-        className="h-screen w-full overflow-hidden relative"
+        className="w-full overflow-hidden relative h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]"
         onWheel={handleScroll}
         onTouchStart={handleTouchStartCapture}
         onTouchMove={handleTouchMove}
