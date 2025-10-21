@@ -9,12 +9,12 @@ import PostModal from './PostModal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 
 export default function CreatorProfile() {
-  const { id } = useParams();
+  const { username } = useParams();
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [selectedPost, setSelectedPost] = useState<any>(null);
 
   const creator = {
-    id: id || '1',
+    id: '1',
     name: 'Sophia Laurent',
     avatar: 'https://placehold.co/100x100',
     banner: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
@@ -22,6 +22,7 @@ export default function CreatorProfile() {
     followers: 125000,
     subscriptionPrice: 19.99,
     isVerified: true,
+    username: username || 'sophialaurent',
   };
 
   const posts = [

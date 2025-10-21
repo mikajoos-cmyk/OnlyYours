@@ -32,6 +32,7 @@ export default function SearchPage() {
       banner: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       badges: ['4K', 'Premium'],
       isLive: false,
+      username: 'elenanoir',
     },
     {
       id: '2',
@@ -40,6 +41,7 @@ export default function SearchPage() {
       banner: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       badges: ['Live', 'Chat'],
       isLive: true,
+      username: 'lucav',
     },
     {
       id: '3',
@@ -48,6 +50,7 @@ export default function SearchPage() {
       banner: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       badges: ['Foto', 'Sets'],
       isLive: false,
+      username: 'ariagold',
     },
     {
       id: '4',
@@ -56,6 +59,7 @@ export default function SearchPage() {
       banner: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       badges: ['Neu', 'Trend'],
       isLive: false,
+      username: 'novas',
     },
   ];
 
@@ -143,7 +147,7 @@ export default function SearchPage() {
               <Card
                 key={creator.id}
                 className="bg-card border-border overflow-hidden cursor-pointer hover:border-secondary transition-colors"
-                onClick={() => navigate(`/creator/${creator.id}`)}
+                onClick={() => navigate(`/profile/${creator.username}`)}
               >
                 <div className="relative h-48">
                   <img

@@ -5,16 +5,23 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 
 interface PostModalProps {
   isOpen: boolean;
   onClose: () => void;
   post: any;
-  creator: any;
+  creator: {
+    id: string;
+    name: string;
+    avatar: string;
+    username: string;
+  };
   allPosts: any[];
 }
 
 export default function PostModal({ isOpen, onClose, post: initialPost, creator, allPosts }: PostModalProps) {
+const navigate = useNavigate();
 //   const [currentPostIndex, setCurrentPostIndex] = useState(allPosts.findIndex(p => p.id === initialPost.id));
 //   const [isLiked, setIsLiked] = useState(false);
 //   const [likes, setLikes] = useState(initialPost.likes);
@@ -141,7 +148,7 @@ if (!isOpen || !currentPost) {
                 exit={{ opacity: 0 }}
                 className="absolute top-4 left-4 right-20 z-10"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/profile/${creator.username}`)}>
                   <Avatar className="w-12 h-12 border-2 border-foreground">
                     <AvatarImage src={creator.avatar} alt={creator.name} />
                     <AvatarFallback className="bg-secondary text-secondary-foreground">

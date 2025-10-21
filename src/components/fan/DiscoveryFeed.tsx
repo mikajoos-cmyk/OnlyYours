@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
 import CommentsSheet from './CommentsSheet';
+import { useNavigate } from 'react-router-dom';
 
 export default function DiscoveryFeed() {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -13,6 +14,7 @@ export default function DiscoveryFeed() {
   const [selectedPostIndex, setSelectedPostIndex] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
+  const navigate = useNavigate();
 
   const posts = [
     {
@@ -129,6 +131,22 @@ export default function DiscoveryFeed() {
     setLikes(initialLikes);
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        setCurrentIndex((prevIndex) => Math.min(prevIndex + 1, posts.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        setCurrentIndex((prevIndex) => Math.max(prevIndex - 1, 0));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [posts.length, setCurrentIndex]);
+
   const scrollThreshold = 50; // Adjust this value as needed for sensitivity
 
   const handleScroll = (e: React.WheelEvent) => {
@@ -212,7 +230,7 @@ export default function DiscoveryFeed() {
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
 
           <div className="absolute top-4 left-4 right-20 z-10">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/profile/${currentPost.creator.username}`)}>
               <Avatar className="w-12 h-12 border-2 border-foreground">
                 <AvatarImage src={currentPost.creator.avatar} alt={currentPost.creator.name} />
                 <AvatarFallback className="bg-secondary text-secondary-foreground">
@@ -285,9 +303,7 @@ export default function DiscoveryFeed() {
             </div>
           </div>
 
-          <div className="absolute bottom-4 right-4 z-10 text-foreground/60 text-sm drop-shadow-lg">
-            {currentIndex + 1} / {posts.length}
-          </div>
+
         </motion.div>
       </div>
 

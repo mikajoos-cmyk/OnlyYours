@@ -51,7 +51,7 @@ export default function MediaCard({ post }: MediaCardProps) {
       
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" />
 
-      <div className="absolute top-8 left-4 flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/creator/${post.creatorId}`)}>
+      <div className="absolute top-8 left-4 flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/profile/${post.creator.username}`)}>
         <Avatar className="w-12 h-12 border-2 border-secondary">
           <AvatarImage src={post.creator.avatar} alt={post.creator.name} />
           <AvatarFallback className="bg-secondary text-secondary-foreground">
