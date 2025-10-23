@@ -64,3 +64,46 @@
     text-wrap: balance;
   }
 }
+/* src/index.css */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ... andere Basis-Styles ... */
+
+@layer utilities {
+  /* Benutzerdefinierte Scrollbar für den Chat-Nachrichtenbereich */
+  .chat-messages-scrollbar {
+    /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--color-secondary)) transparent; /* Daumenfarbe, Trackfarbe */
+  }
+
+  /* Webkit-Browser (Chrome, Safari, Edge, etc.) */
+  .chat-messages-scrollbar::-webkit-scrollbar {
+    width: 6px; /* Breite der Scrollbar */
+  }
+
+  .chat-messages-scrollbar::-webkit-scrollbar-track {
+    background: transparent; /* Hintergrund des Tracks (unsichtbar) */
+  }
+
+  .chat-messages-scrollbar::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--color-secondary)); /* Farbe des Scroll-Daumens (deine Akzentfarbe) */
+    border-radius: 3px; /* Abrundung des Daumens */
+  }
+
+  .chat-messages-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--color-secondary) / 0.8); /* Leicht transparent beim Hover */
+  }
+
+  /* Optional: Hilfsklasse zum kompletten Ausblenden */
+  .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+  }
+  .scrollbar-hide {
+      -ms-overflow-style: none;  /* IE and Edge */
+      scrollbar-width: none;  /* Firefox */
+  }
+}
