@@ -5,14 +5,39 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { UsersIcon, GridIcon, VideoIcon } from 'lucide-react';
 import SubscriptionModal from './SubscriptionModal';
-import PostModal from './PostModal';
+// import SubscriberFeed from './SubscriberFeed'; // Entfernen
+import ProfilePostViewer from './ProfilePostViewer'; // Importieren
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+
+// --- Interface für Posts (muss dem von ProfilePostViewer entsprechen) ---
+interface CreatorInfo {
+  name: string;
+  avatar: string;
+  username: string;
+  isVerified?: boolean;
+}
+
+interface PostData {
+  id: string;
+  creator: CreatorInfo;
+  media: string;
+  caption: string;
+  hashtags: string[];
+  likes: number;
+  comments: number;
+  isLiked?: boolean;
+  type: 'image' | 'video'; // Behalten für Filterung
+}
+// --- Ende Interface ---
+
 
 export default function CreatorProfile() {
   const { username } = useParams();
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-  const [selectedPostIndex, setSelectedPostIndex] = useState<number | null>(null);
+  const [selectedPostIndex, setSelectedPostIndex] = useState<number>(0);
+  const [showPostFeed, setShowPostFeed] = useState(false);
 
+  // Creator Daten
   const creator = {
     id: '1',
     name: 'Sophia Laurent',
@@ -25,9 +50,10 @@ export default function CreatorProfile() {
     username: username || 'sophialaurent',
   };
 
-  const posts = [
-    { 
-      id: '1', 
+  // Rohdaten der Posts
+   const rawPosts = [
+    {
+      id: 'prof1',
       thumbnailUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       type: 'image',
       caption: 'Exclusive behind the scenes from today\'s photoshoot ✨',
@@ -36,8 +62,8 @@ export default function CreatorProfile() {
       comments: 156,
       isLiked: false,
     },
-    { 
-      id: '2', 
+    {
+      id: 'prof2',
       thumbnailUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       type: 'video',
       caption: 'Morning routine secrets revealed 💫',
@@ -46,8 +72,9 @@ export default function CreatorProfile() {
       comments: 98,
       isLiked: false,
     },
-    { 
-      id: '3', 
+     // ... restliche Posts
+    {
+      id: 'prof3',
       thumbnailUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       type: 'image',
       caption: 'New collection preview 🌟',
@@ -56,8 +83,8 @@ export default function CreatorProfile() {
       comments: 203,
       isLiked: false,
     },
-    { 
-      id: '4', 
+    {
+      id: 'prof4',
       thumbnailUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       type: 'video',
       caption: 'Behind the scenes vlog 🎬',
@@ -66,8 +93,8 @@ export default function CreatorProfile() {
       comments: 134,
       isLiked: false,
     },
-    { 
-      id: '5', 
+    {
+      id: 'prof5',
       thumbnailUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       type: 'image',
       caption: 'Sunset vibes ☀️',
@@ -76,8 +103,8 @@ export default function CreatorProfile() {
       comments: 287,
       isLiked: false,
     },
-    { 
-      id: '6', 
+    {
+      id: 'prof6',
       thumbnailUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
       type: 'video',
       caption: 'Q&A Session 💬',
@@ -88,32 +115,46 @@ export default function CreatorProfile() {
     },
   ];
 
+  // Transformiere Rohdaten in das vom Viewer erwartete Format
+  const formattedPostsForViewer: PostData[] = rawPosts.map(post => ({
+    id: post.id,
+    media: post.thumbnailUrl,
+    caption: post.caption,
+    hashtags: post.hashtags,
+    likes: post.likes,
+    comments: post.comments,
+    isLiked: post.isLiked,
+    type: post.type,
+    creator: {
+      name: creator.name,
+      avatar: creator.avatarUrl,
+      username: creator.username,
+      isVerified: creator.isVerified,
+    }
+  }));
+
   const handlePostClick = (post: any) => {
-    const postIndex = posts.findIndex((p) => p.id === post.id);
-    setSelectedPostIndex(postIndex);
-  };
-
-  const handleNextPost = () => {
-    if (selectedPostIndex !== null && selectedPostIndex < posts.length - 1) {
-      setSelectedPostIndex(selectedPostIndex + 1);
+    const postIndex = rawPosts.findIndex((p) => p.id === post.id);
+    if (postIndex !== -1) {
+      setSelectedPostIndex(postIndex);
+      setShowPostFeed(true);
     }
   };
 
-  const handlePreviousPost = () => {
-    if (selectedPostIndex !== null && selectedPostIndex > 0) {
-      setSelectedPostIndex(selectedPostIndex - 1);
-    }
+  const handleClosePostFeed = () => {
+    setShowPostFeed(false);
   };
 
-  const filterPosts = (type?: string) => {
-    if (!type) return posts;
-    return posts.filter(post => post.type === type);
+  const filterPosts = (type?: 'image' | 'video') => {
+    if (!type) return rawPosts;
+    return rawPosts.filter(post => post.type === type);
   };
 
   return (
     <>
-      <div className="min-h-screen">
-        <div className="relative h-64 md:h-80">
+      <div className={`min-h-screen ${showPostFeed ? 'hidden' : ''}`}>
+        {/* ... (Banner, Profilkopf, Tabs, Grid - keine Änderungen hier nötig) ... */}
+         <div className="relative h-64 md:h-80">
           <img
             src={creator.bannerUrl}
             alt="Banner"
@@ -132,7 +173,7 @@ export default function CreatorProfile() {
               </AvatarFallback>
             </Avatar>
 
-            <div className="space-y-2">
+             <div className="space-y-2">
               <div className="flex items-center justify-center gap-2">
                 <h1 className="text-3xl font-serif text-foreground">{creator.name}</h1>
                 {creator.isVerified && (
@@ -156,10 +197,12 @@ export default function CreatorProfile() {
             </Button>
           </div>
 
+          {/* Tabs und Post-Grid */}
           <div className="mt-16 mb-8">
             <Tabs defaultValue="all" className="w-full">
+              {/* TabsList bleibt gleich */}
               <TabsList className="bg-card border border-border w-full justify-start">
-                <TabsTrigger value="all" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
+                 <TabsTrigger value="all" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
                   <GridIcon className="w-4 h-4 mr-2" strokeWidth={1.5} />
                   Alle
                 </TabsTrigger>
@@ -173,13 +216,14 @@ export default function CreatorProfile() {
                 </TabsTrigger>
               </TabsList>
 
+              {/* TabsContent rendert das Grid basierend auf rawPosts */}
               <TabsContent value="all" className="mt-6">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {posts.map((post) => (
+                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {rawPosts.map((post) => ( // Iteriere über rawPosts für das Grid
                     <div
                       key={post.id}
                       className="relative aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity group"
-                      onClick={() => handlePostClick(post)}
+                      onClick={() => handlePostClick(post)} // Übergibt das rawPost-Objekt
                     >
                       <img
                         src={post.thumbnailUrl}
@@ -187,26 +231,25 @@ export default function CreatorProfile() {
                         className="w-full h-full object-cover"
                         loading="lazy"
                       />
-                      {post.type === 'video' && (
+                       {post.type === 'video' && (
                         <div className="absolute top-2 right-2">
                           <VideoIcon className="w-6 h-6 text-foreground drop-shadow-lg" strokeWidth={1.5} />
                         </div>
                       )}
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-6">
-                        <div className="flex items-center gap-2 text-foreground">
-                          <span className="text-lg font-medium">{post.likes}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-foreground">
-                          <span className="text-lg font-medium">{post.comments}</span>
-                        </div>
-                      </div>
+                      {/* Optional: Overlay beim Hover */}
+                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-6 text-foreground text-lg">
+                           {/* Zeige Likes/Kommentare im Overlay */}
+                           <span>♡ {post.likes}</span>
+                           <span>💬 {post.comments}</span>
+                       </div>
                     </div>
                   ))}
                 </div>
               </TabsContent>
 
-              <TabsContent value="images" className="mt-6">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {/* TabsContent für 'images' und 'videos' (gleiches Prinzip) */}
+               <TabsContent value="images" className="mt-6">
+                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {filterPosts('image').map((post) => (
                     <div
                       key={post.id}
@@ -219,21 +262,16 @@ export default function CreatorProfile() {
                         className="w-full h-full object-cover"
                         loading="lazy"
                       />
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-6">
-                        <div className="flex items-center gap-2 text-foreground">
-                          <span className="text-lg font-medium">{post.likes}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-foreground">
-                          <span className="text-lg font-medium">{post.comments}</span>
-                        </div>
-                      </div>
+                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-6 text-foreground text-lg">
+                           <span>♡ {post.likes}</span>
+                           <span>💬 {post.comments}</span>
+                       </div>
                     </div>
                   ))}
                 </div>
               </TabsContent>
-
-              <TabsContent value="videos" className="mt-6">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+               <TabsContent value="videos" className="mt-6">
+                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {filterPosts('video').map((post) => (
                     <div
                       key={post.id}
@@ -249,39 +287,33 @@ export default function CreatorProfile() {
                       <div className="absolute top-2 right-2">
                         <VideoIcon className="w-6 h-6 text-foreground drop-shadow-lg" strokeWidth={1.5} />
                       </div>
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-6">
-                        <div className="flex items-center gap-2 text-foreground">
-                          <span className="text-lg font-medium">{post.likes}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-foreground">
-                          <span className="text-lg font-medium">{post.comments}</span>
-                        </div>
-                      </div>
+                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-6 text-foreground text-lg">
+                           <span>♡ {post.likes}</span>
+                           <span>💬 {post.comments}</span>
+                       </div>
                     </div>
                   ))}
                 </div>
               </TabsContent>
+
             </Tabs>
           </div>
         </div>
       </div>
 
-      <SubscriptionModal
+      {/* SubscriptionModal (unverändert) */}
+       <SubscriptionModal
         isOpen={showSubscriptionModal}
         onClose={() => setShowSubscriptionModal(false)}
-        creator={creator}
+        creator={{ name: creator.name, subscriptionPrice: creator.monthlyPrice }}
       />
 
-      {selectedPostIndex !== null && (
-        <PostModal
-          isOpen={selectedPostIndex !== null}
-          onClose={() => setSelectedPostIndex(null)}
-          post={posts[selectedPostIndex]}
-          creator={creator}
-          allPosts={posts}
-          currentIndex={selectedPostIndex}
-          onNext={handleNextPost}
-          onPrevious={handlePreviousPost}
+      {/* Rendere ProfilePostViewer bedingt */}
+      {showPostFeed && (
+        <ProfilePostViewer
+           initialPosts={formattedPostsForViewer} // Übergib die transformierten Posts
+           initialIndex={selectedPostIndex}     // Übergib den Index
+           onClose={handleClosePostFeed}       // Übergib die Schließen-Funktion
         />
       )}
     </>
