@@ -23,7 +23,7 @@ export default function AppShell({ children }: AppShellProps) {
         {/* Hauptinhalt - Scrollbar hier ausblenden */}
         <main className={cn(
           "flex-1 pb-20 md:pb-0 md:ml-64 overflow-y-auto",
-          "chat-messages-scrollbar" // <--- KLASSE HIER HINZUGEFÜGT
+          "chat-messages-scrollbar3" // <--- KLASSE HIER HINZUGEFÜGT
         )}>
           <div className="max-w-7xl mx-auto h-full">
             {children}

@@ -7,25 +7,25 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        border: "hsl(280, 12%, 25%)",
-        input: "hsl(280, 12%, 25%)",
+        border: "hsl(0, 0%, 15%)",
+        input: "hsl(0, 0%, 15%)",
         ring: "hsl(45, 63%, 52%)",
-        background: "hsl(276, 30%, 18%)",
-        foreground: "hsl(50, 30%, 92%)",
+        background: "hsl(0, 0%, 0%)",
+        foreground: "hsl(45, 63%, 92%)",
         primary: {
-          DEFAULT: "hsl(276, 30%, 18%)",
-          foreground: "hsl(50, 30%, 92%)",
+          DEFAULT: "hsl(0, 0%, 0%)",
+          foreground: "hsl(45, 63%, 92%)",
         },
         secondary: {
           DEFAULT: "hsl(45, 63%, 52%)",
-          foreground: "hsl(276, 30%, 18%)",
+          foreground: "hsl(0, 0%, 0%)",
         },
         tertiary: {
-          DEFAULT: "hsl(50, 30%, 92%)",
-          foreground: "hsl(276, 30%, 18%)",
+          DEFAULT: "hsl(0, 0%, 10%)",
+          foreground: "hsl(45, 63%, 92%)",
         },
         neutral: {
-          DEFAULT: "hsl(280, 12%, 25%)",
+          DEFAULT: "hsl(0, 0%, 15%)",
           foreground: "hsl(45, 63%, 52%)",
         },
         destructive: {
@@ -38,35 +38,35 @@ module.exports = {
         },
         warning: {
           DEFAULT: "hsl(35, 90%, 55%)",
-          foreground: "hsl(276, 30%, 18%)",
+          foreground: "hsl(0, 0%, 0%)",
         },
         muted: {
-          DEFAULT: "hsl(280, 12%, 25%)",
-          foreground: "hsl(276, 10%, 70%)",
+          DEFAULT: "hsl(0, 0%, 20%)",
+          foreground: "hsl(45, 30%, 70%)",
         },
         accent: {
           DEFAULT: "hsl(45, 63%, 52%)",
-          foreground: "hsl(276, 30%, 18%)",
+          foreground: "hsl(0, 0%, 0%)",
         },
         popover: {
-          DEFAULT: "hsl(276, 30%, 18%)",
-          foreground: "hsl(50, 30%, 92%)",
+          DEFAULT: "hsl(0, 0%, 0%)",
+          foreground: "hsl(45, 63%, 92%)",
         },
         card: {
-          DEFAULT: "hsl(276, 35%, 24%)",
-          foreground: "hsl(50, 30%, 92%)",
+          DEFAULT: "hsl(0, 0%, 10%)",
+          foreground: "hsl(45, 63%, 92%)",
         },
         gray: {
-          50: "hsl(276, 15%, 96%)",
-          100: "hsl(276, 14%, 90%)",
-          200: "hsl(276, 12%, 80%)",
-          300: "hsl(276, 10%, 70%)",
-          400: "hsl(276, 9%, 60%)",
-          500: "hsl(276, 8%, 50%)",
-          600: "hsl(276, 10%, 40%)",
-          700: "hsl(276, 15%, 30%)",
-          800: "hsl(276, 20%, 22%)",
-          900: "hsl(276, 30%, 14%)",
+          50: "hsl(0, 0%, 96%)",
+          100: "hsl(0, 0%, 90%)",
+          200: "hsl(0, 0%, 80%)",
+          300: "hsl(0, 0%, 70%)",
+          400: "hsl(0, 0%, 60%)",
+          500: "hsl(0, 0%, 50%)",
+          600: "hsl(0, 0%, 40%)",
+          700: "hsl(0, 0%, 30%)",
+          800: "hsl(0, 0%, 22%)",
+          900: "hsl(0, 0%, 14%)",
         },
       },
       fontFamily: {
@@ -118,7 +118,7 @@ module.exports = {
         "pulse-gold": "pulse-gold 0.6s ease-in-out",
       },
       backgroundImage: {
-        "gradient-1": "linear-gradient(135deg, hsl(276, 30%, 18%) 0%, hsl(276, 35%, 24%) 100%)",
+        "gradient-1": "linear-gradient(135deg, hsl(0, 0%, 0%) 0%, hsl(0, 0%, 10%) 100%)",
         "gradient-2": "linear-gradient(135deg, hsl(45, 63%, 52%) 0%, hsl(45, 63%, 42%) 100%)",
         "button-border-gradient": "linear-gradient(90deg, hsla(45, 63%, 52%, 0.8) 0%, hsla(45, 63%, 65%, 0.8) 100%)",
       },
