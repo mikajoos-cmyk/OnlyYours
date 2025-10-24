@@ -8,14 +8,14 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils'; // cn importieren
 
 // --- Interface für Posts (ähnlich DiscoveryFeed, ggf. anpassen) ---
-interface CreatorInfo {
+export interface CreatorInfo {
   name: string;
   avatar: string;
   username: string;
   isVerified?: boolean;
 }
 
-interface PostData {
+export interface PostData {
   id: string;
   creator: CreatorInfo;
   media: string; // Angepasst von mediaUrl in DiscoveryFeed

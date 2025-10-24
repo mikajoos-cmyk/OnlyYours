@@ -7,7 +7,6 @@ import { UsersIcon, GridIcon, VideoIcon } from 'lucide-react';
 import SubscriptionModal from './SubscriptionModal';
 // import SubscriberFeed from './SubscriberFeed'; // Entfernen
 import ProfilePostViewer from './ProfilePostViewer'; // Importieren
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 
 // --- Interface für Posts (muss dem von ProfilePostViewer entsprechen) ---
 interface CreatorInfo {
@@ -29,6 +28,8 @@ interface PostData {
   type: 'image' | 'video'; // Behalten für Filterung
 }
 // --- Ende Interface ---
+
+
 
 
 export default function CreatorProfile() {
