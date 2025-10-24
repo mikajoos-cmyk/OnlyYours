@@ -17,14 +17,18 @@ export default function TopBar() {
 
   const handleLogout = () => {
     logout();
-    window.location.reload();
+    window.location.reload(); // Beibehalten oder durch navigate('/') ersetzen
   };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-16 items-center justify-between px-4 md:px-8">
-        <h1 className="text-2xl font-serif text-secondary">OnlyYours</h1>
-        
+        {/* --- Änderung beginnt hier --- */}
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
+          <img src="/logo.PNG" alt="OnlyYours Logo" className="h-24 md:h-32 lg:h-16 w-auto" /> {/* Logo hinzugefügt */}
+        </div>
+        {/* --- Änderung endet hier --- */}
+
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
@@ -49,7 +53,11 @@ export default function TopBar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 bg-card text-card-foreground border-border">
-              <DropdownMenuItem className="text-foreground hover:bg-neutral cursor-pointer">
+              {/* Profil-Link zur Profilseite */}
+              <DropdownMenuItem
+                onClick={() => navigate('/profile')}
+                className="text-foreground hover:bg-neutral cursor-pointer"
+              >
                 <UserIcon className="mr-2 w-4 h-4" />
                 Profil
               </DropdownMenuItem>
