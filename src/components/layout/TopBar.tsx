@@ -25,8 +25,11 @@ export default function TopBar() {
       <div className="flex h-16 items-center justify-between px-4 md:px-8">
         {/* --- Änderung beginnt hier --- */}
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-          <img src="/logo.PNG" alt="OnlyYours Logo" className="h-24 md:h-32 lg:h-16 w-auto" /> {/* Logo hinzugefügt */}
-        </div>
+<img
+  src="/logo.png" // Stelle sicher, dass der Dateiname korrekt ist (Groß-/Kleinschreibung)
+  alt="OnlyYours Logo"
+  className="h-8 md:h-12 lg:h-16 w-auto" // Klein -> Mittel -> Groß
+/>        </div>
         {/* --- Änderung endet hier --- */}
 
         <div className="flex items-center gap-4">
