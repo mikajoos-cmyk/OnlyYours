@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { postService } from '../services/postService';
 
 interface Creator {
   id: string;
@@ -26,64 +27,49 @@ interface Post {
 interface FeedState {
   posts: Post[];
   currentIndex: number;
-  loadPosts: () => void;
+  isLoading: boolean;
+  loadDiscoveryPosts: () => Promise<void>;
+  loadSubscriberPosts: () => Promise<void>;
+  loadCreatorPosts: (creatorId: string) => Promise<void>;
   nextPost: () => void;
   previousPost: () => void;
-  toggleLike: (postId: string) => void;
+  toggleLike: (postId: string) => Promise<void>;
 }
 
-const mockCreators: Creator[] = [
-  {
-    id: '1',
-    name: 'Sophia Laurent',
-    avatar: 'https://placehold.co/100x100',
-    isVerified: true,
-    bio: 'Fashion & Lifestyle Creator',
-    followers: 125000,
-    subscriptionPrice: 19.99,
-  },
-  {
-    id: '2',
-    name: 'Isabella Rose',
-    avatar: 'https://placehold.co/100x100',
-    isVerified: true,
-    bio: 'Fitness & Wellness',
-    followers: 98000,
-    subscriptionPrice: 14.99,
-  },
-];
-
-const mockPosts: Post[] = [
-  {
-    id: '1',
-    creatorId: '1',
-    creator: mockCreators[0],
-    mediaUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
-    mediaType: 'image',
-    caption: 'Exclusive behind the scenes from today\'s photoshoot ✨',
-    hashtags: ['fashion', 'luxury', 'exclusive'],
-    likes: 2340,
-    comments: 156,
-    isLiked: false,
-  },
-  {
-    id: '2',
-    creatorId: '2',
-    creator: mockCreators[1],
-    mediaUrl: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
-    mediaType: 'image',
-    caption: 'Morning routine secrets revealed 💫',
-    hashtags: ['fitness', 'wellness', 'lifestyle'],
-    likes: 1890,
-    comments: 98,
-    isLiked: false,
-  },
-];
-
-export const useFeedStore = create<FeedState>((set) => ({
+export const useFeedStore = create<FeedState>((set, get) => ({
   posts: [],
   currentIndex: 0,
-  loadPosts: () => set({ posts: mockPosts }),
+  isLoading: false,
+  loadDiscoveryPosts: async () => {
+    set({ isLoading: true });
+    try {
+      const posts = await postService.getDiscoveryFeed(20);
+      set({ posts, currentIndex: 0, isLoading: false });
+    } catch (error) {
+      console.error('Failed to load discovery posts:', error);
+      set({ isLoading: false });
+    }
+  },
+  loadSubscriberPosts: async () => {
+    set({ isLoading: true });
+    try {
+      const posts = await postService.getSubscriberFeed(20);
+      set({ posts, currentIndex: 0, isLoading: false });
+    } catch (error) {
+      console.error('Failed to load subscriber posts:', error);
+      set({ isLoading: false });
+    }
+  },
+  loadCreatorPosts: async (creatorId: string) => {
+    set({ isLoading: true });
+    try {
+      const posts = await postService.getCreatorPosts(creatorId, 20);
+      set({ posts, currentIndex: 0, isLoading: false });
+    } catch (error) {
+      console.error('Failed to load creator posts:', error);
+      set({ isLoading: false });
+    }
+  },
   nextPost: () =>
     set((state) => ({
       currentIndex: Math.min(state.currentIndex + 1, state.posts.length - 1),
@@ -92,16 +78,41 @@ export const useFeedStore = create<FeedState>((set) => ({
     set((state) => ({
       currentIndex: Math.max(state.currentIndex - 1, 0),
     })),
-  toggleLike: (postId: string) =>
+  toggleLike: async (postId: string) => {
+    const state = get();
+    const post = state.posts.find(p => p.id === postId);
+    if (!post) return;
+
+    const optimisticIsLiked = !post.isLiked;
+    const optimisticLikes = optimisticIsLiked ? post.likes + 1 : post.likes - 1;
+
     set((state) => ({
-      posts: state.posts.map((post) =>
-        post.id === postId
+      posts: state.posts.map((p) =>
+        p.id === postId
           ? {
-              ...post,
-              isLiked: !post.isLiked,
-              likes: post.isLiked ? post.likes - 1 : post.likes + 1,
+              ...p,
+              isLiked: optimisticIsLiked,
+              likes: optimisticLikes,
             }
-          : post
+          : p
       ),
-    })),
+    }));
+
+    try {
+      await postService.toggleLike(postId);
+    } catch (error) {
+      console.error('Failed to toggle like:', error);
+      set((state) => ({
+        posts: state.posts.map((p) =>
+          p.id === postId
+            ? {
+                ...p,
+                isLiked: post.isLiked,
+                likes: post.likes,
+              }
+            : p
+        ),
+      }));
+    }
+  },
 }));

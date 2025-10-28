@@ -5,18 +5,22 @@ import { Button } from '../ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
 import CommentsSheet from './CommentsSheet';
 import { useNavigate } from 'react-router-dom';
+import { useFeedStore } from '../../stores/feedStore';
 
 export default function DiscoveryFeed() {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isLiked, setIsLiked] = useState<{ [key: number]: boolean }>({});
-  const [likes, setLikes] = useState<{ [key: number]: number }>({});
   const [showComments, setShowComments] = useState(false);
-  const [selectedPostIndex, setSelectedPostIndex] = useState<number | null>(null);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
   const navigate = useNavigate();
 
-  const posts = [
+  const { posts, currentIndex, isLoading, loadDiscoveryPosts, nextPost: nextPostAction, previousPost: previousPostAction, toggleLike } = useFeedStore();
+
+  useEffect(() => {
+    loadDiscoveryPosts();
+  }, [loadDiscoveryPosts]);
+
+  const mockPosts = [
     {
       id: '1',
       creator: {
@@ -123,20 +127,14 @@ export default function DiscoveryFeed() {
     },
   ];
 
-  useEffect(() => {
-    const initialLikes: { [key: number]: number } = {};
-    posts.forEach((post, index) => {
-      initialLikes[index] = post.likes;
-    });
-    setLikes(initialLikes);
-  }, []);
+  const displayPosts = posts.length > 0 ? posts : mockPosts;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown') {
-        setCurrentIndex((prevIndex) => Math.min(prevIndex + 1, posts.length - 1));
+        nextPostAction();
       } else if (e.key === 'ArrowUp') {
-        setCurrentIndex((prevIndex) => Math.max(prevIndex - 1, 0));
+        previousPostAction();
       }
     };
 
@@ -145,7 +143,7 @@ export default function DiscoveryFeed() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [posts.length, setCurrentIndex]);
+  }, [nextPostAction, previousPostAction]);
 
   const scrollThreshold = 50; // Adjust this value as needed for sensitivity
 
@@ -153,11 +151,11 @@ export default function DiscoveryFeed() {
     if (isScrolling.current || Math.abs(e.deltaY) < scrollThreshold) return;
 
     isScrolling.current = true;
-    
-    if (e.deltaY > 0 && currentIndex < posts.length - 1) {
-      setCurrentIndex(currentIndex + 1);
+
+    if (e.deltaY > 0 && currentIndex < displayPosts.length - 1) {
+      nextPostAction();
     } else if (e.deltaY < 0 && currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
+      previousPostAction();
     }
 
     setTimeout(() => {
@@ -172,11 +170,11 @@ export default function DiscoveryFeed() {
 
     if (Math.abs(deltaY) > 50 && !isScrolling.current) {
       isScrolling.current = true;
-      
-      if (deltaY > 0 && currentIndex < posts.length - 1) {
-        setCurrentIndex(currentIndex + 1);
+
+      if (deltaY > 0 && currentIndex < displayPosts.length - 1) {
+        nextPostAction();
       } else if (deltaY < 0 && currentIndex > 0) {
-        setCurrentIndex(currentIndex - 1);
+        previousPostAction();
       }
 
       setTimeout(() => {
@@ -189,20 +187,24 @@ export default function DiscoveryFeed() {
     handleTouchStart.current = { y: e.touches[0].clientY };
   };
 
-  const handleLike = (index: number) => {
-    setIsLiked((prev) => ({ ...prev, [index]: !prev[index] }));
-    setLikes((prev) => ({
-      ...prev,
-      [index]: prev[index] + (isLiked[index] ? -1 : 1),
-    }));
+  const handleLike = async (postId: string) => {
+    await toggleLike(postId);
   };
 
-  const handleCommentClick = (index: number) => {
-    setSelectedPostIndex(index);
+  const handleCommentClick = (postId: string) => {
+    setSelectedPostId(postId);
     setShowComments(true);
   };
 
-  const currentPost = posts[currentIndex];
+  const currentPost = displayPosts[currentIndex];
+
+  if (!currentPost) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-foreground">Lade Posts...</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -222,7 +224,7 @@ export default function DiscoveryFeed() {
           className="h-full w-full relative"
         >
           <img
-            src={currentPost.media}
+            src={currentPost.mediaUrl || currentPost.media}
             alt={currentPost.caption}
             className="w-full h-full object-cover"
           />
@@ -230,7 +232,7 @@ export default function DiscoveryFeed() {
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
 
           <div className="absolute top-4 left-4 right-20 z-10">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/profile/${currentPost.creator.username}`)}>
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/profile/${currentPost.creator.username || currentPost.creatorId}`)}>
               <Avatar className="w-12 h-12 border-2 border-foreground">
                 <AvatarImage src={currentPost.creator.avatar} alt={currentPost.creator.name} />
                 <AvatarFallback className="bg-secondary text-secondary-foreground">
@@ -242,7 +244,7 @@ export default function DiscoveryFeed() {
                   {currentPost.creator.name}
                 </p>
                 <p className="text-sm text-foreground/80 drop-shadow-lg">
-                  @{currentPost.creator.username}
+                  @{currentPost.creator.username || currentPost.creatorId}
                 </p>
               </div>
             </div>
@@ -251,24 +253,24 @@ export default function DiscoveryFeed() {
           <div className="absolute right-4 bottom-32 z-10 flex flex-col gap-6">
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={() => handleLike(currentIndex)}
+              onClick={() => handleLike(currentPost.id)}
               className="flex flex-col items-center gap-1"
             >
               <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
                 <HeartIcon
                   className={`w-7 h-7 ${
-                    isLiked[currentIndex] ? 'fill-secondary text-secondary' : 'text-foreground'
+                    currentPost.isLiked ? 'fill-secondary text-secondary' : 'text-foreground'
                   }`}
                   strokeWidth={1.5}
                 />
               </div>
               <span className="text-sm font-medium text-foreground drop-shadow-lg">
-                {likes[currentIndex]?.toLocaleString() || 0}
+                {currentPost.likes?.toLocaleString() || 0}
               </span>
             </motion.button>
 
             <button
-              onClick={() => handleCommentClick(currentIndex)}
+              onClick={() => handleCommentClick(currentPost.id)}
               className="flex flex-col items-center gap-1"
             >
               <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
