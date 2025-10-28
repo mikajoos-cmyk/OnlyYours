@@ -1,3 +1,4 @@
+// src/App.tsx
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useAuthStore } from './stores/authStore';
@@ -17,14 +18,30 @@ import Payouts from './components/creator/Payouts';
 import ProfilePage from './components/profile/ProfilePage';
 import { Toaster } from './components/ui/toaster';
 
-
 function App() {
-  const { isAuthenticated, initialize } = useAuthStore();
+  const { isAuthenticated, isLoading, initialize } = useAuthStore();
   const { hasCompletedOnboarding } = useAppStore();
 
   useEffect(() => {
-    initialize();
-  }, [initialize]);
+    // Rufe initialize auf und speichere die zurückgegebene Unsubscribe-Funktion
+    const unsubscribeAuth = initialize();
+
+    // Gib eine Cleanup-Funktion zurück, die beim Unmount der Komponente aufgerufen wird
+    return () => {
+      unsubscribeAuth(); // Hier wird der Listener abgemeldet
+    };
+  }, [initialize]); // initialize als Abhängigkeit behalten
+
+  // --- Ladezustand anzeigen (bleibt gleich) ---
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-background">
+        <p className="text-foreground">Laden...</p> {/* Oder eine schönere Ladekomponente */}
+      </div>
+    );
+  }
+  // --- ENDE Ladezustand ---
+
 
   if (!isAuthenticated || !hasCompletedOnboarding) {
     return (
@@ -35,6 +52,7 @@ function App() {
     );
   }
 
+  // Rest der Komponente bleibt gleich...
   return (
     <Router>
       <AppShell>

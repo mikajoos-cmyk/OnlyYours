@@ -16,16 +16,26 @@ export interface UserProfile {
 }
 
 export class UserService {
-  async getUserByUsername(username: string): Promise<UserProfile | null> {
+// src/services/userService.ts
+async getUserById(id: string): Promise<UserProfile | null> {
+    console.log("userService searching for id (lowercase):", id.toLowerCase()); // <-- Zusätzliches Logging
     const { data, error } = await supabase
       .from('users')
       .select('*')
-      .eq('username', username.toLowerCase())
+      // Hier wird nach dem kleingeschriebenen Username gefiltert
+      .eq('id', id.toLowerCase())
       .maybeSingle();
 
-    if (error) throw error;
-    if (!data) return null;
+    if (error) {
+        console.error("Supabase error in getUserById:", error); // Fehler loggen
+        throw error;
+    }
+    if (!data) {
+        console.log("No user found for id:", id);
+        return null;
+    }
 
+    console.log("User found:", data);
     return this.mapToUserProfile(data);
   }
 

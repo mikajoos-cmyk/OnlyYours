@@ -1,14 +1,84 @@
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { DollarSignIcon, TrendingUpIcon, CalendarIcon } from 'lucide-react';
+import { useAuthStore } from '../../stores/authStore';
+
+// HINWEIS: Services müssen noch implementiert werden
+// import { payoutService } from '../../services/payoutService';
+// import { statisticsService } from '../../services/statisticsService';
+
+// Annahmen für Datenstrukturen
+interface Transaction {
+  id: string;
+  date: string;
+  amount: string;
+  status: 'completed' | 'pending';
+}
+
+interface PayoutsData {
+  availableBalance: number;
+  nextPayoutDate: string;
+  currentMonthEarnings: number;
+  lastMonthComparison: number;
+  totalYearEarnings: number;
+  history: Transaction[];
+}
 
 export default function Payouts() {
-  const transactions = [
-    { id: '1', date: '2024-01-15', amount: '€2,450', status: 'completed' },
-    { id: '2', date: '2024-01-01', amount: '€2,280', status: 'completed' },
-    { id: '3', date: '2023-12-15', amount: '€2,150', status: 'completed' },
-    { id: '4', date: '2023-12-01', amount: '€1,980', status: 'completed' },
-  ];
+  const { user } = useAuthStore();
+  const [data, setData] = useState<PayoutsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchPayouts = async () => {
+      if (!user?.id) return;
+      setLoading(true);
+      setError(null);
+      try {
+        // HINWEIS: Die folgenden Zeilen sind auskommentiert, da die Services noch nicht existieren.
+        // Ersetzen Sie dies durch echte Service-Aufrufe.
+        // const history = await payoutService.getPayoutHistory(user.id);
+        // const balance = await payoutService.getAvailableBalance(user.id);
+        // const monthlyEarnings = await statisticsService.getCurrentMonthEarnings(user.id);
+        // const totalEarnings = await statisticsService.getTotalEarnings(user.id, { year: new Date().getFullYear() });
+
+        // Mock-Daten als Platzhalter
+        const mockData: PayoutsData = {
+          availableBalance: 4680,
+          nextPayoutDate: '1. Februar 2024',
+          currentMonthEarnings: 24680,
+          lastMonthComparison: 12,
+          totalYearEarnings: 148200,
+          history: [
+            { id: '1', date: '2024-01-15', amount: '€2,450', status: 'completed' },
+            { id: '2', date: '2024-01-01', amount: '€2,280', status: 'completed' },
+          ],
+        };
+        setData(mockData);
+
+      } catch (err) {
+        setError('Fehler beim Laden der Auszahlungsdaten.');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPayouts();
+  }, [user?.id]);
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-screen"><p>Lade Auszahlungsdaten...</p></div>;
+  }
+
+  if (error) {
+    return <div className="flex items-center justify-center h-screen"><p className="text-destructive">{error}</p></div>;
+  }
+
+  if (!data) {
+    return <div className="flex items-center justify-center h-screen"><p>Keine Daten gefunden.</p></div>;
+  }
 
   return (
     <div className="min-h-screen py-8 px-4">
@@ -21,10 +91,10 @@ export default function Payouts() {
               <div>
                 <p className="text-secondary-foreground/80 mb-2">Verfügbares Guthaben</p>
                 <div className="text-5xl font-serif text-secondary-foreground">
-                  €4,680
+                  €{data.availableBalance.toLocaleString()}
                 </div>
                 <p className="text-secondary-foreground/60 mt-2 text-sm">
-                  Nächste Auszahlung: 1. Februar 2024
+                  Nächste Auszahlung: {data.nextPayoutDate}
                 </p>
               </div>
               <DollarSignIcon className="w-16 h-16 text-secondary-foreground/40" strokeWidth={1.5} />
@@ -41,8 +111,8 @@ export default function Payouts() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-serif text-foreground">€24,680</div>
-              <p className="text-sm text-success mt-2">+12% vs. letzter Monat</p>
+              <div className="text-3xl font-serif text-foreground">€{data.currentMonthEarnings.toLocaleString()}</div>
+              <p className="text-sm text-success mt-2">+{data.lastMonthComparison}% vs. letzter Monat</p>
             </CardContent>
           </Card>
 
@@ -50,12 +120,12 @@ export default function Payouts() {
             <CardHeader>
               <CardTitle className="text-foreground flex items-center gap-2">
                 <CalendarIcon className="w-5 h-5 text-secondary" strokeWidth={1.5} />
-                Gesamt (2024)
+                Gesamt ({new Date().getFullYear()})
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-serif text-foreground">€148,200</div>
-              <p className="text-sm text-muted-foreground mt-2">6 Monate</p>
+              <div className="text-3xl font-serif text-foreground">€{data.totalYearEarnings.toLocaleString()}</div>
+              <p className="text-sm text-muted-foreground mt-2">Bisher in diesem Jahr</p>
             </CardContent>
           </Card>
         </div>
@@ -69,14 +139,14 @@ export default function Payouts() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {transactions.map((transaction) => (
+              {data.history.map((transaction) => (
                 <div
                   key={transaction.id}
                   className="flex items-center justify-between py-4 border-b border-border last:border-0"
                 >
                   <div>
                     <div className="text-foreground font-medium">{transaction.amount}</div>
-                    <div className="text-sm text-muted-foreground">{transaction.date}</div>
+                    <div className="text-sm text-muted-foreground">{new Date(transaction.date).toLocaleDateString()}</div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-success">Abgeschlossen</span>

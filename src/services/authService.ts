@@ -13,7 +13,7 @@ export interface AuthUser {
 }
 
 export class AuthService {
-  async register(username: string, email: string, password: string, role: 'fan' | 'creator' = 'fan') {
+  async register(username: string, email: string, password: string, role: 'fan' | 'creator' = 'creator') {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -34,7 +34,7 @@ export class AuthService {
         id: authData.user.id,
         username: username.toLowerCase(),
         display_name: username,
-        role: role.toUpperCase() as 'FAN' | 'CREATOR',
+        role: role.toUpperCase() as 'CREATOR',
         bio: '',
         is_verified: false,
       });
@@ -42,6 +42,17 @@ export class AuthService {
     if (profileError) throw profileError;
 
     return authData;
+  }
+
+  async verifyOtp(email: string, token: string) {
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: 'email',
+    });
+
+    if (error) throw error;
+    return data;
   }
 
   async login(email: string, password: string): Promise<AuthUser> {

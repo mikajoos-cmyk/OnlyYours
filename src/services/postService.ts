@@ -203,7 +203,7 @@ export class PostService {
         .delete()
         .eq('id', existingLike.id);
 
-      await supabase.rpc('decrement_likes_count', { post_id: postId });
+      await supabase.rpc('decrement_likes_count', { post_id_input: postId });
 
       return false;
     } else {
@@ -214,7 +214,7 @@ export class PostService {
           post_id: postId,
         });
 
-      await supabase.rpc('increment_likes_count', { post_id: postId });
+      await supabase.rpc('increment_likes_count', { post_id_input: postId });
 
       return true;
     }

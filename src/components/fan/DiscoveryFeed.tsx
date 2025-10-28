@@ -1,194 +1,86 @@
 import { useState, useRef, useEffect } from 'react';
 import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
-import { Button } from '../ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
 import CommentsSheet from './CommentsSheet';
 import { useNavigate } from 'react-router-dom';
 import { useFeedStore } from '../../stores/feedStore';
+import ProfilePostViewer from './ProfilePostViewer';
 
 export default function DiscoveryFeed() {
   const [showComments, setShowComments] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
+  const [selectedPostIndex, setSelectedPostIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
   const navigate = useNavigate();
 
-  const { posts, currentIndex, isLoading, loadDiscoveryPosts, nextPost: nextPostAction, previousPost: previousPostAction, toggleLike } = useFeedStore();
+  // Zustand Store für den Feed-State
+  const { posts, currentIndex, isLoading, error, loadDiscoveryPosts, nextPost, previousPost, toggleLike } = useFeedStore();
 
+  // Daten beim ersten Rendern laden
   useEffect(() => {
-    loadDiscoveryPosts();
-  }, [loadDiscoveryPosts]);
+    // Nur laden, wenn noch keine Posts vorhanden sind, um unnötige Ladevorgänge zu vermeiden
+    if (posts.length === 0) {
+      loadDiscoveryPosts();
+    }
+  }, [loadDiscoveryPosts, posts.length]);
 
-  const mockPosts = [
-    {
-      id: '1',
-      creator: {
-        name: 'Sophia Laurent',
-        avatar: 'https://placehold.co/100x100',
-        username: 'sophialaurent',
-      },
-      media: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
-      caption: 'Exclusive behind the scenes ✨',
-      hashtags: ['luxury', 'fashion', 'exclusive'],
-      likes: 2340,
-      comments: 156,
-    },
-    {
-      id: '2',
-      creator: {
-        name: 'Isabella Rose',
-        avatar: 'https://placehold.co/100x100',
-        username: 'isabellarose',
-      },
-      media: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
-      caption: 'Morning vibes 💫',
-      hashtags: ['fitness', 'wellness', 'lifestyle'],
-      likes: 1890,
-      comments: 98,
-    },
-    {
-      id: '3',
-      creator: {
-        name: 'Elena Noir',
-        avatar: 'https://placehold.co/100x100',
-        username: 'elenanoir',
-      },
-      media: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
-      caption: 'New collection preview 🌟',
-      hashtags: ['fashion', 'style', 'premium'],
-      likes: 3120,
-      comments: 203,
-    },
-    {
-      id: '4',
-      creator: {
-        name: 'Aria Gold',
-        avatar: 'https://placehold.co/100x100',
-        username: 'ariagold',
-      },
-      media: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
-      caption: 'Behind the scenes magic 🎬',
-      hashtags: ['vlog', 'behindthescenes', '4k'],
-      likes: 2567,
-      comments: 134,
-    },
-    {
-      id: '5',
-      creator: {
-        name: 'Nova Sterling',
-        avatar: 'https://placehold.co/100x100',
-        username: 'novasterling',
-      },
-      media: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
-      caption: 'Sunset dreams ☀️',
-      hashtags: ['sunset', 'photography', 'aesthetic'],
-      likes: 4230,
-      comments: 287,
-    },
-    {
-      id: '6',
-      creator: {
-        name: 'Luna Wilde',
-        avatar: 'https://placehold.co/100x100',
-        username: 'lunawilde',
-      },
-      media: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
-      caption: 'Q&A time! Ask me anything 💬',
-      hashtags: ['qanda', 'community', 'live'],
-      likes: 1876,
-      comments: 421,
-    },
-    {
-      id: '7',
-      creator: {
-        name: 'Scarlett Vogue',
-        avatar: 'https://placehold.co/100x100',
-        username: 'scarlettvogue',
-      },
-      media: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
-      caption: 'Fashion week highlights 👗',
-      hashtags: ['fashionweek', 'runway', 'couture'],
-      likes: 5432,
-      comments: 312,
-    },
-    {
-      id: '8',
-      creator: {
-        name: 'Jade Luxe',
-        avatar: 'https://placehold.co/100x100',
-        username: 'jadeluxe',
-      },
-      media: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
-      caption: 'Travel diaries: Paris edition 🗼',
-      hashtags: ['travel', 'paris', 'luxury'],
-      likes: 3890,
-      comments: 245,
-    },
-  ];
+  // Posts für den Viewer vorbereiten
+  const viewerPosts = posts.map(post => ({ ...post, isLiked: post.isLiked || false }));
 
-  const displayPosts = posts.length > 0 ? posts : mockPosts;
+  const handlePostClick = (index: number) => {
+    setSelectedPostIndex(index);
+    setIsViewerOpen(true);
+  };
 
+  // Tastatur-Navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown') {
-        nextPostAction();
+        nextPost();
       } else if (e.key === 'ArrowUp') {
-        previousPostAction();
+        previousPost();
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [nextPost, previousPost]);
 
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [nextPostAction, previousPostAction]);
-
-  const scrollThreshold = 50; // Adjust this value as needed for sensitivity
-
+  // Mausrad-Navigation
   const handleScroll = (e: React.WheelEvent) => {
-    if (isScrolling.current || Math.abs(e.deltaY) < scrollThreshold) return;
-
+    if (isScrolling.current || Math.abs(e.deltaY) < 50) return;
     isScrolling.current = true;
-
-    if (e.deltaY > 0 && currentIndex < displayPosts.length - 1) {
-      nextPostAction();
-    } else if (e.deltaY < 0 && currentIndex > 0) {
-      previousPostAction();
+    if (e.deltaY > 0) {
+      nextPost();
+    } else if (e.deltaY < 0) {
+      previousPost();
     }
-
-    setTimeout(() => {
-      isScrolling.current = false;
-    }, 800);
+    setTimeout(() => { isScrolling.current = false; }, 800);
   };
 
+  // Touch-Navigation
   const handleTouchStart = useRef({ y: 0 });
   const handleTouchMove = (e: React.TouchEvent) => {
     const touch = e.touches[0];
     const deltaY = handleTouchStart.current.y - touch.clientY;
-
     if (Math.abs(deltaY) > 50 && !isScrolling.current) {
       isScrolling.current = true;
-
-      if (deltaY > 0 && currentIndex < displayPosts.length - 1) {
-        nextPostAction();
-      } else if (deltaY < 0 && currentIndex > 0) {
-        previousPostAction();
+      if (deltaY > 0) {
+        nextPost();
+      } else if (deltaY < 0) {
+        previousPost();
       }
-
-      setTimeout(() => {
-        isScrolling.current = false;
-      }, 800);
+      setTimeout(() => { isScrolling.current = false; }, 800);
     }
   };
-
   const handleTouchStartCapture = (e: React.TouchEvent) => {
     handleTouchStart.current = { y: e.touches[0].clientY };
   };
 
-  const handleLike = async (postId: string) => {
-    await toggleLike(postId);
+  const handleLike = (postId: string) => {
+    toggleLike(postId);
   };
 
   const handleCommentClick = (postId: string) => {
@@ -196,12 +88,29 @@ export default function DiscoveryFeed() {
     setShowComments(true);
   };
 
-  const currentPost = displayPosts[currentIndex];
+  const currentPost = posts[currentIndex];
+
+  // Lade- und Fehlerzustände behandeln
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-foreground">Lade Posts...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-destructive">{error}</p>
+      </div>
+    );
+  }
 
   if (!currentPost) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <p className="text-foreground">Lade Posts...</p>
+        <p className="text-foreground">Keine Posts gefunden.</p>
       </div>
     );
   }
@@ -216,7 +125,7 @@ export default function DiscoveryFeed() {
         onTouchMove={handleTouchMove}
       >
         <motion.div
-          key={currentIndex}
+          key={currentIndex} // Wichtig für die Animation beim Post-Wechsel
           initial={{ opacity: 0, y: 100 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -100 }}
@@ -226,7 +135,8 @@ export default function DiscoveryFeed() {
           <img
             src={currentPost.mediaUrl || currentPost.media}
             alt={currentPost.caption}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover cursor-pointer"
+            onClick={() => handlePostClick(currentIndex)}
           />
 
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
@@ -244,7 +154,7 @@ export default function DiscoveryFeed() {
                   {currentPost.creator.name}
                 </p>
                 <p className="text-sm text-foreground/80 drop-shadow-lg">
-                  @{currentPost.creator.username || currentPost.creatorId}
+                  @{currentPost.creatorId}
                 </p>
               </div>
             </div>
@@ -258,9 +168,7 @@ export default function DiscoveryFeed() {
             >
               <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
                 <HeartIcon
-                  className={`w-7 h-7 ${
-                    currentPost.isLiked ? 'fill-secondary text-secondary' : 'text-foreground'
-                  }`}
+                  className={`w-7 h-7 ${currentPost.isLiked ? 'fill-secondary text-secondary' : 'text-foreground'}`}
                   strokeWidth={1.5}
                 />
               </div>
@@ -304,23 +212,30 @@ export default function DiscoveryFeed() {
               ))}
             </div>
           </div>
-
-
         </motion.div>
       </div>
 
       <AnimatePresence>
-        {selectedPostIndex !== null && showComments && (
+        {selectedPostId !== null && showComments && (
           <CommentsSheet
             isOpen={showComments}
             onClose={() => {
               setShowComments(false);
-              setSelectedPostIndex(null);
+              setSelectedPostId(null);
             }}
-            post={posts[selectedPostIndex]}
+            post={posts.find(p => p.id === selectedPostId)}
           />
         )}
       </AnimatePresence>
+
+      {isViewerOpen && (
+        <ProfilePostViewer
+          initialPosts={viewerPosts}
+          initialIndex={selectedPostIndex}
+          onClose={() => setIsViewerOpen(false)}
+        />
+      )}
     </>
   );
 }
+

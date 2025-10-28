@@ -36,7 +36,7 @@ export class CommentService {
 
     if (error) throw error;
 
-    await supabase.rpc('increment_comments_count', { post_id: postId });
+    await supabase.rpc('increment_comments_count', { post_id_input: postId });
 
     return data;
   }
@@ -81,7 +81,7 @@ export class CommentService {
     if (error) throw error;
 
     if (comment) {
-      await supabase.rpc('decrement_comments_count', { post_id: comment.post_id });
+      await supabase.rpc('decrement_comments_count', { post_id_input: comment.post_id });
     }
   }
 

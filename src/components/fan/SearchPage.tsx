@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { SearchIcon, SlidersHorizontalIcon } from 'lucide-react';
@@ -6,62 +6,67 @@ import { Card } from '../ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Badge } from '../ui/badge';
 import { useNavigate } from 'react-router-dom';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '../ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { userService } from '../../services/userService'; // Import user service
+
+// Annahme für die Creator-Datenstruktur
+interface Creator {
+  id: string;
+  name: string;
+  avatar: string;
+  banner: string;
+  badges: string[];
+  isLive: boolean;
+  username: string;
+}
 
 export default function SearchPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [priceFilter, setPriceFilter] = useState('all');
   const [contentType, setContentType] = useState('all');
+  const [creators, setCreators] = useState<Creator[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const popularTags = ['#luxury', '#fitness', '#behindthescenes', '4K', 'Live jetzt'];
 
-  const creators = [
-    {
-      id: '1',
-      name: 'Elena Noir',
-      avatar: 'https://placehold.co/100x100',
-      banner: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
-      badges: ['4K', 'Premium'],
-      isLive: false,
-      username: 'elenanoir',
-    },
-    {
-      id: '2',
-      name: 'Luca V.',
-      avatar: 'https://placehold.co/100x100',
-      banner: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
-      badges: ['Live', 'Chat'],
-      isLive: true,
-      username: 'lucav',
-    },
-    {
-      id: '3',
-      name: 'Aria Gold',
-      avatar: 'https://placehold.co/100x100',
-      banner: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
-      badges: ['Foto', 'Sets'],
-      isLive: false,
-      username: 'ariagold',
-    },
-    {
-      id: '4',
-      name: 'Nova S.',
-      avatar: 'https://placehold.co/100x100',
-      banner: 'https://c.animaapp.com/mgqoddesI6hoXr/img/ai_1.png',
-      badges: ['Neu', 'Trend'],
-      isLive: false,
-      username: 'novas',
-    },
-  ];
+  useEffect(() => {
+    const fetchCreators = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Wenn keine Suchanfrage besteht, Top-Creators laden
+        if (!searchQuery && priceFilter === 'all' && contentType === 'all') {
+          const topCreators = await userService.getTopCreators();
+          setCreators(topCreators || []);
+        } else {
+          // Ansonsten Suche mit den aktuellen Filtern
+          const filters = { price: priceFilter, type: contentType };
+          const searchResults = await userService.searchCreators(searchQuery, filters);
+          setCreators(searchResults || []);
+        }
+
+      } catch (err) {
+        setError('Fehler bei der Suche nach Creators.');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Debounce: Warte kurz, bevor die Suche nach einer Eingabe ausgelöst wird
+    const handler = setTimeout(() => {
+      fetchCreators();
+    }, 300);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchQuery, priceFilter, contentType]);
 
   return (
     <div className="min-h-screen py-8 px-4">
@@ -133,6 +138,7 @@ export default function SearchPage() {
             <Button
               key={tag}
               variant="outline"
+              onClick={() => setSearchQuery(tag)} // Setzt den Tag als Suchanfrage
               className="bg-card text-foreground border-border hover:bg-secondary hover:text-secondary-foreground rounded-full font-normal"
             >
               {tag}
@@ -141,55 +147,60 @@ export default function SearchPage() {
         </div>
 
         <div>
-          <h2 className="text-xl font-serif text-foreground mb-4">Kuratiert für dich</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {creators.map((creator) => (
-              <Card
-                key={creator.id}
-                className="bg-card border-border overflow-hidden cursor-pointer hover:border-secondary transition-colors"
-                onClick={() => navigate(`/profile/${creator.username}`)}
-              >
-                <div className="relative h-48">
-                  <img
-                    src={creator.banner}
-                    alt={creator.name}
-                    className="w-full h-full object-cover"
-                  />
-                  {creator.isLive && (
-                    <Badge className="absolute top-3 right-3 bg-destructive text-destructive-foreground font-normal">
-                      LIVE
-                    </Badge>
-                  )}
-                </div>
-                <div className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="w-12 h-12 border-2 border-secondary">
-                      <AvatarImage src={creator.avatar} alt={creator.name} />
-                      <AvatarFallback className="bg-secondary text-secondary-foreground">
-                        {creator.name.charAt(0)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <h3 className="font-medium text-foreground">{creator.name}</h3>
-                      <div className="flex gap-2 mt-1">
-                        {creator.badges.map((badge) => (
-                          <span
-                            key={badge}
-                            className="text-xs text-muted-foreground"
-                          >
-                            {badge}
-                          </span>
-                        ))}
+          <h2 className="text-xl font-serif text-foreground mb-4">Ergebnisse</h2>
+          {loading && <p>Suche läuft...</p>}
+          {error && <p className="text-destructive">{error}</p>}
+          {!loading && !error && creators.length === 0 && <p>Keine Creators gefunden.</p>}
+          {!loading && !error && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {creators.map((creator) => (
+                <Card
+                  key={creator.id}
+                  className="bg-card border-border overflow-hidden cursor-pointer hover:border-secondary transition-colors"
+                  onClick={() => navigate(`/profile/${creator.username}`)}
+                >
+                  <div className="relative h-48">
+                    <img
+                      src={creator.banner}
+                      alt={creator.name}
+                      className="w-full h-full object-cover"
+                    />
+                    {creator.isLive && (
+                      <Badge className="absolute top-3 right-3 bg-destructive text-destructive-foreground font-normal">
+                        LIVE
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="w-12 h-12 border-2 border-secondary">
+                        <AvatarImage src={creator.avatar} alt={creator.name} />
+                        <AvatarFallback className="bg-secondary text-secondary-foreground">
+                          {creator.name.charAt(0)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <h3 className="font-medium text-foreground">{creator.name}</h3>
+                        <div className="flex gap-2 mt-1">
+                          {creator.badges.map((badge) => (
+                            <span
+                              key={badge}
+                              className="text-xs text-muted-foreground"
+                            >
+                              {badge}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
+                    <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal">
+                      Abonnieren
+                    </Button>
                   </div>
-                  <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal">
-                    Abonnieren
-                  </Button>
-                </div>
-              </Card>
-            ))}
-          </div>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

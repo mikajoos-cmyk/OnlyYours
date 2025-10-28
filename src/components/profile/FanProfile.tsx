@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -7,22 +7,69 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Switch } from '../ui/switch';
 import { useAuthStore } from '../../stores/authStore';
+import { subscriptionService } from '../../services/subscriptionService';
+// HINWEIS: Typen sollten idealerweise aus einer zentralen Datei importiert werden
 import { CameraIcon, ShieldIcon, CreditCardIcon, BookmarkIcon } from 'lucide-react';
+
+// Annahme für die Datenstruktur, passe sie an deine echten Typen an
+interface ActiveSubscription {
+  creator: { name: string };
+  price: number;
+  next_billing_date: string;
+}
+
+interface Transaction {
+  id: string;
+  created_at: string;
+  description: string;
+  amount: number;
+}
 
 export default function FanProfile() {
   const { user } = useAuthStore();
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
 
-  const activeSubscriptions = [
-    { creator: 'Sophia Laurent', price: '19.99€', nextBilling: '15.02.2024' },
-    { creator: 'Isabella Rose', price: '14.99€', nextBilling: '20.02.2024' },
-  ];
+  const [activeSubscriptions, setActiveSubscriptions] = useState<ActiveSubscription[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const transactions = [
-    { date: '10.01.2024', description: 'Abonnement: Sophia Laurent', amount: '19.99€' },
-    { date: '08.01.2024', description: 'PPV: Exklusives Video', amount: '9.99€' },
-    { date: '05.01.2024', description: 'Trinkgeld: Isabella Rose', amount: '5.00€' },
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user?.id) return;
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Lade aktive Abonnements
+        const subs = await subscriptionService.getUserSubscriptions(user.id);
+        setActiveSubscriptions(subs || []);
+
+        // Lade Transaktionen (sobald der Service existiert)
+        // HINWEIS: `paymentService` und `getUserPaymentHistory` müssen noch implementiert werden.
+        // const paymentHistory = await paymentService.getUserPaymentHistory(user.id);
+        // setTransactions(paymentHistory || []);
+        
+        // Platzhalter, bis der Service existiert
+        const mockTransactions = [
+          { id: '1', created_at: '2024-01-10T10:00:00Z', description: 'Abonnement: Sophia Laurent', amount: 19.99 },
+          { id: '2', created_at: '2024-01-08T12:30:00Z', description: 'PPV: Exklusives Video', amount: 9.99 },
+        ];
+        setTransactions(mockTransactions);
+
+
+      } catch (err) {
+        setError('Fehler beim Laden der Daten.');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user?.id]);
+
 
   return (
     <div className="space-y-8">
@@ -138,20 +185,23 @@ export default function FanProfile() {
               <CardTitle className="text-foreground">Aktive Abonnements</CardTitle>
             </CardHeader>
             <CardContent>
+               {loading && <p>Lade Abonnements...</p>}
+               {error && <p className="text-destructive">{error}</p>}
+               {!loading && !error && activeSubscriptions.length === 0 && <p>Keine aktiven Abonnements.</p>}
               <div className="space-y-4">
-                {activeSubscriptions.map((sub, index) => (
+                {!loading && !error && activeSubscriptions.map((sub, index) => (
                   <div
                     key={index}
                     className="flex items-center justify-between py-4 border-b border-border last:border-0"
                   >
                     <div>
-                      <h3 className="text-foreground font-medium">{sub.creator}</h3>
+                      <h3 className="text-foreground font-medium">{sub.creator.name}</h3>
                       <p className="text-sm text-muted-foreground">
-                        Nächste Abrechnung: {sub.nextBilling}
+                        Nächste Abrechnung: {new Date(sub.next_billing_date).toLocaleDateString()}
                       </p>
                     </div>
                     <div className="flex items-center gap-4">
-                      <span className="text-secondary font-medium">{sub.price}/Monat</span>
+                      <span className="text-secondary font-medium">{sub.price.toFixed(2)}€/Monat</span>
                       <Button
                         variant="outline"
                         className="bg-background text-foreground border-border hover:bg-neutral font-normal"
@@ -184,17 +234,20 @@ export default function FanProfile() {
 
               <div className="border-t border-border pt-6">
                 <h3 className="text-foreground font-medium mb-4">Transaktionshistorie</h3>
+                 {loading && <p>Lade Transaktionen...</p>}
+                 {error && <p className="text-destructive">{error}</p>}
+                 {!loading && !error && transactions.length === 0 && <p>Keine Transaktionen vorhanden.</p>}
                 <div className="space-y-3">
-                  {transactions.map((transaction, index) => (
+                  {!loading && !error && transactions.map((transaction) => (
                     <div
-                      key={index}
+                      key={transaction.id}
                       className="flex items-center justify-between py-3 border-b border-border last:border-0"
                     >
                       <div>
                         <p className="text-foreground">{transaction.description}</p>
-                        <p className="text-sm text-muted-foreground">{transaction.date}</p>
+                        <p className="text-sm text-muted-foreground">{new Date(transaction.created_at).toLocaleDateString()}</p>
                       </div>
-                      <span className="text-foreground font-medium">{transaction.amount}</span>
+                      <span className="text-foreground font-medium">{transaction.amount.toFixed(2)}€</span>
                     </div>
                   ))}
                 </div>
