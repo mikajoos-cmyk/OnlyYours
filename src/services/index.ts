@@ -5,3 +5,4 @@ export { commentService } from './commentService';
 export { messageService } from './messageService';
 export { storageService } from './storageService';
 export { userService } from './userService';
+export { notificationService } from './notificationService';

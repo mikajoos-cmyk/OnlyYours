@@ -170,11 +170,26 @@ export default function ProfilePostViewer({
            className="h-full w-full relative" // Wichtig: h-full
          >
            {/* Bild/Video */}
-           <img
-             src={currentPost.media}
-             alt={currentPost.caption}
-             className="w-full h-full object-cover"
-           />
+           {/* --- NEU: Bedingtes Rendern für Video/Bild --- */}
+           {/* HINWEIS: Annahme, dass 'currentPost.mediaType' vorhanden ist.
+               Wenn nicht, muss der Typ aus 'initialPosts' korrekt durchgereicht werden. */}
+           {currentPost.mediaType === 'video' ? (
+              <video
+                src={currentPost.media}
+                autoPlay
+                muted // WICHTIG: Autoplay funktioniert in Browsern nur ohne Ton
+                loop
+                playsInline // Wichtig für iOS-Geräte
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <img
+                src={currentPost.media}
+                alt={currentPost.caption}
+                className="w-full h-full object-cover"
+              />
+            )}
+           {/* --- ENDE --- */}
 
            {/* Gradient Overlay */}
            <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />

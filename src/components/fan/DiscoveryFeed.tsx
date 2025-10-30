@@ -132,12 +132,26 @@ export default function DiscoveryFeed() {
           transition={{ duration: 0.5 }}
           className="h-full w-full relative"
         >
-          <img
-            src={currentPost.mediaUrl || currentPost.media}
-            alt={currentPost.caption}
-            className="w-full h-full object-cover cursor-pointer"
-            onClick={() => handlePostClick(currentIndex)}
-          />
+          {/* --- NEU: Bedingtes Rendern für Video/Bild --- */}
+          {currentPost.mediaType === 'video' ? (
+            <video
+              src={currentPost.mediaUrl || currentPost.media}
+              autoPlay
+              muted // WICHTIG: Autoplay funktioniert in Browsern nur ohne Ton
+              loop
+              playsInline // Wichtig für iOS-Geräte
+              className="w-full h-full object-cover cursor-pointer"
+              onClick={() => handlePostClick(currentIndex)}
+            />
+          ) : (
+            <img
+              src={currentPost.mediaUrl || currentPost.media}
+              alt={currentPost.caption}
+              className="w-full h-full object-cover cursor-pointer"
+              onClick={() => handlePostClick(currentIndex)}
+            />
+          )}
+          {/* --- ENDE --- */}
 
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
 

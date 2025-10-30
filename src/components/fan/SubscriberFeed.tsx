@@ -230,11 +230,24 @@ export default function SubscriberFeed({
            className="h-full w-full relative"
          >
             {/* Bild/Video */}
-            <img
-                src={currentPost.mediaUrl} // Verwende mediaUrl aus ServicePostData
+            {/* --- NEU: Bedingtes Rendern für Video/Bild --- */}
+            {currentPost.mediaType === 'video' ? (
+              <video
+                src={currentPost.mediaUrl}
+                autoPlay
+                muted // WICHTIG: Autoplay funktioniert in Browsern nur ohne Ton
+                loop
+                playsInline // Wichtig für iOS-Geräte
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <img
+                src={currentPost.mediaUrl}
                 alt={currentPost.caption}
                 className="w-full h-full object-cover"
-            />
+              />
+            )}
+            {/* --- ENDE --- */}
             {/* Gradient Overlay */}
             <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />
 
@@ -244,7 +257,7 @@ export default function SubscriberFeed({
                     <Avatar className="w-12 h-12 border-2 border-foreground">
                         <AvatarImage src={currentPost.creator.avatar} alt={currentPost.creator.name} />
                         <AvatarFallback className="bg-secondary text-secondary-foreground">
-                        {currentPost.creator.name.charAt(0)}
+                        {currentPost.creator.name ? currentPost.creator.name.charAt(0) : ''}
                         </AvatarFallback>
                     </Avatar>
                     <div>

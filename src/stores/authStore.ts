@@ -4,7 +4,11 @@ import { authService, AuthUser } from '../services/authService';
 import { Subscription } from '@supabase/supabase-js'; // Subscription Typ importieren
 
 // Interface (ggf. anpassen oder importieren)
-interface AppUser extends AuthUser {}
+interface AppUser extends AuthUser {
+  // Zukünftige, App-spezifische User-Eigenschaften können hier hin
+  // Die neuen Felder `followersCount` und `totalEarnings`
+  // werden bereits durch `AuthUser` abgedeckt.
+}
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -28,31 +32,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: true, // Starte immer mit isLoading = true
 
   initialize: () => {
-    // Wenn der Listener bereits aktiv ist (z.B. durch StrictMode double mount), nichts tun und Dummy-Unsubscribe zurückgeben
+    // ... (Rest der initialize-Funktion bleibt unverändert) ...
     if (initializationEnsured && authListenerSubscription) {
       console.log("Auth listener already initialized. Skipping.");
       return () => { /* No-op, da der eigentliche Unsubscriber schon zurückgegeben wurde */ };
     }
-     if (!authListenerSubscription) { // Nur abonnieren, wenn noch kein Listener aktiv ist
+     if (!authListenerSubscription) {
         console.log("Initializing auth listener...");
 
         const { data: { subscription } } = authService.onAuthStateChange(async (userAuthData: AppUser | null) => {
           console.log("Auth state change received in store:", userAuthData);
-          const currentlyLoading = get().isLoading; // Prüfen, ob dies der *initiale* Ladevorgang ist
+          const currentlyLoading = get().isLoading;
 
           let finalUser: AppUser | null = null;
           let finalIsAuthenticated = false;
 
           if (userAuthData) {
-            // Hole *immer* das aktuellste Profil, da userAuthData ggf. veraltet sein kann
             const userProfile = await authService.getCurrentUser();
             if (userProfile) {
               finalUser = userProfile;
               finalIsAuthenticated = true;
             } else {
               console.error("Authenticated user found by Supabase, but profile data missing!");
-              // In diesem Fall den Benutzer ausloggen, um inkonsistenten Zustand zu beheben
-               await authService.logout(); // Führt dazu, dass dieser Callback erneut mit null aufgerufen wird
+               await authService.logout();
                finalUser = null;
                finalIsAuthenticated = false;
             }
@@ -61,39 +63,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             finalIsAuthenticated = false;
           }
 
-          // Setze isLoading nur beim *ersten* Mal auf false, wenn der Status geklärt ist
           set({
             isAuthenticated: finalIsAuthenticated,
             user: finalUser,
-            isLoading: currentlyLoading ? false : get().isLoading // Nur auf false setzen, wenn wir initial geladen haben
+            isLoading: currentlyLoading ? false : get().isLoading
           });
 
           console.log("Auth state updated:", { isAuthenticated: finalIsAuthenticated, user: finalUser, isLoading: get().isLoading });
-          initializationEnsured = true; // Markieren, dass die erste Prüfung durch ist
+          initializationEnsured = true;
         });
 
-        authListenerSubscription = subscription; // Das aktive Abonnement speichern
+        authListenerSubscription = subscription;
      } else {
          console.log("Auth listener subscription already exists.");
      }
 
 
-    // Gib die Unsubscribe-Funktion zurück
     return () => {
       console.log("Running unsubscribe function returned by initialize...");
       if (authListenerSubscription) {
         authListenerSubscription.unsubscribe();
-        authListenerSubscription = null; // Wichtig: Zurücksetzen, damit es neu erstellt werden kann
-        initializationEnsured = false; // Zurücksetzen für den Fall eines echten Unmounts/Remounts
+        authListenerSubscription = null;
+        initializationEnsured = false;
         console.log("Auth listener unsubscribed.");
-        // Setze isLoading NICHT zurück, nur der initiale Load sollte es tun.
       } else {
           console.log("No active auth listener subscription to unsubscribe from.");
       }
     };
   },
 
-  // --- login, register, logout, setUser, updateProfile bleiben wie zuvor ---
   login: async (email: string, password: string) => {
     try {
       const user = await authService.login(email, password);

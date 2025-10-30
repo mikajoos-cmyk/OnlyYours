@@ -10,6 +10,10 @@ export interface AuthUser {
   avatar: string;
   role: 'fan' | 'creator';
   isVerified?: boolean;
+  // --- HINZUGEFÜGT ---
+  followersCount: number;
+  totalEarnings: number;
+  // --- ENDE HINZUGEFÜGT ---
 }
 
 export class AuthService {
@@ -77,7 +81,7 @@ export class AuthService {
   }
 
   async logout() {
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabase.signOut();
     if (error) throw error;
   }
 
@@ -140,10 +144,14 @@ export class AuthService {
     return {
       id: userData.id,
       name: userData.display_name,
-      email: '',
+      email: '', // E-Mail wird aus auth.user bezogen, hier nicht benötigt
       avatar: userData.avatar_url || 'https://placehold.co/100x100',
       role: userData.role.toLowerCase() as 'fan' | 'creator',
       isVerified: userData.is_verified,
+      // --- HINZUGEFÜGT ---
+      followersCount: userData.followers_count || 0,
+      totalEarnings: userData.total_earnings || 0,
+      // --- ENDE HINZUGEFÜGT ---
     };
   }
 }
