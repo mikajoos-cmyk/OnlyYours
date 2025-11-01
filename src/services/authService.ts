@@ -4,17 +4,15 @@ import type { Database } from '../lib/database.types';
 
 type UserRow = Database['public']['Tables']['users']['Row'];
 
-// Dieses Interface spiegelt das volle Profil wider, das der authStore halten soll
 export interface AuthUser {
   id: string;
-  name: string; // display_name
+  name: string;
   email: string;
   avatar: string;
   role: 'fan' | 'creator';
   isVerified?: boolean;
   followersCount: number;
   totalEarnings: number;
-  // --- Erweiterte Felder für Profilseiten ---
   username?: string;
   bio?: string;
   bannerUrl?: string | null;
@@ -22,33 +20,35 @@ export interface AuthUser {
 }
 
 export class AuthService {
+
+  /**
+   * (AKTUALISIERT) Registriert einen Benutzer.
+   * Die Erstellung des 'public.users'-Profils wird jetzt
+   * durch den Supabase DB-Trigger 'handle_new_user' übernommen.
+   */
   async register(username: string, email: string, password: string, role: 'fan' | 'creator' = 'creator') {
+
+    // --- KORREKTUR HIER ---
+    // Wir übergeben alle Profildaten (username, display_name, role)
+    // an die 'options.data', damit der DB-Trigger sie lesen kann.
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
-          username,
-          role,
+          username: username.toLowerCase(),
+          display_name: username, // Standardmäßig ist display_name gleich username
+          role: role.toUpperCase(), // 'FAN' oder 'CREATOR'
         },
+        // E-Mail-Bestätigung ist standardmäßig aktiviert
       },
     });
+    // --- ENDE KORREKTUR ---
 
     if (authError) throw authError;
     if (!authData.user) throw new Error('Registration failed');
 
-    const { error: profileError } = await supabase
-      .from('users')
-      .insert({
-        id: authData.user.id,
-        username: username.toLowerCase(),
-        display_name: username,
-        role: role.toUpperCase() as 'CREATOR', // Standard-DB-Enum
-        bio: '',
-        is_verified: false,
-      });
-
-    if (profileError) throw profileError;
+    // Der manuelle .insert() Aufruf wird entfernt, da der DB-Trigger dies übernimmt.
 
     return authData;
   }
@@ -64,6 +64,30 @@ export class AuthService {
     return data;
   }
 
+  async resendOtp(email: string) {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email,
+    });
+    if (error) throw error;
+  }
+
+  async checkUsernameAvailability(username: string): Promise<boolean> {
+    const { data, error } = await supabase
+      .from('users')
+      .select('username')
+      .eq('username', username.toLowerCase())
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error checking username:", error);
+      return false;
+    }
+
+    return !data; // true (verfügbar), wenn data null ist
+  }
+
+
   async login(email: string, password: string): Promise<AuthUser> {
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
@@ -73,7 +97,6 @@ export class AuthService {
     if (authError) throw authError;
     if (!authData.user) throw new Error('Login failed');
 
-    // Verwende die neue Full-Profile-Funktion
     const userProfile = await this.getCurrentUserFullProfile();
     if (!userProfile) throw new Error('User profile not found after login');
 
@@ -81,29 +104,27 @@ export class AuthService {
   }
 
   async logout() {
-    const { error } = await supabase.signOut();
+    const { error } = await supabase.auth.signOut();
     if (error) throw error;
   }
 
-  /**
-   * (ALT) Beibehalten für Kompatibilität, falls noch woanders genutzt,
-   * leitet aber jetzt auf die neue Funktion um.
-   */
   async getCurrentUser(): Promise<AuthUser | null> {
     return this.getCurrentUserFullProfile();
   }
 
-  /**
-   * (NEU) Lädt das vollständige Benutzerprofil aus der 'users'-Tabelle
-   */
   async getCurrentUserFullProfile(): Promise<AuthUser | null> {
     const { data: { session } } = await supabase.auth.getSession();
-
     if (!session?.user) return null;
+
+    // Nur fortfahren, wenn die E-Mail bestätigt wurde
+    if (session.user.aud !== 'authenticated') {
+        console.warn("User session found, but email not verified.");
+        return null;
+    }
 
     const { data: userData, error } = await supabase
       .from('users')
-      .select('*') // Holt alle Felder
+      .select('*')
       .eq('id', session.user.id)
       .single();
 
@@ -112,13 +133,9 @@ export class AuthService {
         return null;
     }
 
-    // Verwende die map-Funktion, die *alle* Felder mappt
     return this.mapUserRowToAuthUser(userData, session.user.email);
   }
 
-  /**
-   * (AKTUALISIERT) Akzeptiert jetzt die neuen Felder
-   */
   async updateProfile(userId: string, updates: {
     display_name?: string;
     bio?: string;
@@ -128,7 +145,7 @@ export class AuthService {
   }) {
     const { data, error } = await supabase
       .from('users')
-      .update(updates) // 'updates' wird direkt durchgereicht
+      .update(updates)
       .eq('id', userId)
       .select()
       .single();
@@ -137,9 +154,6 @@ export class AuthService {
     return data;
   }
 
-  /**
-   * (NEU) Ändert das Passwort des angemeldeten Benutzers
-   */
   async changePassword(newPassword: string) {
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
@@ -148,14 +162,11 @@ export class AuthService {
     if (error) throw error;
   }
 
-  /**
-   * (AKTUALISIERT) Verwendet jetzt getCurrentUserFullProfile
-   */
   onAuthStateChange(callback: (user: AuthUser | null) => void) {
     return supabase.auth.onAuthStateChange((_event, session) => {
       (async () => {
-        if (session?.user) {
-          // Ruft die neue Funktion auf, um das volle Profil zu laden
+        // Nur als eingeloggt betrachten, wenn die E-Mail bestätigt ist
+        if (session?.user && session.user.aud === 'authenticated') {
           const user = await this.getCurrentUserFullProfile();
           callback(user);
         } else {
@@ -165,20 +176,16 @@ export class AuthService {
     });
   }
 
-  /**
-   * (AKTUALISIERT) Mappt alle Felder von der DB-Zeile zum AuthUser-Interface
-   */
   private mapUserRowToAuthUser(userData: UserRow, email?: string): AuthUser {
     return {
       id: userData.id,
       name: userData.display_name,
-      email: email || '', // E-Mail von der Auth-Session übergeben
+      email: email || '',
       avatar: userData.avatar_url || 'https://placehold.co/100x100',
       role: userData.role.toLowerCase() as 'fan' | 'creator',
       isVerified: userData.is_verified,
       followersCount: userData.followers_count || 0,
       totalEarnings: userData.total_earnings || 0,
-      // --- Erweiterte Felder ---
       username: userData.username,
       bio: userData.bio,
       bannerUrl: userData.banner_url,

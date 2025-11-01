@@ -3,8 +3,6 @@ import { create } from 'zustand';
 import { authService, AuthUser } from '../services/authService';
 import { Subscription } from '@supabase/supabase-js';
 
-// Das AppUser-Interface im Store ist jetzt identisch mit dem AuthUser-Interface
-// aus dem authService, das alle Felder enthält.
 interface AppUser extends AuthUser {}
 
 interface AuthState {
@@ -16,7 +14,6 @@ interface AuthState {
   register: (username: string, email: string, password: string, role?: 'fan' | 'creator') => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: AppUser) => void;
-  // Signatur erweitert
   updateProfile: (updates: {
     display_name?: string;
     bio?: string;
@@ -24,7 +21,13 @@ interface AuthState {
     banner_url?: string;
     subscription_price?: number;
   }) => Promise<void>;
-  changePassword: (newPassword: string) => Promise<void>; // Hinzugefügt
+  changePassword: (newPassword: string) => Promise<void>;
+
+  // --- NEUE METHODEN ---
+  checkUsernameAvailability: (username: string) => Promise<boolean>;
+  verifyOtp: (email: string, token: string) => Promise<any>;
+  resendOtp: (email: string) => Promise<void>;
+  // --- ENDE NEUE METHODEN ---
 }
 
 let authListenerSubscription: Subscription | null = null;
@@ -43,14 +46,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
      if (!authListenerSubscription) {
         console.log("Initializing auth listener...");
 
-        // onAuthStateChange ruft jetzt intern getCurrentUserFullProfile auf
         const { data: { subscription } } = authService.onAuthStateChange(async (userFullProfile: AppUser | null) => {
           console.log("Auth state change received in store:", userFullProfile);
 
           set({
             isAuthenticated: !!userFullProfile,
             user: userFullProfile,
-            isLoading: false // Ladevorgang hier abschließen
+            isLoading: false
           });
 
           console.log("Auth state updated:", { isAuthenticated: !!userFullProfile, user: userFullProfile, isLoading: false });
@@ -74,7 +76,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (email: string, password: string) => {
     try {
       await authService.login(email, password);
-      // State wird durch onAuthStateChange aktualisiert
     } catch (error) {
       console.error('Login failed:', error);
       set({ isAuthenticated: false, user: null });
@@ -107,10 +108,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const currentUser = get().user;
     if (!currentUser) throw new Error('Not authenticated');
     try {
-      // Ruft den Service auf
       await authService.updateProfile(currentUser.id, updates);
-
-      // Holt das volle Profil neu, um den Store zu aktualisieren
       const updatedUser = await authService.getCurrentUserFullProfile();
       if (updatedUser) {
         set({ user: updatedUser });
@@ -121,7 +119,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  // --- NEUE METHODE ---
   changePassword: async (newPassword: string) => {
     try {
       await authService.changePassword(newPassword);
@@ -130,4 +127,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
        throw error;
     }
   },
+
+  // --- IMPLEMENTIERUNG DER NEUEN METHODEN ---
+  checkUsernameAvailability: async (username: string) => {
+    return authService.checkUsernameAvailability(username);
+  },
+
+  verifyOtp: async (email: string, token: string) => {
+    return authService.verifyOtp(email, token);
+  },
+
+  resendOtp: async (email: string) => {
+    return authService.resendOtp(email);
+  }
+  // --- ENDE IMPLEMENTIERUNG ---
 }));

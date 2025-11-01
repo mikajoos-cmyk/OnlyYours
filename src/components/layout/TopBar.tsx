@@ -1,3 +1,4 @@
+// src/components/layout/TopBar.tsx
 import { BellIcon, UserIcon } from 'lucide-react';
 import { Button } from '../ui/button';
 import {
@@ -15,22 +16,28 @@ export default function TopBar() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
-    window.location.reload(); // Beibehalten oder durch navigate('/') ersetzen
+  // --- KORREKTUR HIER ---
+  // Die Funktion muss 'async' sein und 'await' verwenden
+  const handleLogout = async () => {
+    try {
+      await logout(); // WARTEN, bis der Logout abgeschlossen ist
+      window.location.reload(); // ERST DANN die Seite neu laden
+    } catch (error) {
+      console.error("Logout failed in TopBar:", error);
+      // Hier könnte man einen Toast-Fehler anzeigen
+    }
   };
+  // --- ENDE KORREKTUR ---
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-16 items-center justify-between px-4 md:px-8">
-        {/* --- Änderung beginnt hier --- */}
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
 <img
-  src="/logo.png" // Stelle sicher, dass der Dateiname korrekt ist (Groß-/Kleinschreibung)
+  src="/logo.png"
   alt="OnlyYours Logo"
-  className="h-8 md:h-12 lg:h-16 w-auto" // Klein -> Mittel -> Groß
+  className="h-8 md:h-12 lg:h-16 w-auto"
 />        </div>
-        {/* --- Änderung endet hier --- */}
 
         <div className="flex items-center gap-4">
           <Button
@@ -56,7 +63,6 @@ export default function TopBar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 bg-card text-card-foreground border-border">
-              {/* Profil-Link zur Profilseite */}
               <DropdownMenuItem
                 onClick={() => navigate('/profile')}
                 className="text-foreground hover:bg-neutral cursor-pointer"
@@ -66,7 +72,7 @@ export default function TopBar() {
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-border" />
               <DropdownMenuItem
-                onClick={handleLogout}
+                onClick={handleLogout} // Ruft die korrigierte Funktion auf
                 className="text-foreground hover:bg-neutral cursor-pointer"
               >
                 Abmelden
