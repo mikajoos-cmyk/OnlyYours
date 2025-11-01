@@ -1,3 +1,4 @@
+// src/services/postService.ts
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
 
@@ -33,43 +34,38 @@ export interface Post {
 
 export class PostService {
 
-  // --- AKTUALISIERTE createPost FUNKTION ---
   async createPost(post: {
     mediaUrl: string;
     mediaType: 'IMAGE' | 'VIDEO';
-    thumbnail_url?: string | null; // Thumbnail hinzugefügt
+    thumbnail_url?: string | null;
     caption?: string;
     hashtags?: string[];
     price?: number;
     tierId?: string | null;
     scheduledFor?: string | null;
-    is_published?: boolean; // Status für Entwürfe hinzugefügt
+    is_published?: boolean;
   }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Standard-Veröffentlichungslogik
-    // Wenn scheduledFor gesetzt ist, wird is_published ignoriert (da es geplant ist)
-    // Ansonsten ist es standardmäßig true (veröffentlicht)
-    // Außer, is_published wird explizit als false (Entwurf) übergeben
     let resolvedIsPublished = true;
     if (post.scheduledFor) {
-      resolvedIsPublished = true; // Geplante Posts sind "veröffentlicht", aber erst später sichtbar
+      resolvedIsPublished = true;
     } else if (post.is_published === false) {
-      resolvedIsPublished = false; // Explizit als Entwurf gespeichert
+      resolvedIsPublished = false;
     }
 
     const postData: PostInsert = {
       creator_id: user.id,
       media_url: post.mediaUrl,
       media_type: post.mediaType,
-      thumbnail_url: post.thumbnail_url || null, // Thumbnail speichern
+      thumbnail_url: post.thumbnail_url || null,
       caption: post.caption || '',
       hashtags: post.hashtags || [],
       price: post.price || 0,
       tier_id: post.tierId || null,
       scheduled_for: post.scheduledFor || null,
-      is_published: resolvedIsPublished, // Aufgelösten Status verwenden
+      is_published: resolvedIsPublished,
     };
 
     const { data, error } = await supabase
@@ -81,7 +77,6 @@ export class PostService {
     if (error) throw error;
     return data;
   }
-  // --- ENDE AKTUALISIERUNG ---
 
 
   async getDiscoveryFeed(limit: number = 20, offset: number = 0) {
@@ -124,19 +119,28 @@ export class PostService {
     return this.mapPostsToFrontend(posts || [], userLikes);
   }
 
+  /**
+   * (AKTUALISIERT) Ruft Posts von Creatorn ab, die der User abonniert hat.
+   * Berücksichtigt jetzt auch gekündigte Abos, die noch gültig (end_date > now()) sind.
+   */
   async getSubscriberFeed(limit: number = 20, offset: number = 0) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
+    // --- HIER IST DIE ÄNDERUNG ---
+    // Wir holen alle Abos, die 'ACTIVE' SIND
+    // ODER 'CANCELED' SIND, ABER DEREN 'end_date' NOCH IN DER ZUKUNFT LIEGT.
     const { data: subscriptions } = await supabase
       .from('subscriptions')
       .select('creator_id')
       .eq('fan_id', user.id)
-      .eq('status', 'ACTIVE');
+      .or(`status.eq.ACTIVE,and(status.eq.CANCELED,end_date.gt.now())`);
+    // --- ENDE DER ÄNDERUNG ---
 
     const creatorIds = subscriptions?.map(s => s.creator_id) || [];
     if (creatorIds.length === 0) return [];
 
+    // Der Rest der Funktion bleibt gleich
     const { data: posts, error } = await supabase
       .from('posts')
       .select(`
@@ -154,6 +158,8 @@ export class PostService {
       `)
       .in('creator_id', creatorIds)
       .eq('is_published', true)
+      // Posts anzeigen, die entweder nicht geplant sind oder deren Plandatum in der Vergangenheit liegt
+      .or('scheduled_for.is.null,scheduled_for.lte.now()')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -188,6 +194,8 @@ export class PostService {
       `)
       .eq('creator_id', creatorId)
       .eq('is_published', true)
+      // Nur veröffentlichte Posts anzeigen, die nicht in der Zukunft liegen
+      .or('scheduled_for.is.null,scheduled_for.lte.now()')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 

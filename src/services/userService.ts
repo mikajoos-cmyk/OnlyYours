@@ -1,3 +1,4 @@
+// src/services/userService.ts
 import { supabase } from '../lib/supabase';
 
 export interface UserProfile {
@@ -16,34 +17,45 @@ export interface UserProfile {
 }
 
 export class UserService {
-// src/services/userService.ts
-async getUserById(id: string): Promise<UserProfile | null> {
-    console.log("userService searching for id (lowercase):", id.toLowerCase()); // <-- Zusätzliches Logging
+
+  /**
+   * (WIEDERHERGESTELLT) Ruft ein Benutzerprofil anhand seines eindeutigen @username ab.
+   * Wird von der Creator-Profilseite (CreatorProfile.tsx) verwendet.
+   */
+  async getUserByUsername(username: string): Promise<UserProfile | null> {
+    // Stellt sicher, dass die Abfrage immer kleingeschrieben erfolgt,
+    // da Ihr DB-Schema dies für 'username' vorsieht.
+    const normalizedUsername = username.toLowerCase();
+
+    console.log("userService searching for username (lowercase):", normalizedUsername);
+
     const { data, error } = await supabase
       .from('users')
       .select('*')
-      // Hier wird nach dem kleingeschriebenen Username gefiltert
-      .eq('id', id.toLowerCase())
+      .eq('username', normalizedUsername) // Sucht in der 'username'-Spalte
       .maybeSingle();
 
     if (error) {
-        console.error("Supabase error in getUserById:", error); // Fehler loggen
+        console.error("Supabase error in getUserByUsername:", error);
         throw error;
     }
     if (!data) {
-        console.log("No user found for id:", id);
+        console.log("No user found for username:", normalizedUsername);
         return null;
     }
 
-    console.log("User found:", data);
+    console.log("User found by username:", data);
     return this.mapToUserProfile(data);
   }
 
+  /**
+   * Ruft ein Benutzerprofil anhand seiner UUID (id) ab.
+   */
   async getUserById(userId: string): Promise<UserProfile | null> {
     const { data, error } = await supabase
       .from('users')
       .select('*')
-      .eq('id', userId)
+      .eq('id', userId) // Sucht korrekt in der 'id'-Spalte
       .maybeSingle();
 
     if (error) throw error;

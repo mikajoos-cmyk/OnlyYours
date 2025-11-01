@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+// src/components/profile/FanProfile.tsx
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -7,33 +8,54 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Switch } from '../ui/switch';
 import { useAuthStore } from '../../stores/authStore';
-import { subscriptionService } from '../../services/subscriptionService';
-// HINWEIS: Typen sollten idealerweise aus einer zentralen Datei importiert werden
-import { CameraIcon, ShieldIcon, CreditCardIcon, BookmarkIcon } from 'lucide-react';
+import { subscriptionService, Subscription } from '../../services/subscriptionService';
+// --- NEUE IMPORTS ---
+import { storageService } from '../../services/storageService';
+import { paymentService, PaymentTransaction } from '../../services/paymentService';
+import { useToast } from '../../hooks/use-toast';
+import { CameraIcon, ShieldIcon, CreditCardIcon, Loader2Icon } from 'lucide-react';
+// --- ENDE NEUE IMPORTS ---
 
-// Annahme für die Datenstruktur, passe sie an deine echten Typen an
+// Typ für Abos (angepasst an das, was wir wirklich brauchen)
 interface ActiveSubscription {
+  id: string;
   creator: { name: string };
   price: number;
-  next_billing_date: string;
-}
-
-interface Transaction {
-  id: string;
-  created_at: string;
-  description: string;
-  amount: number;
+  endDate: string | null;
+  status: 'ACTIVE' | 'CANCELED' | 'EXPIRED';
 }
 
 export default function FanProfile() {
-  const { user } = useAuthStore();
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const { user, updateProfile, changePassword } = useAuthStore();
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // States für Daten
   const [activeSubscriptions, setActiveSubscriptions] = useState<ActiveSubscription[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // States für Formular "Konto"
+  const [displayName, setDisplayName] = useState(user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [isAccountLoading, setIsAccountLoading] = useState(false);
+  const [isAvatarLoading, setIsAvatarLoading] = useState(false);
+
+  // States für Formular "Sicherheit"
+  const [currentPassword, setCurrentPassword] = useState(''); // Supabase 'updateUser' braucht dies nicht
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isPasswordLoading, setIsPasswordLoading] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false); // UI-only
+
+  // --- FEHLERBEHEBUNG: formatCurrency-Funktion hier definieren ---
+  const formatCurrency = (value: number) => {
+    return `€${value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+  // --- ENDE FEHLERBEHEBUNG ---
+
+  // Daten (Abos und Transaktionen) beim Laden fetchen
   useEffect(() => {
     const fetchData = async () => {
       if (!user?.id) return;
@@ -43,21 +65,19 @@ export default function FanProfile() {
         setError(null);
 
         // Lade aktive Abonnements
-        const subs = await subscriptionService.getUserSubscriptions(user.id);
-        setActiveSubscriptions(subs || []);
+        const subs: Subscription[] = await subscriptionService.getUserSubscriptions();
+        const mappedSubs = subs.map(s => ({
+            id: s.id,
+            creator: { name: s.creator?.name || 'Unbekannter Creator' },
+            price: s.price,
+            endDate: s.endDate,
+            status: s.status
+        }));
+        setActiveSubscriptions(mappedSubs || []);
 
-        // Lade Transaktionen (sobald der Service existiert)
-        // HINWEIS: `paymentService` und `getUserPaymentHistory` müssen noch implementiert werden.
-        // const paymentHistory = await paymentService.getUserPaymentHistory(user.id);
-        // setTransactions(paymentHistory || []);
-        
-        // Platzhalter, bis der Service existiert
-        const mockTransactions = [
-          { id: '1', created_at: '2024-01-10T10:00:00Z', description: 'Abonnement: Sophia Laurent', amount: 19.99 },
-          { id: '2', created_at: '2024-01-08T12:30:00Z', description: 'PPV: Exklusives Video', amount: 9.99 },
-        ];
-        setTransactions(mockTransactions);
-
+        // Lade Transaktionen
+        const paymentHistory = await paymentService.getUserPaymentHistory(user.id);
+        setTransactions(paymentHistory || []);
 
       } catch (err) {
         setError('Fehler beim Laden der Daten.');
@@ -70,6 +90,71 @@ export default function FanProfile() {
     fetchData();
   }, [user?.id]);
 
+  // Benutzerdaten in Formular synchronisieren, wenn sich der 'user' im Store ändert
+  useEffect(() => {
+    if (user) {
+        setDisplayName(user.name || '');
+        setEmail(user.email || '');
+    }
+  }, [user]);
+
+  // --- HANDLER FÜR PROFIL-UPDATES ---
+
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+
+    setIsAvatarLoading(true);
+    try {
+        const avatarUrl = await storageService.uploadMedia(file, user.id);
+        await updateProfile({ avatar_url: avatarUrl });
+        toast({ title: "Profilbild aktualisiert!" });
+    } catch (error: any) {
+        toast({ title: "Fehler beim Upload", description: error.message, variant: "destructive" });
+    } finally {
+        setIsAvatarLoading(false);
+    }
+  };
+
+  const handleAccountUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAccountLoading(true);
+    try {
+        await updateProfile({ display_name: displayName });
+        // E-Mail-Änderung erfordert spezielle Supabase-Handhabung (Bestätigung)
+        // Vorerst nur 'display_name'
+        toast({ title: "Profil aktualisiert!" });
+    } catch (error: any) {
+        toast({ title: "Update fehlgeschlagen", description: error.message, variant: "destructive" });
+    } finally {
+        setIsAccountLoading(false);
+    }
+  };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+        toast({ title: "Fehler", description: "Die neuen Passwörter stimmen nicht überein.", variant: "destructive" });
+        return;
+    }
+    if (newPassword.length < 6) {
+        toast({ title: "Fehler", description: "Das Passwort muss mindestens 6 Zeichen lang sein.", variant: "destructive" });
+        return;
+    }
+
+    setIsPasswordLoading(true);
+    try {
+        await changePassword(newPassword);
+        toast({ title: "Passwort erfolgreich geändert!" });
+        setNewPassword('');
+        setConfirmPassword('');
+        setCurrentPassword(''); // Aktuelles PW-Feld leeren
+    } catch (error: any) {
+         toast({ title: "Passwortänderung fehlgeschlagen", description: error.message, variant: "destructive" });
+    } finally {
+        setIsPasswordLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -94,42 +179,69 @@ export default function FanProfile() {
             <CardHeader>
               <CardTitle className="text-foreground">Grundlegende Informationen</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center gap-6">
-                <Avatar className="w-24 h-24">
-                  <AvatarImage src={user?.avatar} alt={user?.name} />
-                  <AvatarFallback className="bg-secondary text-secondary-foreground text-2xl">
-                    {user?.name?.charAt(0)}
-                  </AvatarFallback>
-                </Avatar>
-                <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal">
-                  <CameraIcon className="w-5 h-5 mr-2" strokeWidth={1.5} />
-                  Profilbild ändern
+            <CardContent>
+              <form onSubmit={handleAccountUpdate} className="space-y-6">
+                <div className="flex items-center gap-6">
+                  <Avatar className="w-24 h-24">
+                    <AvatarImage src={user?.avatar} alt={user?.name} />
+                    <AvatarFallback className="bg-secondary text-secondary-foreground text-2xl">
+                      {user?.name?.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <Button
+                    type="button"
+                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isAvatarLoading}
+                  >
+                    {isAvatarLoading ? (
+                        <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />
+                    ) : (
+                        <CameraIcon className="w-5 h-5 mr-2" strokeWidth={1.5} />
+                    )}
+                    Profilbild ändern
+                  </Button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleAvatarChange}
+                    accept="image/png, image/jpeg"
+                    className="hidden"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="username" className="text-foreground">Anzeigename</Label>
+                  <Input
+                    id="username"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="bg-background text-foreground border-border"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-foreground">E-Mail-Adresse</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    className="bg-neutral text-muted-foreground border-border"
+                    disabled // E-Mail-Änderung ist ein komplexerer Flow
+                    readOnly
+                  />
+                   <p className="text-xs text-muted-foreground">E-Mail-Änderungen erfordern eine Bestätigung und sind hier nicht implementiert.</p>
+                </div>
+
+                <Button
+                    type="submit"
+                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
+                    disabled={isAccountLoading || displayName === user?.name}
+                >
+                  {isAccountLoading && <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />}
+                  Änderungen speichern
                 </Button>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="username" className="text-foreground">Username</Label>
-                <Input
-                  id="username"
-                  defaultValue={user?.name}
-                  className="bg-background text-foreground border-border"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-foreground">E-Mail-Adresse</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  defaultValue={user?.email}
-                  className="bg-background text-foreground border-border"
-                />
-              </div>
-
-              <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal">
-                Änderungen speichern
-              </Button>
+              </form>
             </CardContent>
           </Card>
         </TabsContent>
@@ -142,39 +254,53 @@ export default function FanProfile() {
                 Sicherheit & Privatsphäre
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="current-password" className="text-foreground">Aktuelles Passwort</Label>
-                <Input
-                  id="current-password"
-                  type="password"
-                  className="bg-background text-foreground border-border"
-                />
-              </div>
+            <CardContent>
+              <form onSubmit={handlePasswordChange} className="space-y-6">
 
-              <div className="space-y-2">
-                <Label htmlFor="new-password" className="text-foreground">Neues Passwort</Label>
-                <Input
-                  id="new-password"
-                  type="password"
-                  className="bg-background text-foreground border-border"
-                />
-              </div>
-
-              <div className="flex items-center justify-between py-4 border-t border-border">
-                <div>
-                  <h3 className="text-foreground font-medium">Zwei-Faktor-Authentifizierung</h3>
-                  <p className="text-sm text-muted-foreground">Zusätzliche Sicherheit für Ihr Konto</p>
+                 <div className="space-y-2">
+                  <Label htmlFor="new-password" className="text-foreground">Neues Passwort</Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="bg-background text-foreground border-border"
+                    placeholder="Mindestens 6 Zeichen"
+                  />
                 </div>
-                <Switch
-                  checked={twoFactorEnabled}
-                  onCheckedChange={setTwoFactorEnabled}
-                />
-              </div>
 
-              <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal">
-                Passwort ändern
-              </Button>
+                 <div className="space-y-2">
+                  <Label htmlFor="confirm-password" className="text-foreground">Neues Passwort bestätigen</Label>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="bg-background text-foreground border-border"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between py-4 border-t border-border">
+                  <div>
+                    <h3 className="text-foreground font-medium">Zwei-Faktor-Authentifizierung</h3>
+                    <p className="text-sm text-muted-foreground">Zusätzliche Sicherheit (derzeit nicht verfügbar)</p>
+                  </div>
+                  <Switch
+                    checked={twoFactorEnabled}
+                    onCheckedChange={setTwoFactorEnabled}
+                    disabled // Deaktiviert, da nicht implementiert
+                  />
+                </div>
+
+                <Button
+                    type="submit"
+                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
+                    disabled={isPasswordLoading || !newPassword || !confirmPassword}
+                >
+                   {isPasswordLoading && <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />}
+                  Passwort ändern
+                </Button>
+              </form>
             </CardContent>
           </Card>
         </TabsContent>
@@ -185,28 +311,49 @@ export default function FanProfile() {
               <CardTitle className="text-foreground">Aktive Abonnements</CardTitle>
             </CardHeader>
             <CardContent>
-               {loading && <p>Lade Abonnements...</p>}
+               {loading && <p className="text-muted-foreground">Lade Abonnements...</p>}
                {error && <p className="text-destructive">{error}</p>}
-               {!loading && !error && activeSubscriptions.length === 0 && <p>Keine aktiven Abonnements.</p>}
+               {!loading && !error && activeSubscriptions.length === 0 && <p className="text-muted-foreground">Keine aktiven Abonnements.</p>}
               <div className="space-y-4">
-                {!loading && !error && activeSubscriptions.map((sub, index) => (
+                {!loading && !error && activeSubscriptions.map((sub) => (
                   <div
-                    key={index}
+                    key={sub.id}
                     className="flex items-center justify-between py-4 border-b border-border last:border-0"
                   >
                     <div>
                       <h3 className="text-foreground font-medium">{sub.creator.name}</h3>
                       <p className="text-sm text-muted-foreground">
-                        Nächste Abrechnung: {new Date(sub.next_billing_date).toLocaleDateString()}
+                        {sub.status === 'CANCELED' ?
+                            `Gekündigt, läuft ab am: ${sub.endDate ? new Date(sub.endDate).toLocaleDateString('de-DE') : 'N/A'}` :
+                            `Nächste Abrechnung: ${sub.endDate ? new Date(sub.endDate).toLocaleDateString('de-DE') : 'N/A'}`
+                        }
                       </p>
                     </div>
                     <div className="flex items-center gap-4">
-                      <span className="text-secondary font-medium">{sub.price.toFixed(2)}€/Monat</span>
+                      <span className="text-secondary font-medium">{formatCurrency(sub.price)}/Monat</span>
                       <Button
                         variant="outline"
                         className="bg-background text-foreground border-border hover:bg-neutral font-normal"
+                        disabled={sub.status === 'CANCELED'} // Deaktiviere, wenn schon gekündigt
+                        onClick={async () => {
+                            try {
+                                await subscriptionService.cancelSubscription(sub.id);
+                                toast({ title: "Abonnement gekündigt" });
+                                // Lade Daten neu, um Status zu aktualisieren
+                                const subs = await subscriptionService.getUserSubscriptions();
+                                setActiveSubscriptions(subs.map(s => ({
+                                    id: s.id,
+                                    creator: { name: s.creator?.name || 'Unbekannter Creator' },
+                                    price: s.price,
+                                    endDate: s.endDate,
+                                    status: s.status
+                                })));
+                            } catch (error: any) {
+                                toast({ title: "Fehler", description: error.message, variant: "destructive" });
+                            }
+                        }}
                       >
-                        Kündigen
+                        {sub.status === 'CANCELED' ? 'Gekündigt' : 'Kündigen'}
                       </Button>
                     </div>
                   </div>
@@ -227,16 +374,17 @@ export default function FanProfile() {
             <CardContent className="space-y-6">
               <div>
                 <h3 className="text-foreground font-medium mb-4">Gespeicherte Zahlungsmethoden</h3>
-                <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal">
+                <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal" disabled>
                   Zahlungsmethode hinzufügen
                 </Button>
+                 <p className="text-xs text-muted-foreground mt-2">Zahlungsverwaltung (Stripe/PayPal) noch nicht implementiert.</p>
               </div>
 
               <div className="border-t border-border pt-6">
                 <h3 className="text-foreground font-medium mb-4">Transaktionshistorie</h3>
-                 {loading && <p>Lade Transaktionen...</p>}
+                 {loading && <p className="text-muted-foreground">Lade Transaktionen...</p>}
                  {error && <p className="text-destructive">{error}</p>}
-                 {!loading && !error && transactions.length === 0 && <p>Keine Transaktionen vorhanden.</p>}
+                 {!loading && !error && transactions.length === 0 && <p className="text-muted-foreground">Keine Transaktionen vorhanden.</p>}
                 <div className="space-y-3">
                   {!loading && !error && transactions.map((transaction) => (
                     <div
@@ -245,9 +393,9 @@ export default function FanProfile() {
                     >
                       <div>
                         <p className="text-foreground">{transaction.description}</p>
-                        <p className="text-sm text-muted-foreground">{new Date(transaction.created_at).toLocaleDateString()}</p>
+                        <p className="text-sm text-muted-foreground">{new Date(transaction.created_at).toLocaleDateString('de-DE')}</p>
                       </div>
-                      <span className="text-foreground font-medium">{transaction.amount.toFixed(2)}€</span>
+                      <span className="text-foreground font-medium">-{formatCurrency(transaction.amount)}</span>
                     </div>
                   ))}
                 </div>

@@ -253,7 +253,7 @@ export default function SubscriberFeed({
 
             {/* Creator Info */}
             <div className="absolute top-4 left-4 right-20 z-10">
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => !isProfileView && navigate(`/profile/${currentPost.creatorId}`)}>
+                <div className="flex items-center gap-3 cursor-pointer" onClick={() => !isProfileView && navigate(`/profile/${currentPost.creator.username || currentPost.creatorId}`)}>
                     <Avatar className="w-12 h-12 border-2 border-foreground">
                         <AvatarImage src={currentPost.creator.avatar} alt={currentPost.creator.name} />
                         <AvatarFallback className="bg-secondary text-secondary-foreground">

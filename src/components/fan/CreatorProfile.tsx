@@ -1,20 +1,19 @@
 // src/components/fan/CreatorProfile.tsx
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom'; // useNavigate hinzugefügt
+import { useParams, useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { UsersIcon, GridIcon, VideoIcon, CheckIcon } from 'lucide-react'; // CheckIcon hinzugefügt
+import { UsersIcon, GridIcon, VideoIcon, CheckIcon } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import SubscriptionModal from './SubscriptionModal';
 import ProfilePostViewer, { PostData as ViewerPostData } from './ProfilePostViewer';
 import { userService, UserProfile } from '../../services/userService';
 import { postService, Post as ServicePostData } from '../../services/postService';
-import { subscriptionService } from '../../services/subscriptionService'; // SubscriptionService importieren
-import { useAuthStore } from '../../stores/authStore'; // AuthStore importieren
-import { useToast } from '../../hooks/use-toast'; // useToast für Feedback
-import { cn } from '../../lib/utils'; // cn für dynamische Klassen importieren
-
+import { subscriptionService } from '../../services/subscriptionService';
+import { useAuthStore } from '../../stores/authStore';
+import { useToast } from '../../hooks/use-toast';
+import { cn } from '../../lib/utils';
 
 // Interne Typdefinition für die Grid-Ansicht
 interface GridPost {
@@ -27,10 +26,13 @@ interface GridPost {
 }
 
 export default function CreatorProfile() {
-  const { username } = useParams<{ username: string }>(); // Behält 'username' bei, wie von dir übergeben
-  // console.log("ID from URL:", username);
+  // --- HIER IST DIE ÄNDERUNG ---
+  // Holt den ':username' Parameter aus der URL (z.B. /profile/creator-name)
+  const { username } = useParams<{ username: string }>();
+  // --- ENDE DER ÄNDERUNG ---
+
   const navigate = useNavigate();
-  const { user: currentUser } = useAuthStore(); // Aktuellen Benutzer holen
+  const { user: currentUser } = useAuthStore();
   const { toast } = useToast();
 
   const [creator, setCreator] = useState<UserProfile | null>(null);
@@ -39,20 +41,18 @@ export default function CreatorProfile() {
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // --- States für Abo-Button ---
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
-  // --- Ende States für Abo-Button ---
 
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [selectedPostIndex, setSelectedPostIndex] = useState<number>(0);
   const [showPostFeed, setShowPostFeed] = useState(false);
 
-  // 1. Creator-Profil laden (Verwendet getUserById mit dem 'username'-Parameter aus der URL)
+  // 1. Creator-Profil laden (Verwendet jetzt getUserByUsername)
   useEffect(() => {
     const fetchCreator = async () => {
       if (!username) {
-          setError('Kein Benutzername/ID in der URL gefunden.'); // Text angepasst
+          setError('Kein Benutzername in der URL gefunden.');
           setIsLoadingProfile(false);
           return;
       };
@@ -60,11 +60,15 @@ export default function CreatorProfile() {
       setError(null);
       setCreator(null);
       setPosts([]);
-      setIsSubscribed(false); // Abo-Status zurücksetzen
-      setIsLoadingSubscription(true); // Abo-Prüfung starten
+      setIsSubscribed(false);
+      setIsLoadingSubscription(true);
+
       try {
-        // *** HIER: Behält getUserById bei, wie gewünscht ***
-        const profile = await userService.getUserById(username);
+        // --- HIER IST DIE ÄNDERUNG ---
+        // Ruft das Profil basierend auf dem 'username' aus der URL ab
+        const profile = await userService.getUserByUsername(username);
+        // --- ENDE DER ÄNDERUNG ---
+
         if (!profile) {
           setError('Benutzer nicht gefunden.');
         } else {
@@ -72,18 +76,13 @@ export default function CreatorProfile() {
         }
       } catch (err: any) {
         console.error("Fehler beim Laden des Profils:", err);
-        // Behandelt spezifisch den UUID-Fehler, falls der Param kein UUID ist
-        if (err.message?.includes("invalid input syntax for type uuid")) {
-             setError(`Ungültige User-ID in der URL: ${username}`);
-        } else {
-             setError('Profil konnte nicht geladen werden.');
-        }
+        setError('Profil konnte nicht geladen werden.');
       } finally {
         setIsLoadingProfile(false);
       }
     };
     fetchCreator();
-  }, [username]); // Neu laden, wenn sich der Parameter in der URL ändert
+  }, [username]); // Neu laden, wenn sich der 'username' in der URL ändert
 
   // 2. Posts laden, NACHDEM das Creator-Profil geladen wurde
   useEffect(() => {
@@ -91,6 +90,7 @@ export default function CreatorProfile() {
       if (!creator || !creator.id) return;
       setIsLoadingPosts(true);
       try {
+        // Ruft die Posts über die ID des gefundenen Creators ab
         const fetchedPosts = await postService.getCreatorPosts(creator.id);
         setPosts(fetchedPosts);
       } catch (err: any) {
@@ -100,35 +100,32 @@ export default function CreatorProfile() {
       }
     };
     fetchPosts();
-  }, [creator]);
+  }, [creator]); // Abhängig vom geladenen Creator-Objekt
 
-  // --- NEU: 3. Abonnement-Status prüfen ---
+  // 3. Abonnement-Status prüfen
   useEffect(() => {
     const checkSubscriptionStatus = async () => {
-      // Prüfen, ob Profil und eingeloggter User vorhanden sind und es nicht das eigene Profil ist
       if (!creator || !currentUser || creator.id === currentUser.id) {
           setIsLoadingSubscription(false);
-          setIsSubscribed(false); // Man kann sich nicht selbst abonnieren
+          setIsSubscribed(false);
           return;
       }
       setIsLoadingSubscription(true);
       try {
         const activeSubscription = await subscriptionService.getActiveSubscription(currentUser.id, creator.id);
-        setIsSubscribed(!!activeSubscription); // Setze true wenn Abo-Objekt existiert, sonst false
+        setIsSubscribed(!!activeSubscription);
       } catch (error) {
         console.error("Fehler beim Prüfen des Abonnements:", error);
-        setIsSubscribed(false); // Im Fehlerfall als nicht abonniert behandeln
+        setIsSubscribed(false);
       } finally {
         setIsLoadingSubscription(false);
       }
     };
 
-    // Nur ausführen, wenn das Creator-Profil geladen wurde
     if (!isLoadingProfile && creator) {
         checkSubscriptionStatus();
     }
-  }, [creator, currentUser, isLoadingProfile]); // Abhängigkeiten: creator, currentUser, isLoadingProfile
-  // --- ENDE NEU ---
+  }, [creator, currentUser, isLoadingProfile]);
 
   // --- Rendern ---
   if (isLoadingProfile) {
@@ -151,7 +148,6 @@ export default function CreatorProfile() {
   const handleClosePostFeed = () => {
     setShowPostFeed(false);
   };
-  // --- NEU: Handler für Abo-Button ---
   const handleSubscribeClick = () => {
     if (!currentUser) {
         toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um zu abonnieren.", variant: "destructive" });
@@ -160,15 +156,14 @@ export default function CreatorProfile() {
     setShowSubscriptionModal(true);
   };
   const handleManageSubscriptionClick = () => {
-    navigate('/profile'); // Navigiert zur allgemeinen Profil/Einstellungsseite des Users
+    navigate('/profile');
     toast({ title: "Abonnement", description: "Verwalte deine Abonnements in deinem Profil." });
   };
-  // --- ENDE NEU ---
 
   // --- Daten für die Ansicht transformieren ---
   const gridPosts: GridPost[] = posts.map(p => ({
       id: p.id,
-      thumbnailUrl: p.mediaUrl,
+      thumbnailUrl: p.thumbnail_url || p.mediaUrl,
       type: p.mediaType,
       caption: p.caption,
       likes: p.likes,
@@ -182,7 +177,7 @@ export default function CreatorProfile() {
     likes: p.likes,
     comments: p.comments,
     isLiked: p.isLiked,
-    // type: p.mediaType, // Nicht unbedingt nötig im Viewer-Interface
+    mediaType: p.mediaType,
     creator: {
       name: creator.displayName,
       avatar: creator.avatarUrl || 'https://placehold.co/100x100',
@@ -195,7 +190,7 @@ export default function CreatorProfile() {
     return gridPosts.filter(post => post.type === type);
   };
 
-  // --- JSX ---
+  // --- JSX (bleibt gleich, außer Hinzufügung von @username) ---
   return (
     <>
       <div className={`min-h-screen ${showPostFeed ? 'hidden' : ''} pb-16 md:pb-0`}>
@@ -216,26 +211,29 @@ export default function CreatorProfile() {
                 <h1 className="text-3xl font-serif text-foreground">{creator.displayName}</h1>
                 {creator.isVerified && ( <Badge className="bg-secondary text-secondary-foreground font-normal">Verifiziert</Badge> )}
               </div>
+              {/* (AKTUALISIERT) @username hinzugefügt */}
+              <p className="text-lg text-secondary">@{creator.username}</p>
+
               <p className="text-muted-foreground max-w-md">{creator.bio || 'Keine Bio vorhanden.'}</p>
               <div className="flex items-center justify-center gap-2 text-foreground">
                 <UsersIcon className="w-5 h-5" strokeWidth={1.5} />
                 <span>{creator.followersCount.toLocaleString()} Abonnenten</span>
               </div>
             </div>
-            {/* --- Dynamischer Abonnement-Button --- */}
-            {currentUser && currentUser.id !== creator.id && ( // Zeige Button nur, wenn es nicht das eigene Profil ist
+
+            {currentUser && currentUser.id !== creator.id && (
                  <Button
                     onClick={isSubscribed ? handleManageSubscriptionClick : handleSubscribeClick}
-                    disabled={isLoadingSubscription} // Deaktivieren während der Prüfung
+                    disabled={isLoadingSubscription}
                     className={cn(
-                        "px-8 py-6 text-base font-normal w-64 transition-colors duration-200", // Breite und Übergang hinzugefügt
+                        "px-8 py-6 text-base font-normal w-64 transition-colors duration-200",
                         isSubscribed
-                         ? "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10" // Styling für "Abonniert"
-                         : "bg-secondary text-secondary-foreground hover:bg-secondary/90" // Styling für "Abonnieren"
+                         ? "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10"
+                         : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
                     )}
                  >
                     {isLoadingSubscription ? (
-                        'Laden...' // Ladeanzeige
+                        'Laden...'
                     ) : isSubscribed ? (
                         <>
                             <CheckIcon className="w-5 h-5 mr-2" strokeWidth={2} />
@@ -246,9 +244,8 @@ export default function CreatorProfile() {
                     )}
                  </Button>
             )}
-            {/* --- Ende Dynamischer Button --- */}
           </div>
-          {/* Tabs und Post-Grid */}
+
           <div className="mt-16 mb-8">
              <Tabs defaultValue="all" className="w-full">
               <TabsList className="bg-card border border-border w-full justify-start">
@@ -303,9 +300,16 @@ export default function CreatorProfile() {
           </div>
         </div>
       </div>
-      {/* Modals */}
+
        <SubscriptionModal isOpen={showSubscriptionModal} onClose={() => setShowSubscriptionModal(false)} creator={{ name: creator.displayName, subscriptionPrice: creator.subscriptionPrice }}/>
-      {showPostFeed && formattedPostsForViewer.length > 0 && ( <ProfilePostViewer initialPosts={formattedPostsForViewer} initialIndex={selectedPostIndex} onClose={handleClosePostFeed}/> )}
+
+      {showPostFeed && formattedPostsForViewer.length > 0 && (
+        <ProfilePostViewer
+            initialPosts={formattedPostsForViewer}
+            initialIndex={selectedPostIndex}
+            onClose={handleClosePostFeed}
+        />
+      )}
     </>
   );
 }

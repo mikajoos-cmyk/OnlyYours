@@ -1,37 +1,63 @@
+// src/components/fan/PaymentModal.tsx
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { CreditCardIcon, WalletIcon } from 'lucide-react';
+import { CreditCardIcon, WalletIcon, Loader2Icon } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Label } from '../ui/label';
 import { useToast } from '../../hooks/use-toast';
+import { subscriptionService } from '../../services/subscriptionService'; // <-- Importiert
 
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   tier: {
+    id: string; // z.B. 'vip'
     name: string;
     price: number;
   };
+  creatorId: string; // <-- Prop ist jetzt hier
   creatorName: string;
+  onPaymentSuccess: () => void; // <-- Prop ist jetzt hier
 }
 
-export default function PaymentModal({ isOpen, onClose, tier, creatorName }: PaymentModalProps) {
+export default function PaymentModal({ isOpen, onClose, tier, creatorId, creatorName, onPaymentSuccess }: PaymentModalProps) {
   const [paymentMethod, setPaymentMethod] = useState('stripe');
+  const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
 
   const paymentMethods = [
     { id: 'stripe', name: 'Kreditkarte (Stripe)', icon: CreditCardIcon },
     { id: 'paypal', name: 'PayPal', icon: WalletIcon },
-    { id: 'crypto', name: 'Kryptowährung', icon: WalletIcon },
   ];
 
-  const handlePayment = () => {
-    toast({
-      title: 'Zahlung erfolgreich!',
-      description: `Sie haben ${tier.name} für ${creatorName} abonniert.`,
-    });
-    onClose();
+  const handlePayment = async () => {
+    setIsProcessing(true);
+    try {
+      // --- KORREKTUR: creatorId wird jetzt hier verwendet ---
+      await subscriptionService.subscribe(
+        creatorId,
+        null, // tierId (null = Standard-Abo)
+        tier.price
+      );
+      // --- ENDE KORREKTUR ---
+
+      toast({
+        title: 'Zahlung erfolgreich!',
+        description: `Sie haben ${tier.name} für ${creatorName} abonniert.`,
+      });
+      onPaymentSuccess(); // Ruft Callback auf (schließt Modal & aktualisiert UI)
+
+    } catch (error: any) {
+      console.error("Fehler beim Abonnieren:", error);
+      toast({
+        title: 'Fehler bei der Zahlung',
+        description: error.message || 'Das Abonnement konnte nicht abgeschlossen werden.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -56,7 +82,7 @@ export default function PaymentModal({ isOpen, onClose, tier, creatorName }: Pay
             <div className="border-t border-border pt-2 mt-2">
               <div className="flex justify-between text-foreground text-lg">
                 <span className="font-medium">Gesamt:</span>
-                <span className="font-serif text-secondary">{tier.price}€/Monat</span>
+                <span className="font-serif text-secondary">{tier.price.toFixed(2)}€/Monat</span>
               </div>
             </div>
           </div>
@@ -89,8 +115,13 @@ export default function PaymentModal({ isOpen, onClose, tier, creatorName }: Pay
           <Button
             onClick={handlePayment}
             className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90 py-6 text-base font-normal"
+            disabled={isProcessing}
           >
-            Jetzt bezahlen
+            {isProcessing ? (
+              <Loader2Icon className="w-5 h-5 animate-spin" />
+            ) : (
+              'Jetzt bezahlen'
+            )}
           </Button>
         </div>
       </DialogContent>

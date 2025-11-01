@@ -1,19 +1,24 @@
+// src/services/authService.ts
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
 
 type UserRow = Database['public']['Tables']['users']['Row'];
 
+// Dieses Interface spiegelt das volle Profil wider, das der authStore halten soll
 export interface AuthUser {
   id: string;
-  name: string;
+  name: string; // display_name
   email: string;
   avatar: string;
   role: 'fan' | 'creator';
   isVerified?: boolean;
-  // --- HINZUGEFÜGT ---
   followersCount: number;
   totalEarnings: number;
-  // --- ENDE HINZUGEFÜGT ---
+  // --- Erweiterte Felder für Profilseiten ---
+  username?: string;
+  bio?: string;
+  bannerUrl?: string | null;
+  subscriptionPrice?: number;
 }
 
 export class AuthService {
@@ -38,7 +43,7 @@ export class AuthService {
         id: authData.user.id,
         username: username.toLowerCase(),
         display_name: username,
-        role: role.toUpperCase() as 'CREATOR',
+        role: role.toUpperCase() as 'CREATOR', // Standard-DB-Enum
         bio: '',
         is_verified: false,
       });
@@ -68,16 +73,11 @@ export class AuthService {
     if (authError) throw authError;
     if (!authData.user) throw new Error('Login failed');
 
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', authData.user.id)
-      .single();
+    // Verwende die neue Full-Profile-Funktion
+    const userProfile = await this.getCurrentUserFullProfile();
+    if (!userProfile) throw new Error('User profile not found after login');
 
-    if (userError) throw userError;
-    if (!userData) throw new Error('User profile not found');
-
-    return this.mapUserToAuthUser(userData);
+    return userProfile;
   }
 
   async logout() {
@@ -85,22 +85,40 @@ export class AuthService {
     if (error) throw error;
   }
 
+  /**
+   * (ALT) Beibehalten für Kompatibilität, falls noch woanders genutzt,
+   * leitet aber jetzt auf die neue Funktion um.
+   */
   async getCurrentUser(): Promise<AuthUser | null> {
+    return this.getCurrentUserFullProfile();
+  }
+
+  /**
+   * (NEU) Lädt das vollständige Benutzerprofil aus der 'users'-Tabelle
+   */
+  async getCurrentUserFullProfile(): Promise<AuthUser | null> {
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session?.user) return null;
 
     const { data: userData, error } = await supabase
       .from('users')
-      .select('*')
+      .select('*') // Holt alle Felder
       .eq('id', session.user.id)
       .single();
 
-    if (error || !userData) return null;
+    if (error || !userData) {
+        console.error("Fehler beim Abrufen des vollen Profils:", error);
+        return null;
+    }
 
-    return this.mapUserToAuthUser(userData);
+    // Verwende die map-Funktion, die *alle* Felder mappt
+    return this.mapUserRowToAuthUser(userData, session.user.email);
   }
 
+  /**
+   * (AKTUALISIERT) Akzeptiert jetzt die neuen Felder
+   */
   async updateProfile(userId: string, updates: {
     display_name?: string;
     bio?: string;
@@ -110,7 +128,7 @@ export class AuthService {
   }) {
     const { data, error } = await supabase
       .from('users')
-      .update(updates)
+      .update(updates) // 'updates' wird direkt durchgereicht
       .eq('id', userId)
       .select()
       .single();
@@ -119,6 +137,9 @@ export class AuthService {
     return data;
   }
 
+  /**
+   * (NEU) Ändert das Passwort des angemeldeten Benutzers
+   */
   async changePassword(newPassword: string) {
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
@@ -127,11 +148,15 @@ export class AuthService {
     if (error) throw error;
   }
 
+  /**
+   * (AKTUALISIERT) Verwendet jetzt getCurrentUserFullProfile
+   */
   onAuthStateChange(callback: (user: AuthUser | null) => void) {
     return supabase.auth.onAuthStateChange((_event, session) => {
       (async () => {
         if (session?.user) {
-          const user = await this.getCurrentUser();
+          // Ruft die neue Funktion auf, um das volle Profil zu laden
+          const user = await this.getCurrentUserFullProfile();
           callback(user);
         } else {
           callback(null);
@@ -140,18 +165,24 @@ export class AuthService {
     });
   }
 
-  private mapUserToAuthUser(userData: UserRow): AuthUser {
+  /**
+   * (AKTUALISIERT) Mappt alle Felder von der DB-Zeile zum AuthUser-Interface
+   */
+  private mapUserRowToAuthUser(userData: UserRow, email?: string): AuthUser {
     return {
       id: userData.id,
       name: userData.display_name,
-      email: '', // E-Mail wird aus auth.user bezogen, hier nicht benötigt
+      email: email || '', // E-Mail von der Auth-Session übergeben
       avatar: userData.avatar_url || 'https://placehold.co/100x100',
       role: userData.role.toLowerCase() as 'fan' | 'creator',
       isVerified: userData.is_verified,
-      // --- HINZUGEFÜGT ---
       followersCount: userData.followers_count || 0,
       totalEarnings: userData.total_earnings || 0,
-      // --- ENDE HINZUGEFÜGT ---
+      // --- Erweiterte Felder ---
+      username: userData.username,
+      bio: userData.bio,
+      bannerUrl: userData.banner_url,
+      subscriptionPrice: userData.subscription_price,
     };
   }
 }

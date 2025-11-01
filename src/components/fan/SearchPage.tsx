@@ -1,3 +1,4 @@
+// src/components/fan/SearchPage.tsx
 import { useState, useEffect } from 'react';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -8,24 +9,23 @@ import { useNavigate } from 'react-router-dom';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { userService, UserProfile } from '../../services/userService'; // Import user service und UserProfile
-import { useAuthStore } from '../../stores/authStore'; // Import AuthStore
-import { subscriptionService } from '../../services/subscriptionService'; // Import SubscriptionService
-import { useToast } from '../../hooks/use-toast'; // Import useToast
-import SubscriptionModal from './SubscriptionModal'; // Import SubscriptionModal
-import { cn } from '../../lib/utils'; // Import cn
+import { userService, UserProfile } from '../../services/userService';
+import { useAuthStore } from '../../stores/authStore';
+import { subscriptionService } from '../../services/subscriptionService';
+import { useToast } from '../../hooks/use-toast';
+import SubscriptionModal from './SubscriptionModal';
+import { cn } from '../../lib/utils';
 
 export default function SearchPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [priceFilter, setPriceFilter] = useState('all');
   const [contentType, setContentType] = useState('all');
-  const [creators, setCreators] = useState<UserProfile[]>([]); // Korrekter Typ
+  const [creators, setCreators] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // States für Abonnement-Status
   const { user: currentUser } = useAuthStore();
   const [subscribedCreatorIds, setSubscribedCreatorIds] = useState<Set<string>>(new Set());
   const [isLoadingSubscriptions, setIsLoadingSubscriptions] = useState(true);
@@ -34,30 +34,33 @@ export default function SearchPage() {
 
   const popularTags = ['#luxury', '#fitness', '#behindthescenes', '4K', 'Live jetzt'];
 
-  // Effekt zum Laden der Abonnements des aktuellen Benutzers
-  useEffect(() => {
+  // Effekt zum Laden der Abonnements
+  const fetchSubscriptions = async () => {
     if (!currentUser?.id) {
       setIsLoadingSubscriptions(false);
       return;
     }
+    setIsLoadingSubscriptions(true);
+    try {
+      const subs = await subscriptionService.getUserSubscriptions();
+      // Zeigt "Abonniert" nur für 'ACTIVE' Abos
+      const subIds = new Set(
+        subs
+          .filter(s => s.status === 'ACTIVE')
+          .map(s => s.creatorId)
+      );
+      setSubscribedCreatorIds(subIds);
+    } catch (err) {
+      console.error("Fehler beim Laden der Abonnements:", err);
+      toast({ title: "Fehler", description: "Abonnements konnten nicht geladen werden.", variant: "destructive" });
+    } finally {
+      setIsLoadingSubscriptions(false);
+    }
+  };
 
-    const fetchSubscriptions = async () => {
-      setIsLoadingSubscriptions(true);
-      try {
-        const subs = await subscriptionService.getUserSubscriptions();
-        // Erstellen eines Sets mit allen Creator-IDs, die der User abonniert hat
-        const subIds = new Set(subs.map(s => s.creatorId));
-        setSubscribedCreatorIds(subIds);
-      } catch (err) {
-        console.error("Fehler beim Laden der Abonnements:", err);
-        toast({ title: "Fehler", description: "Abonnements konnten nicht geladen werden.", variant: "destructive" });
-      } finally {
-        setIsLoadingSubscriptions(false);
-      }
-    };
-
+  useEffect(() => {
     fetchSubscriptions();
-  }, [currentUser?.id, toast]); // toast zur Abhängigkeitsliste hinzugefügt
+  }, [currentUser?.id, toast]);
 
   // Effekt zum Suchen/Laden von Creators
   useEffect(() => {
@@ -66,12 +69,10 @@ export default function SearchPage() {
         setLoading(true);
         setError(null);
 
-        // Wenn keine Suchanfrage besteht, Top-Creators laden
         if (!searchQuery && priceFilter === 'all' && contentType === 'all') {
           const topCreators = await userService.getTopCreators();
           setCreators(topCreators || []);
         } else {
-          // Ansonsten Suche mit den aktuellen Filtern
           const filters = { price: priceFilter, type: contentType };
           const searchResults = await userService.searchCreators(searchQuery, filters);
           setCreators(searchResults || []);
@@ -85,7 +86,6 @@ export default function SearchPage() {
       }
     };
 
-    // Debounce: Warte kurz, bevor die Suche nach einer Eingabe ausgelöst wird
     const handler = setTimeout(() => {
       fetchCreators();
     }, 300);
@@ -101,15 +101,22 @@ export default function SearchPage() {
       toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um zu abonnieren.", variant: "destructive" });
       return;
     }
-    setSelectedCreator(creator);
+    setSelectedCreator(creator); // <-- Speichert das *ganze* Creator-Objekt
     setShowSubscriptionModal(true);
   };
 
-  // Handler zur Verwaltung von Abos (leitet zum Profil)
   const handleManageSubscriptionClick = () => {
     navigate('/profile');
     toast({ title: "Abonnement", description: "Verwalte deine Abonnements in deinem Profil." });
   };
+
+  // --- KORREKTUR: Neuer Callback für erfolgreiches Abo ---
+  const handleSubscriptionComplete = (subscribedCreatorId: string) => {
+    // UI sofort aktualisieren
+    setSubscribedCreatorIds(prev => new Set(prev).add(subscribedCreatorId));
+    setShowSubscriptionModal(false);
+  };
+  // --- ENDE KORREKTUR ---
 
   return (
     <>
@@ -117,7 +124,7 @@ export default function SearchPage() {
         <div className="max-w-6xl mx-auto space-y-6">
           <h1 className="text-3xl font-serif text-foreground">Creators suchen</h1>
 
-          {/* --- Suchleiste und Filter (unverändert) --- */}
+          {/* Suchleiste und Filter */}
           <div className="flex gap-3">
             <div className="relative flex-1">
               <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" strokeWidth={1.5} />
@@ -143,6 +150,7 @@ export default function SearchPage() {
                   <SheetTitle className="text-foreground">Filter</SheetTitle>
                 </SheetHeader>
                 <div className="space-y-6 mt-6">
+                  {/* Filter-Optionen... */}
                   <div className="space-y-2">
                     <Label className="text-foreground">Preis</Label>
                     <Select value={priceFilter} onValueChange={setPriceFilter}>
@@ -158,7 +166,6 @@ export default function SearchPage() {
                       </SelectContent>
                     </Select>
                   </div>
-
                   <div className="space-y-2">
                     <Label className="text-foreground">Art</Label>
                     <Select value={contentType} onValueChange={setContentType}>
@@ -177,15 +184,13 @@ export default function SearchPage() {
               </SheetContent>
             </Sheet>
           </div>
-          {/* --- Ende Suchleiste und Filter --- */}
-
 
           <div className="flex flex-wrap gap-2">
             {popularTags.map((tag) => (
               <Button
                 key={tag}
                 variant="outline"
-                onClick={() => setSearchQuery(tag)} // Setzt den Tag als Suchanfrage
+                onClick={() => setSearchQuery(tag)}
                 className="bg-card text-foreground border-border hover:bg-secondary hover:text-secondary-foreground rounded-full font-normal"
               >
                 {tag}
@@ -199,39 +204,25 @@ export default function SearchPage() {
             {error && <p className="text-destructive">{error}</p>}
             {!loading && !error && creators.length === 0 && <p>Keine Creators gefunden.</p>}
 
-            {/* --- Aktualisierte Creator-Liste --- */}
             {!loading && !error && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {creators.map((creator) => {
-
-                  // Prüfen, ob der Creator abonniert ist
                   const isSubscribed = subscribedCreatorIds.has(creator.id);
-                  // Prüfen, ob es das eigene Profil ist
                   const isOwnProfile = currentUser?.id === creator.id;
 
                   return (
-                    <Card
-                      key={creator.id}
-                      className="bg-card border-border overflow-hidden"
-                    >
-                      {/* --- Bannerbild (Vorschaubild) --- */}
+                    <Card key={creator.id} className="bg-card border-border overflow-hidden">
                       <div
-                        className="relative h-48 bg-neutral cursor-pointer" // Fallback-Hintergrund
+                        className="relative h-48 bg-neutral cursor-pointer"
                         onClick={() => navigate(`/profile/${creator.username}`)}
                       >
                         {creator.bannerUrl ? (
-                          <img
-                            src={creator.bannerUrl}
-                            alt={creator.displayName}
-                            className="w-full h-full object-cover"
-                          />
+                          <img src={creator.bannerUrl} alt={creator.displayName} className="w-full h-full object-cover" />
                         ) : (
-                          // Fallback, wenn kein Bannerbild vorhanden ist
                           <div className="w-full h-full object-cover bg-neutral" />
                         )}
                       </div>
 
-                      {/* --- Profilbild, Name und Button --- */}
                       <div className="p-4 flex items-center justify-between">
                         <div
                           className="flex items-center gap-3 cursor-pointer"
@@ -248,16 +239,15 @@ export default function SearchPage() {
                           </div>
                         </div>
 
-                        {/* --- Aktualisierter Abo-Button --- */}
                         {!isOwnProfile && (
                           <Button
                             onClick={(e) => {
-                              e.stopPropagation(); // Verhindert Klick auf Karte
+                              e.stopPropagation();
                               isSubscribed ? handleManageSubscriptionClick() : handleSubscribeClick(creator);
                             }}
                             disabled={isLoadingSubscriptions}
                             className={cn(
-                              "font-normal transition-colors duration-200 flex-shrink-0", // Wichtig bei langen Namen
+                              "font-normal transition-colors duration-200 flex-shrink-0",
                               isSubscribed
                                 ? "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10 px-3"
                                 : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
@@ -275,8 +265,6 @@ export default function SearchPage() {
                             )}
                           </Button>
                         )}
-                        {/* --- Ende Button --- */}
-
                       </div>
                     </Card>
                   );
@@ -287,15 +275,18 @@ export default function SearchPage() {
         </div>
       </div>
 
-      {/* --- Abonnement-Modal --- */}
+      {/* --- KORREKTUR: Props an SubscriptionModal übergeben --- */}
       {showSubscriptionModal && selectedCreator && (
         <SubscriptionModal
           isOpen={showSubscriptionModal}
           onClose={() => setShowSubscriptionModal(false)}
           creator={{
+            id: selectedCreator.id, // Die ID wird jetzt korrekt übergeben
             name: selectedCreator.displayName,
             subscriptionPrice: selectedCreator.subscriptionPrice,
           }}
+          // Neuer Callback wird übergeben
+          onSubscriptionComplete={() => handleSubscriptionComplete(selectedCreator.id)}
         />
       )}
     </>

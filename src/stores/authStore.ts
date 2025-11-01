@@ -1,83 +1,64 @@
 // src/stores/authStore.ts
 import { create } from 'zustand';
 import { authService, AuthUser } from '../services/authService';
-import { Subscription } from '@supabase/supabase-js'; // Subscription Typ importieren
+import { Subscription } from '@supabase/supabase-js';
 
-// Interface (ggf. anpassen oder importieren)
-interface AppUser extends AuthUser {
-  // Zukünftige, App-spezifische User-Eigenschaften können hier hin
-  // Die neuen Felder `followersCount` und `totalEarnings`
-  // werden bereits durch `AuthUser` abgedeckt.
-}
+// Das AppUser-Interface im Store ist jetzt identisch mit dem AuthUser-Interface
+// aus dem authService, das alle Felder enthält.
+interface AppUser extends AuthUser {}
 
 interface AuthState {
   isAuthenticated: boolean;
   user: AppUser | null;
-  isLoading: boolean; // Initialer Ladezustand
-  initialize: () => () => void; // Gibt jetzt die Unsubscribe-Funktion zurück
+  isLoading: boolean;
+  initialize: () => () => void;
   login: (email: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string, role?: 'fan' | 'creator') => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: AppUser) => void;
-  updateProfile: (updates: { display_name?: string; bio?: string; avatar_url?: string; banner_url?: string }) => Promise<void>;
+  // Signatur erweitert
+  updateProfile: (updates: {
+    display_name?: string;
+    bio?: string;
+    avatar_url?: string;
+    banner_url?: string;
+    subscription_price?: number;
+  }) => Promise<void>;
+  changePassword: (newPassword: string) => Promise<void>; // Hinzugefügt
 }
 
-// Variable außerhalb des Stores, um das Abonnement zu halten (wird nicht bei jedem Render neu erstellt)
 let authListenerSubscription: Subscription | null = null;
-let initializationEnsured = false; // Flag um sicherzustellen, dass die Logik nur einmal pro "echtem" Mount läuft
+let initializationEnsured = false;
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   user: null,
-  isLoading: true, // Starte immer mit isLoading = true
+  isLoading: true,
 
   initialize: () => {
-    // ... (Rest der initialize-Funktion bleibt unverändert) ...
     if (initializationEnsured && authListenerSubscription) {
       console.log("Auth listener already initialized. Skipping.");
-      return () => { /* No-op, da der eigentliche Unsubscriber schon zurückgegeben wurde */ };
+      return () => { /* No-op */ };
     }
      if (!authListenerSubscription) {
         console.log("Initializing auth listener...");
 
-        const { data: { subscription } } = authService.onAuthStateChange(async (userAuthData: AppUser | null) => {
-          console.log("Auth state change received in store:", userAuthData);
-          const currentlyLoading = get().isLoading;
-
-          let finalUser: AppUser | null = null;
-          let finalIsAuthenticated = false;
-
-          if (userAuthData) {
-            const userProfile = await authService.getCurrentUser();
-            if (userProfile) {
-              finalUser = userProfile;
-              finalIsAuthenticated = true;
-            } else {
-              console.error("Authenticated user found by Supabase, but profile data missing!");
-               await authService.logout();
-               finalUser = null;
-               finalIsAuthenticated = false;
-            }
-          } else {
-            finalUser = null;
-            finalIsAuthenticated = false;
-          }
+        // onAuthStateChange ruft jetzt intern getCurrentUserFullProfile auf
+        const { data: { subscription } } = authService.onAuthStateChange(async (userFullProfile: AppUser | null) => {
+          console.log("Auth state change received in store:", userFullProfile);
 
           set({
-            isAuthenticated: finalIsAuthenticated,
-            user: finalUser,
-            isLoading: currentlyLoading ? false : get().isLoading
+            isAuthenticated: !!userFullProfile,
+            user: userFullProfile,
+            isLoading: false // Ladevorgang hier abschließen
           });
 
-          console.log("Auth state updated:", { isAuthenticated: finalIsAuthenticated, user: finalUser, isLoading: get().isLoading });
+          console.log("Auth state updated:", { isAuthenticated: !!userFullProfile, user: userFullProfile, isLoading: false });
           initializationEnsured = true;
         });
 
         authListenerSubscription = subscription;
-     } else {
-         console.log("Auth listener subscription already exists.");
      }
-
 
     return () => {
       console.log("Running unsubscribe function returned by initialize...");
@@ -86,15 +67,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         authListenerSubscription = null;
         initializationEnsured = false;
         console.log("Auth listener unsubscribed.");
-      } else {
-          console.log("No active auth listener subscription to unsubscribe from.");
       }
     };
   },
 
   login: async (email: string, password: string) => {
     try {
-      const user = await authService.login(email, password);
+      await authService.login(email, password);
       // State wird durch onAuthStateChange aktualisiert
     } catch (error) {
       console.error('Login failed:', error);
@@ -114,7 +93,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
        console.log("Calling authService.logout...");
       await authService.logout();
-      set({ isAuthenticated: false, user: null }); // Setze sofort für UI Feedback
+      set({ isAuthenticated: false, user: null });
     } catch (error) {
       console.error('Logout failed:', error);
       throw error;
@@ -123,18 +102,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setUser: (user: AppUser) => {
     set({ user });
   },
+
   updateProfile: async (updates) => {
     const currentUser = get().user;
     if (!currentUser) throw new Error('Not authenticated');
     try {
+      // Ruft den Service auf
       await authService.updateProfile(currentUser.id, updates);
-      const updatedUser = await authService.getCurrentUser();
+
+      // Holt das volle Profil neu, um den Store zu aktualisieren
+      const updatedUser = await authService.getCurrentUserFullProfile();
       if (updatedUser) {
         set({ user: updatedUser });
       }
     } catch (error) {
       console.error('Profile update failed:', error);
       throw error;
+    }
+  },
+
+  // --- NEUE METHODE ---
+  changePassword: async (newPassword: string) => {
+    try {
+      await authService.changePassword(newPassword);
+    } catch (error) {
+       console.error('Password change failed:', error);
+       throw error;
     }
   },
 }));

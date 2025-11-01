@@ -1,3 +1,4 @@
+// src/components/creator/Statistics.tsx
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -13,19 +14,17 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useAuthStore } from '../../stores/authStore';
+// --- NEUE IMPORTS ---
+import { statisticsService, MonthlyStatData, TopFan, EngagementStats } from '../../services/statisticsService';
+import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'; // Avatar importieren
+// --- ENDE NEUE IMPORTS ---
 
-// HINWEIS: Service muss noch implementiert werden
-// import { statisticsService } from '../../services/statisticsService';
-
-// Annahmen für Datenstrukturen
-interface ChartData { month: string; value: number; }
-interface TopFan { name: string; spent: string; avatar: string; }
-interface EngagementStats { avgLikes: number; avgComments: number; engagementRate: number; }
 
 export default function Statistics() {
   const { user } = useAuthStore();
-  const [revenueData, setRevenueData] = useState<ChartData[]>([]);
-  const [subscriberData, setSubscriberData] = useState<ChartData[]>([]);
+  // States mit neuen Typen
+  const [revenueData, setRevenueData] = useState<MonthlyStatData[]>([]);
+  const [subscriberData, setSubscriberData] = useState<MonthlyStatData[]>([]);
   const [topFans, setTopFans] = useState<TopFan[]>([]);
   const [engagementStats, setEngagementStats] = useState<EngagementStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,30 +36,23 @@ export default function Statistics() {
       setLoading(true);
       setError(null);
       try {
-        // HINWEIS: Die folgenden Zeilen sind auskommentiert, da der Service noch nicht existiert.
-        // Ersetzen Sie dies durch echte Service-Aufrufe.
-        // const revenue = await statisticsService.getRevenueData(user.id);
-        // const subscribers = await statisticsService.getSubscriberGrowth(user.id);
-        // const fans = await statisticsService.getTopFans(user.id);
-        // const engagement = await statisticsService.getEngagementStats(user.id);
+        // --- ECHTE DATENABFRAGE ---
+        // Daten parallel abrufen
+        const [revenue, subscribers, fans, engagement] = await Promise.all([
+          statisticsService.getRevenueData(user.id),
+          statisticsService.getSubscriberGrowth(user.id),
+          statisticsService.getTopFans(user.id, 5), // Limit auf 5
+          statisticsService.getEngagementStats(user.id)
+        ]);
 
-        // Mock-Daten als Platzhalter
-        setRevenueData([
-          { month: 'Jan', value: 18000 }, { month: 'Feb', value: 21000 }, { month: 'Mar', value: 24000 },
-          { month: 'Apr', value: 22000 }, { month: 'Mai', value: 26000 }, { month: 'Jun', value: 28000 },
-        ]);
-        setSubscriberData([
-          { month: 'Jan', value: 850 }, { month: 'Feb', value: 920 }, { month: 'Mar', value: 1050 },
-          { month: 'Apr', value: 1100 }, { month: 'Mai', value: 1180 }, { month: 'Jun', value: 1234 },
-        ]);
-        setTopFans([
-          { name: 'Anna Schmidt', spent: '€1,250', avatar: 'https://placehold.co/100x100' },
-          { name: 'Max Müller', spent: '€980', avatar: 'https://placehold.co/100x100' },
-        ]);
-        setEngagementStats({ avgLikes: 342, avgComments: 28, engagementRate: 8.5 });
+        setRevenueData(revenue || []);
+        setSubscriberData(subscribers || []);
+        setTopFans(fans || []);
+        setEngagementStats(engagement);
+        // --- ENDE ECHTE DATENABFRAGE ---
 
-      } catch (err) {
-        setError('Fehler beim Laden der Statistiken.');
+      } catch (err: any) {
+        setError('Fehler beim Laden der Statistiken. Stellen Sie sicher, dass die Supabase RPC-Funktionen (get_monthly_revenue, get_monthly_subscriber_growth, get_top_fans) existieren.');
         console.error(err);
       } finally {
         setLoading(false);
@@ -70,12 +62,43 @@ export default function Statistics() {
   }, [user?.id]);
 
   if (loading) {
-    return <div className="flex items-center justify-center h-screen"><p>Lade Statistiken...</p></div>;
+    return <div className="flex items-center justify-center h-screen"><p className="text-foreground">Lade Statistiken...</p></div>;
   }
 
   if (error) {
     return <div className="flex items-center justify-center h-screen"><p className="text-destructive">{error}</p></div>;
   }
+
+  // Helper zur Formatierung der Y-Achse für Euro
+  const formatCurrency = (value: number) => `€${value.toLocaleString('de-DE')}`;
+  // Helper zur Formatierung der Y-Achse für Zahlen
+  const formatNumber = (value: number) => `${value.toLocaleString('de-DE')}`;
+  // Helper zur Formatierung der Tooltips für Währung
+  const renderCurrencyTooltip = (props: any) => {
+    const { active, payload } = props;
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-card border border-border p-2 rounded-md shadow-lg">
+          <p className="text-muted-foreground">{payload[0].payload.month}</p>
+          <p className="text-foreground">{`Umsatz: ${formatCurrency(payload[0].value)}`}</p>
+        </div>
+      );
+    }
+    return null;
+  };
+  // Helper zur Formatierung der Tooltips für Zahlen
+  const renderNumberTooltip = (props: any) => {
+     const { active, payload } = props;
+     if (active && payload && payload.length) {
+       return (
+         <div className="bg-card border border-border p-2 rounded-md shadow-lg">
+           <p className="text-muted-foreground">{payload[0].payload.month}</p>
+           <p className="text-foreground">{`Neue Abonnenten: ${formatNumber(payload[0].value)}`}</p>
+         </div>
+       );
+     }
+     return null;
+   };
 
   return (
     <div className="min-h-screen py-8 px-4">
@@ -84,23 +107,23 @@ export default function Statistics() {
 
         <Tabs defaultValue="revenue" className="w-full">
           <TabsList className="bg-card border border-border">
-            <TabsTrigger value="revenue">Umsatz</TabsTrigger>
-            <TabsTrigger value="subscribers">Abonnenten</TabsTrigger>
-            <TabsTrigger value="engagement">Engagement</TabsTrigger>
-            <TabsTrigger value="fans">Top Fans</TabsTrigger>
+            <TabsTrigger value="revenue" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">Umsatz</TabsTrigger>
+            <TabsTrigger value="subscribers" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">Abonnenten</TabsTrigger>
+            <TabsTrigger value="engagement" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">Engagement</TabsTrigger>
+            <TabsTrigger value="fans" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">Top Fans</TabsTrigger>
           </TabsList>
 
           <TabsContent value="revenue" className="mt-6">
             <Card className="bg-card border-border">
-              <CardHeader><CardTitle>Umsatzentwicklung</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Umsatzentwicklung (Letzte 6 Monate)</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={400}>
                   <LineChart data={revenueData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(280, 12%, 25%)" />
-                    <XAxis dataKey="month" stroke="hsl(50, 30%, 92%)" />
-                    <YAxis stroke="hsl(50, 30%, 92%)" />
-                    <Tooltip contentStyle={{ backgroundColor: 'hsl(276, 35%, 24%)', border: '1px solid hsl(280, 12%, 25%)' }} />
-                    <Line type="monotone" dataKey="value" name="Umsatz" stroke="hsl(45, 63%, 52%)" strokeWidth={2} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--color-border))" />
+                    <XAxis dataKey="month" stroke="hsl(var(--color-muted-foreground))" />
+                    <YAxis stroke="hsl(var(--color-muted-foreground))" tickFormatter={formatCurrency} />
+                    <Tooltip content={renderCurrencyTooltip} />
+                    <Line type="monotone" dataKey="value" name="Umsatz" stroke="hsl(var(--color-secondary))" strokeWidth={2} dot={{ r: 4, fill: "hsl(var(--color-secondary))" }} activeDot={{ r: 6 }} />
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -109,15 +132,15 @@ export default function Statistics() {
 
           <TabsContent value="subscribers" className="mt-6">
             <Card className="bg-card border-border">
-              <CardHeader><CardTitle>Abonnentenwachstum</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Abonnenten-Neuzugänge (Letzte 6 Monate)</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={400}>
                   <BarChart data={subscriberData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(280, 12%, 25%)" />
-                    <XAxis dataKey="month" stroke="hsl(50, 30%, 92%)" />
-                    <YAxis stroke="hsl(50, 30%, 92%)" />
-                    <Tooltip contentStyle={{ backgroundColor: 'hsl(276, 35%, 24%)', border: '1px solid hsl(280, 12%, 25%)' }} />
-                    <Bar dataKey="value" name="Abonnenten" fill="hsl(45, 63%, 52%)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--color-border))" />
+                    <XAxis dataKey="month" stroke="hsl(var(--color-muted-foreground))" />
+                    <YAxis stroke="hsl(var(--color-muted-foreground))" allowDecimals={false} tickFormatter={formatNumber} />
+                    <Tooltip content={renderNumberTooltip} />
+                    <Bar dataKey="value" name="Abonnenten" fill="hsl(var(--color-secondary))" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -130,22 +153,22 @@ export default function Statistics() {
                 <Card className="bg-card border-border">
                   <CardHeader><CardTitle>Durchschn. Likes</CardTitle></CardHeader>
                   <CardContent>
-                    <div className="text-4xl font-serif text-secondary">{engagementStats.avgLikes}</div>
-                    <p className="text-sm text-muted-foreground mt-2">pro Beitrag</p>
+                    <div className="text-4xl font-serif text-secondary">{engagementStats.avgLikes.toFixed(1)}</div>
+                    <p className="text-sm text-muted-foreground mt-2">pro veröffentlichtem Beitrag</p>
                   </CardContent>
                 </Card>
                 <Card className="bg-card border-border">
                   <CardHeader><CardTitle>Durchschn. Kommentare</CardTitle></CardHeader>
                   <CardContent>
-                    <div className="text-4xl font-serif text-secondary">{engagementStats.avgComments}</div>
-                    <p className="text-sm text-muted-foreground mt-2">pro Beitrag</p>
+                    <div className="text-4xl font-serif text-secondary">{engagementStats.avgComments.toFixed(1)}</div>
+                    <p className="text-sm text-muted-foreground mt-2">pro veröffentlichtem Beitrag</p>
                   </CardContent>
                 </Card>
                 <Card className="bg-card border-border">
-                  <CardHeader><CardTitle>Engagement Rate</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>Gesamtanzahl Posts</CardTitle></CardHeader>
                   <CardContent>
-                    <div className="text-4xl font-serif text-secondary">{engagementStats.engagementRate.toFixed(1)}%</div>
-                    <p className="text-sm text-muted-foreground mt-2">durchschnittlich</p>
+                    <div className="text-4xl font-serif text-secondary">{engagementStats.totalPosts}</div>
+                    <p className="text-sm text-muted-foreground mt-2">veröffentlicht</p>
                   </CardContent>
                 </Card>
               </div>
@@ -154,20 +177,29 @@ export default function Statistics() {
 
           <TabsContent value="fans" className="mt-6">
             <Card className="bg-card border-border">
-              <CardHeader><CardTitle>Top 5 Fans</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Top 5 Fans (nach Umsatz)</CardTitle></CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {topFans.map((fan, index) => (
-                    <div key={fan.name} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl font-serif text-secondary w-8">#{index + 1}</span>
-                        <img src={fan.avatar} alt={fan.name} className="w-10 h-10 rounded-full" />
-                        <span className="text-foreground">{fan.name}</span>
-                      </div>
-                      <span className="text-secondary font-medium">{fan.spent}</span>
+                {topFans.length === 0 ? (
+                    <p className="text-muted-foreground">Noch keine Fan-Daten vorhanden.</p>
+                ) : (
+                    <div className="space-y-4">
+                    {topFans.map((fan, index) => (
+                        <div key={fan.id} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl font-serif text-secondary w-8">#{index + 1}</span>
+                            <Avatar className="w-10 h-10">
+                                <AvatarImage src={fan.avatar || undefined} alt={fan.name} />
+                                <AvatarFallback className="bg-neutral text-secondary">{fan.name.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-foreground">{fan.name}</span>
+                        </div>
+                        <span className="text-secondary font-medium">
+                            {formatCurrency(fan.spent)}
+                        </span>
+                        </div>
+                    ))}
                     </div>
-                  ))}
-                </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

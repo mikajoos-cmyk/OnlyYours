@@ -1,3 +1,4 @@
+// src/services/subscriptionService.ts
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
 
@@ -32,8 +33,15 @@ export class SubscriptionService {
       throw new Error('Cannot subscribe to yourself');
     }
 
+    // --- KORREKTUR HIER ---
+    // Wenn 'price' (aus dem Modal) übergeben wird, verwenden wir diesen.
+    // Wir fragen die DB nur ab, wenn 'price' NICHT übergeben wurde.
     let subscriptionPrice = price;
-    if (!subscriptionPrice) {
+    if (subscriptionPrice === undefined || subscriptionPrice === null) {
+      // Dieser Block wird jetzt (wahrscheinlich) nicht mehr aufgerufen,
+      // aber der 'creatorId'-Check ist trotzdem wichtig.
+      if (!creatorId) throw new Error("Creator ID is missing for price lookup.");
+      
       const { data: creator } = await supabase
         .from('users')
         .select('subscription_price')
@@ -42,13 +50,14 @@ export class SubscriptionService {
 
       subscriptionPrice = creator?.subscription_price || 0;
     }
+    // --- ENDE KORREKTUR ---
 
     const endDate = new Date();
     endDate.setMonth(endDate.getMonth() + 1);
 
     const subscriptionData: SubscriptionInsert = {
       fan_id: user.id,
-      creator_id: creatorId,
+      creator_id: creatorId, // creatorId wird von PaymentModal durchgereicht
       tier_id: tierId || null,
       price: subscriptionPrice,
       status: 'ACTIVE',
@@ -112,7 +121,8 @@ export class SubscriptionService {
         )
       `)
       .eq('fan_id', user.id)
-      .in('status', ['ACTIVE', 'CANCELED'])
+      // (Geändert) Holt alle, damit 'FanProfile' den Status 'CANCELED' anzeigen kann
+      .in('status', ['ACTIVE', 'CANCELED']) 
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -159,7 +169,8 @@ export class SubscriptionService {
       .select('*')
       .eq('fan_id', fanId)
       .eq('creator_id', creatorId)
-      .eq('status', 'ACTIVE')
+      // (Geändert) Berücksichtigt auch noch laufende gekündigte Abos
+      .or(`status.eq.ACTIVE,and(status.eq.CANCELED,end_date.gt.now())`)
       .maybeSingle();
 
     if (error) throw error;

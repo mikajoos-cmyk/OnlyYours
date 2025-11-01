@@ -1,83 +1,133 @@
+// src/components/creator/Payouts.tsx
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
-import { DollarSignIcon, TrendingUpIcon, CalendarIcon } from 'lucide-react';
+import { DollarSignIcon, TrendingUpIcon, CalendarIcon, Loader2Icon } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
-
-// HINWEIS: Services müssen noch implementiert werden
-// import { payoutService } from '../../services/payoutService';
-// import { statisticsService } from '../../services/statisticsService';
-
-// Annahmen für Datenstrukturen
-interface Transaction {
-  id: string;
-  date: string;
-  amount: string;
-  status: 'completed' | 'pending';
-}
-
-interface PayoutsData {
-  availableBalance: number;
-  nextPayoutDate: string;
-  currentMonthEarnings: number;
-  lastMonthComparison: number;
-  totalYearEarnings: number;
-  history: Transaction[];
-}
+// --- NEUE IMPORTS ---
+import { payoutService, PayoutSummary, PayoutTransaction } from '../../services/payoutService';
+import { useToast } from '../../hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '../ui/alert-dialog';
+import { Input } from '../ui/input';
+// --- ENDE NEUE IMPORTS ---
 
 export default function Payouts() {
   const { user } = useAuthStore();
-  const [data, setData] = useState<PayoutsData | null>(null);
+  const { toast } = useToast();
+
+  // Getrennte States für die Daten
+  const [summary, setSummary] = useState<PayoutSummary | null>(null);
+  const [history, setHistory] = useState<PayoutTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [payoutAmount, setPayoutAmount] = useState('');
+  const [isRequestingPayout, setIsRequestingPayout] = useState(false);
+
+  // Helper zum Formatieren von Währungen
+  const formatCurrency = (value: number) => {
+    return `€${value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  // Funktion zum Abrufen aller Daten
+  const fetchPayouts = async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      // Daten parallel abrufen
+      const [summaryData, historyData] = await Promise.all([
+        payoutService.getPayoutSummary(user.id),
+        payoutService.getPayoutHistory(user.id, 10)
+      ]);
+      
+      setSummary(summaryData);
+      setHistory(historyData);
+
+    } catch (err: any) {
+      setError('Fehler beim Laden der Auszahlungsdaten. Stellen Sie sicher, dass die Supabase RPC-Funktionen (get_payout_summary, request_payout) existieren.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchPayouts = async () => {
-      if (!user?.id) return;
-      setLoading(true);
-      setError(null);
-      try {
-        // HINWEIS: Die folgenden Zeilen sind auskommentiert, da die Services noch nicht existieren.
-        // Ersetzen Sie dies durch echte Service-Aufrufe.
-        // const history = await payoutService.getPayoutHistory(user.id);
-        // const balance = await payoutService.getAvailableBalance(user.id);
-        // const monthlyEarnings = await statisticsService.getCurrentMonthEarnings(user.id);
-        // const totalEarnings = await statisticsService.getTotalEarnings(user.id, { year: new Date().getFullYear() });
-
-        // Mock-Daten als Platzhalter
-        const mockData: PayoutsData = {
-          availableBalance: 4680,
-          nextPayoutDate: '1. Februar 2024',
-          currentMonthEarnings: 24680,
-          lastMonthComparison: 12,
-          totalYearEarnings: 148200,
-          history: [
-            { id: '1', date: '2024-01-15', amount: '€2,450', status: 'completed' },
-            { id: '2', date: '2024-01-01', amount: '€2,280', status: 'completed' },
-          ],
-        };
-        setData(mockData);
-
-      } catch (err) {
-        setError('Fehler beim Laden der Auszahlungsdaten.');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchPayouts();
   }, [user?.id]);
 
+  // Handler für den Auszahlungs-Button
+  const handlePayoutRequest = async () => {
+    if (!user?.id || !summary) return;
+
+    const amount = parseFloat(payoutAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({ title: "Ungültiger Betrag", description: "Bitte geben Sie einen positiven Betrag ein.", variant: "destructive" });
+      return;
+    }
+    if (amount > summary.availableBalance) {
+      toast({ title: "Fehler", description: "Der Betrag übersteigt Ihr verfügbares Guthaben.", variant: "destructive" });
+      return;
+    }
+
+    setIsRequestingPayout(true);
+    try {
+      // RPC-Funktion aufrufen
+      await payoutService.requestPayout(user.id, amount);
+      
+      toast({
+        title: "Auszahlung beantragt",
+        description: `${formatCurrency(amount)} werden nun bearbeitet.`,
+      });
+      
+      // Daten neu laden, um das aktualisierte Guthaben anzuzeigen
+      await fetchPayouts(); 
+      setPayoutAmount('');
+      
+    } catch (err: any) {
+      console.error("Fehler bei Auszahlungsanfrage:", err);
+      toast({ title: "Fehler", description: err.message || "Auszahlung fehlgeschlagen.", variant: "destructive" });
+    } finally {
+      setIsRequestingPayout(false);
+    }
+  };
+
+  // Helper zum Anzeigen des Status
+  const getStatusBadge = (status: PayoutTransaction['status']) => {
+    switch (status) {
+      case 'COMPLETED':
+        return <span className="text-sm text-success">Abgeschlossen</span>;
+      case 'PENDING':
+        return <span className="text-sm text-warning">Ausstehend</span>;
+      case 'PROCESSING':
+        return <span className="text-sm text-blue-400">In Bearbeitung</span>;
+      case 'FAILED':
+        return <span className="text-sm text-destructive">Fehlgeschlagen</span>;
+      default:
+        return <span className="text-sm text-muted-foreground">{status}</span>;
+    }
+  };
+
+
   if (loading) {
-    return <div className="flex items-center justify-center h-screen"><p>Lade Auszahlungsdaten...</p></div>;
+    return <div className="flex items-center justify-center h-screen"><p className="text-foreground">Lade Auszahlungsdaten...</p></div>;
   }
 
   if (error) {
-    return <div className="flex items-center justify-center h-screen"><p className="text-destructive">{error}</p></div>;
+    return <div className="flex items-center justify-center h-screen"><p className="text-destructive max-w-md text-center">{error}</p></div>;
   }
 
-  if (!data) {
-    return <div className="flex items-center justify-center h-screen"><p>Keine Daten gefunden.</p></div>;
+  if (!summary) {
+    return <div className="flex items-center justify-center h-screen"><p className="text-foreground">Keine Daten gefunden.</p></div>;
   }
 
   return (
@@ -91,10 +141,10 @@ export default function Payouts() {
               <div>
                 <p className="text-secondary-foreground/80 mb-2">Verfügbares Guthaben</p>
                 <div className="text-5xl font-serif text-secondary-foreground">
-                  €{data.availableBalance.toLocaleString()}
+                  {formatCurrency(summary.availableBalance)}
                 </div>
                 <p className="text-secondary-foreground/60 mt-2 text-sm">
-                  Nächste Auszahlung: {data.nextPayoutDate}
+                  Nächste geplante Auszahlung: {summary.nextPayoutDate}
                 </p>
               </div>
               <DollarSignIcon className="w-16 h-16 text-secondary-foreground/40" strokeWidth={1.5} />
@@ -111,8 +161,10 @@ export default function Payouts() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-serif text-foreground">€{data.currentMonthEarnings.toLocaleString()}</div>
-              <p className="text-sm text-success mt-2">+{data.lastMonthComparison}% vs. letzter Monat</p>
+              <div className="text-3xl font-serif text-foreground">{formatCurrency(summary.currentMonthEarnings)}</div>
+              <p className={`text-sm mt-2 ${summary.lastMonthComparison >= 0 ? 'text-success' : 'text-destructive'}`}>
+                {summary.lastMonthComparison.toFixed(1)}% vs. letzter Monat
+              </p>
             </CardContent>
           </Card>
 
@@ -124,7 +176,7 @@ export default function Payouts() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-serif text-foreground">€{data.totalYearEarnings.toLocaleString()}</div>
+              <div className="text-3xl font-serif text-foreground">{formatCurrency(summary.totalYearEarnings)}</div>
               <p className="text-sm text-muted-foreground mt-2">Bisher in diesem Jahr</p>
             </CardContent>
           </Card>
@@ -133,27 +185,75 @@ export default function Payouts() {
         <Card className="bg-card border-border">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-foreground">Auszahlungshistorie</CardTitle>
-            <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal">
-              Guthaben auszahlen
-            </Button>
+            
+            {/* --- Auszahlungs-Dialog-Button --- */}
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
+                  disabled={summary.availableBalance <= 0} // Deaktivieren, wenn kein Guthaben
+                >
+                  Guthaben auszahlen
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="bg-card border-border">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-foreground">Auszahlung beantragen</AlertDialogTitle>
+                  <AlertDialogDescription className="text-muted-foreground">
+                    Verfügbares Guthaben: {formatCurrency(summary.availableBalance)}.
+                    Bitte geben Sie den gewünschten Auszahlungsbetrag ein.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="relative my-4">
+                  <Input
+                    type="number"
+                    placeholder="0.00"
+                    value={payoutAmount}
+                    onChange={(e) => setPayoutAmount(e.target.value)}
+                    className="bg-background text-foreground border-border text-lg pl-8"
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">€</span>
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="bg-background text-foreground border-border hover:bg-neutral">Abbrechen</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                    onClick={handlePayoutRequest}
+                    disabled={isRequestingPayout || parseFloat(payoutAmount) <= 0 || parseFloat(payoutAmount) > summary.availableBalance}
+                  >
+                    {isRequestingPayout ? (
+                      <Loader2Icon className="w-5 h-5 animate-spin" />
+                    ) : (
+                      'Auszahlung beantragen'
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            {/* --- ENDE Dialog-Button --- */}
+            
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {data.history.map((transaction) => (
-                <div
-                  key={transaction.id}
-                  className="flex items-center justify-between py-4 border-b border-border last:border-0"
-                >
-                  <div>
-                    <div className="text-foreground font-medium">{transaction.amount}</div>
-                    <div className="text-sm text-muted-foreground">{new Date(transaction.date).toLocaleDateString()}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-success">Abgeschlossen</span>
-                  </div>
+            {history.length === 0 ? (
+                <p className="text-muted-foreground text-center py-4">Keine Auszahlungshistorie vorhanden.</p>
+            ) : (
+                <div className="space-y-4">
+                {history.map((transaction) => (
+                    <div
+                    key={transaction.id}
+                    className="flex items-center justify-between py-4 border-b border-border last:border-0"
+                    >
+                    <div>
+                        <div className="text-foreground font-medium">{formatCurrency(transaction.amount)}</div>
+                        <div className="text-sm text-muted-foreground">{new Date(transaction.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {getStatusBadge(transaction.status)}
+                    </div>
+                    </div>
+                ))}
                 </div>
-              ))}
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>

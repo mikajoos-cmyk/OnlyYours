@@ -1,3 +1,4 @@
+// src/components/fan/SubscriptionModal.tsx
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
@@ -10,18 +11,24 @@ interface SubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
   creator: {
+    id: string; // <-- Prop ist jetzt hier
     name: string;
     subscriptionPrice: number;
   };
+  onSubscriptionComplete: () => void; // <-- Prop ist jetzt hier
 }
 
-export default function SubscriptionModal({ isOpen, onClose, creator }: SubscriptionModalProps) {
+export default function SubscriptionModal({ isOpen, onClose, creator, onSubscriptionComplete }: SubscriptionModalProps) {
   const [selectedTier, setSelectedTier] = useState('vip');
   const [showPayment, setShowPayment] = useState(false);
 
+  // Beispiel-Tiers.
+  // HINWEIS: 'id' hier ('vip', 'vip-gold') sind nur Platzhalter.
+  // Der subscriptionService (Fix 1) ist so eingestellt, dass er 'null' als tierId
+  // sendet, um DB-Fehler zu vermeiden, falls diese Tiers nicht in Ihrer DB existieren.
   const tiers = [
     {
-      id: 'vip',
+      id: 'vip', // Diese ID wird an das PaymentModal übergeben
       name: 'VIP',
       price: creator.subscriptionPrice,
       benefits: [
@@ -49,13 +56,22 @@ export default function SubscriptionModal({ isOpen, onClose, creator }: Subscrip
     setShowPayment(true);
   };
 
+  const selectedTierData = tiers.find((t) => t.id === selectedTier);
+
+  if (!selectedTierData) {
+      console.error("Ausgewählter Tier nicht gefunden!");
+      return null;
+  }
+
   if (showPayment) {
     return (
       <PaymentModal
         isOpen={isOpen}
         onClose={onClose}
-        tier={tiers.find((t) => t.id === selectedTier)!}
+        tier={selectedTierData}
+        creatorId={creator.id} // <-- 'creator.id' wird hier korrekt übergeben
         creatorName={creator.name}
+        onPaymentSuccess={onSubscriptionComplete} // <-- Callback wird durchgereicht
       />
     );
   }
@@ -86,7 +102,7 @@ export default function SubscriptionModal({ isOpen, onClose, creator }: Subscrip
                     <div className="flex items-center justify-between">
                       <h3 className="text-xl font-serif text-foreground">{tier.name}</h3>
                       <span className="text-2xl font-serif text-secondary">
-                        {tier.price}€<span className="text-sm text-muted-foreground">/Monat</span>
+                        {tier.price.toFixed(2)}€<span className="text-sm text-muted-foreground">/Monat</span>
                       </span>
                     </div>
                     <ul className="space-y-2">
