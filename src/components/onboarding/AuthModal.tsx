@@ -16,13 +16,18 @@ interface AuthModalProps {
 
 type ValidationStatus = 'idle' | 'checking' | 'available' | 'taken';
 
+// Helper für E-Mail-Validierung (einfach)
+const validateEmail = (email: string) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
 export default function AuthModal({ onComplete }: AuthModalProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [ageVerified, setAgeVerified] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
 
-  const { login, register, verifyOtp, resendOtp, checkUsernameAvailability } = useAuthStore();
+  const { login, register, verifyOtp, resendOtp, checkUsernameAvailability, checkEmailAvailability } = useAuthStore();
   const { toast } = useToast();
 
   const [username, setUsername] = useState('');
@@ -31,7 +36,12 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
 
   const [usernameStatus, setUsernameStatus] = useState<ValidationStatus>('idle');
   const [usernameError, setUsernameError] = useState<string | null>(null);
-  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const [emailStatus, setEmailStatus] = useState<ValidationStatus>('idle');
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  const debounceUsernameTimer = useRef<NodeJS.Timeout | null>(null);
+  const debounceEmailTimer = useRef<NodeJS.Timeout | null>(null);
 
   const [step, setStep] = useState<'auth' | 'verify'>('auth');
   const [verificationCode, setVerificationCode] = useState('');
@@ -45,11 +55,9 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
       setUsernameError(null);
       return;
     }
-
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current);
+    if (debounceUsernameTimer.current) {
+      clearTimeout(debounceUsernameTimer.current);
     }
-
     if (username.length < 3) {
       setUsernameStatus('taken');
       setUsernameError('Muss mindestens 3 Zeichen lang sein.');
@@ -60,11 +68,9 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
       setUsernameError('Nur Kleinbuchstaben, Zahlen und _ erlaubt.');
       return;
     }
-
     setUsernameError(null);
     setUsernameStatus('checking');
-
-    debounceTimer.current = setTimeout(async () => {
+    debounceUsernameTimer.current = setTimeout(async () => {
       try {
         const isAvailable = await checkUsernameAvailability(username);
         if (isAvailable) {
@@ -79,17 +85,56 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
         setUsernameError('Fehler bei der Prüfung.');
       }
     }, 500);
-
     return () => {
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
+      if (debounceUsernameTimer.current) {
+        clearTimeout(debounceUsernameTimer.current);
       }
     };
   }, [username, isLogin, checkUsernameAvailability]);
 
+  // Debounced-Effekt für E-Mail-Validierung
+  useEffect(() => {
+    if (isLogin || !email) {
+      setEmailStatus('idle');
+      setEmailError(null);
+      return;
+    }
+    if (debounceEmailTimer.current) {
+      clearTimeout(debounceEmailTimer.current);
+    }
+    if (!validateEmail(email)) {
+      setEmailStatus('idle');
+      setEmailError('Bitte geben Sie eine gültige E-Mail ein.');
+      return;
+    }
+    setEmailError(null);
+    setEmailStatus('checking');
+    debounceEmailTimer.current = setTimeout(async () => {
+      try {
+        const isAvailable = await checkEmailAvailability(email);
+        if (isAvailable) {
+          setEmailStatus('available');
+          setEmailError(null);
+        } else {
+          setEmailStatus('taken');
+          setEmailError('Diese E-Mail-Adresse ist bereits registriert.');
+        }
+      } catch (error) {
+        setEmailStatus('taken');
+        setEmailError('Fehler bei der E-Mail-Prüfung.');
+      }
+    }, 500);
+    return () => {
+      if (debounceEmailTimer.current) {
+        clearTimeout(debounceEmailTimer.current);
+      }
+    };
+  }, [email, isLogin, checkEmailAvailability]);
+
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("[AuthModal] handleAuthSubmit CALLED. isLogin:", isLogin);
     setIsLoading(true);
 
     if (!ageVerified) {
@@ -105,9 +150,12 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
     if (isLogin) {
       // --- Login-Logik ---
       try {
+        console.log("[AuthModal] Awaiting login...");
         await login(email, password);
-        // onComplete() wird durch den authStore-Listener (initialize) aufgerufen
+        console.log("[AuthModal] Login SUCCEEDED (oder onAuthStateChange übernimmt).");
+        // onComplete() wird jetzt durch den authStore-Listener aufgerufen
       } catch (error: any) {
+        console.error("[AuthModal] Login FAILED:", error);
         toast({
           title: 'Anmeldung fehlgeschlagen',
           description: error.message || 'Bitte überprüfen Sie Ihre E-Mail und Ihr Passwort.',
@@ -118,6 +166,11 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
       // --- Registrierungs-Logik ---
       if (usernameStatus !== 'available') {
          toast({ title: 'Registrierung fehlgeschlagen', description: usernameError || 'Bitte wählen Sie einen gültigen Benutzernamen.', variant: 'destructive'});
+         setIsLoading(false);
+         return;
+      }
+      if (emailStatus !== 'available') {
+         toast({ title: 'Registrierung fehlgeschlagen', description: emailError || 'Bitte verwenden Sie eine andere E-Mail-Adresse.', variant: 'destructive'});
          setIsLoading(false);
          return;
       }
@@ -133,27 +186,30 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
       }
 
       try {
+        console.log("[AuthModal] Awaiting register...");
         await register(username, email, password, 'fan');
+        console.log("[AuthModal] Register SUCCEEDED.");
+
+        // --- KORREKTUR: Toast-Nachricht für den nächsten Schritt ---
         toast({
-          title: 'Registrierung erfolgreich!',
+          title: 'Postfach prüfen!',
           description: 'Bitte überprüfen Sie Ihre E-Mails und geben Sie den Code ein.',
         });
+        // --- ENDE KORREKTUR ---
+
         setStep('verify');
       } catch (error: any) {
+         console.error("[AuthModal] Register FAILED:", error);
          let description = 'Ein unbekannter Fehler ist aufgetreten.';
-
-         // --- KORREKTUR 1: Fehlererkennung für doppelten Username ---
-         // Fängt den DB-Trigger-Fehler (500) oder einen E-Mail-Fehler (400) ab
          if (error.message?.includes('Database error saving new user') || error.message?.includes('duplicate key value violates unique constraint "users_username_key"')) {
-             description = 'Dieser Benutzername ist bereits vergeben. (Aktualisiert)';
-             // Setzt die UI zurück, um den Fehler anzuzeigen
+             description = 'Dieser Benutzername ist bereits vergeben.';
              setUsernameStatus('taken');
              setUsernameError('Benutzername ist bereits vergeben.');
          } else if (error.message?.includes('User already registered')) {
             description = 'Diese E-Mail-Adresse ist bereits registriert.';
+            setEmailStatus('taken');
+            setEmailError('Diese E-Mail-Adresse ist bereits registriert.');
          }
-         // --- ENDE KORREKTUR 1 ---
-
          toast({
           title: 'Registrierung fehlgeschlagen',
           description: description,
@@ -165,10 +221,11 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
   };
 
   /**
-   * (AKTUALISIERT) Fügt eine Verzögerung hinzu, um das "sofortige Verlassen" zu verhindern.
+   * (AKTUALISIERT)
    */
   const handleVerificationSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
+      console.log("[AuthModal] handleVerificationSubmit CALLED.");
       if (!verificationCode || verificationCode.length < 6) {
            toast({ title: 'Fehler', description: 'Bitte geben Sie einen 6-stelligen Code ein.', variant: 'destructive'});
            return;
@@ -177,27 +234,31 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
       setIsLoading(true);
       try {
           // 1. OTP bei Supabase verifizieren
+          console.log("[AuthModal] Awaiting verifyOtp...");
           await verifyOtp(email, verificationCode);
+          console.log("[AuthModal] verifyOtp SUCCEEDED.");
 
+          // --- KORREKTUR: Toast-Nachricht HIERHER verschoben ---
           toast({
-              title: 'E-Mail verifiziert!',
+              title: 'Registrierung erfolgreich!',
               description: 'Ihr Konto ist jetzt aktiv. Sie werden angemeldet...',
           });
+          // --- ENDE KORREKTUR ---
 
-          // --- KORREKTUR 2: Login & Verzögerung ---
-          // 2. Melden Sie den Benutzer explizit an, um die Sitzung zu starten
+          // 2. Melden Sie den Benutzer explizit an
+          console.log("[AuthModal] Awaiting login (post-verification)...");
           await login(email, password);
+          console.log("[AuthModal] login SUCCEEDED (post-verification).");
 
-          // 3. Warten Sie, damit der Benutzer den Toast lesen kann.
-          // Der authStore-Listener wird durch das login() ausgelöst,
-          // ABER onComplete() (was das Onboarding beendet) wird verzögert.
-          setTimeout(() => {
-            onComplete();
-          }, 2000); // 2 Sekunden Verzögerung
-          // --- ENDE KORREKTUR 2 ---
+          // 3. onComplete() aufrufen.
+          // Der authStore-Listener (im Hintergrund) wird durch login() getriggert
+          // und `completeOnboarding()` im appStore aufrufen.
+          // Dieses onComplete() hier beendet nur den *Flow* in OnboardingFlow.tsx
+          console.log("[AuthModal] Calling onComplete() to finish OnboardingFlow.");
+          onComplete();
 
       } catch (error: any) {
-          console.error("Verification error:", error);
+          console.error("[AuthModal] Verification error:", error);
           toast({
               title: 'Verifizierung fehlgeschlagen',
               description: 'Der eingegebene Code ist ungültig oder abgelaufen.',
@@ -205,10 +266,10 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
           });
           setIsLoading(false); // Nur im Fehlerfall Loading stoppen
       }
-      // setIsLoading(false) wird bei Erfolg entfernt, da die Komponente unmountet
   };
 
   const handleResendCode = async () => {
+      console.log("[AuthModal] handleResendCode CALLED.");
       if (isResending) return;
 
       setIsResending(true);
@@ -287,8 +348,31 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
                 <Label htmlFor="email" className="text-foreground">E-Mail</Label>
                 <div className="relative">
                   <MailIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input id="email" type="email" placeholder="ihre@email.com" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-10 bg-background text-foreground border-border" required />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="ihre@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={cn(
+                      "pl-10 bg-background text-foreground border-border",
+                      !isLogin && emailStatus === 'taken' && "border-destructive focus-visible:ring-destructive",
+                      !isLogin && emailStatus === 'available' && "border-success focus-visible:ring-success"
+                    )}
+                    required
+                    aria-invalid={!isLogin && emailStatus === 'taken'}
+                  />
+                  {!isLogin && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5">
+                      {emailStatus === 'checking' && <Loader2Icon className="animate-spin text-muted-foreground" />}
+                      {emailStatus === 'available' && <CheckIcon className="text-success" />}
+                      {emailStatus === 'taken' && <XIcon className="text-destructive" />}
+                    </div>
+                  )}
                 </div>
+                {!isLogin && emailError && (
+                  <p className="text-xs text-destructive">{emailError}</p>
+                )}
               </div>
 
               <div className="space-y-2">

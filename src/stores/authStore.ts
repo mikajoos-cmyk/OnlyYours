@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { authService, AuthUser } from '../services/authService';
 import { Subscription } from '@supabase/supabase-js';
+import { useAppStore } from './appStore'; // <-- WICHTIGER IMPORT
 
 interface AppUser extends AuthUser {}
 
@@ -22,12 +23,10 @@ interface AuthState {
     subscription_price?: number;
   }) => Promise<void>;
   changePassword: (newPassword: string) => Promise<void>;
-
-  // --- NEUE METHODEN ---
   checkUsernameAvailability: (username: string) => Promise<boolean>;
+  checkEmailAvailability: (email: string) => Promise<boolean>;
   verifyOtp: (email: string, token: string) => Promise<any>;
   resendOtp: (email: string) => Promise<void>;
-  // --- ENDE NEUE METHODEN ---
 }
 
 let authListenerSubscription: Subscription | null = null;
@@ -40,30 +39,49 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: () => {
     if (initializationEnsured && authListenerSubscription) {
-      console.log("Auth listener already initialized. Skipping.");
+      console.log("[authStore] Auth listener already initialized. Skipping.");
       return () => { /* No-op */ };
     }
      if (!authListenerSubscription) {
-        console.log("Initializing auth listener...");
+        console.log("[authStore] Initializing auth listener...");
 
-        const { data: { subscription } } = authService.onAuthStateChange(async (userFullProfile: AppUser | null) => {
-          console.log("Auth state change received in store:", userFullProfile);
+        // --- HIER IST DER FIX (Zeile 49 in deinen Logs) ---
+        // 'authService.onAuthStateChange' gibt jetzt das Subscription-Objekt korrekt zurück
+        const authSubscription = authService.onAuthStateChange(async (userFullProfile: AppUser | null) => {
+          console.log("[authStore] Auth state change received:", userFullProfile);
 
-          set({
-            isAuthenticated: !!userFullProfile,
-            user: userFullProfile,
-            isLoading: false
-          });
+          if (userFullProfile) {
+            // User ist authentifiziert UND E-Mail-verifiziert
+            set({
+              isAuthenticated: true,
+              user: userFullProfile,
+              isLoading: false
+            });
+            // Stelle sicher, dass Onboarding als abgeschlossen markiert wird
+            useAppStore.getState().completeOnboarding();
+            console.log("[authStore] User is Authenticated. Onboarding marked complete.");
+          } else {
+            // User ist NICHT authentifiziert (oder E-Mail nicht verifiziert)
+            set({
+              isAuthenticated: false,
+              user: null,
+              isLoading: false
+            });
+            // Setze Onboarding-Status zurück, wenn User ausgeloggt ist
+            useAppStore.getState().resetOnboarding();
+            console.log("[authStore] User is NOT Authenticated. Onboarding reset.");
+          }
 
-          console.log("Auth state updated:", { isAuthenticated: !!userFullProfile, user: userFullProfile, isLoading: false });
           initializationEnsured = true;
         });
 
-        authListenerSubscription = subscription;
+        // Weise die Subscription-Eigenschaft des zurückgegebenen Objekts zu
+        authListenerSubscription = authSubscription.data.subscription;
+        // --- ENDE FIX ---
      }
 
     return () => {
-      console.log("Running unsubscribe function returned by initialize...");
+      console.log("[authStore] Running unsubscribe function returned by initialize...");
       if (authListenerSubscription) {
         authListenerSubscription.unsubscribe();
         authListenerSubscription = null;
@@ -128,17 +146,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  // --- IMPLEMENTIERUNG DER NEUEN METHODEN ---
   checkUsernameAvailability: async (username: string) => {
     return authService.checkUsernameAvailability(username);
   },
-
+  checkEmailAvailability: async (email: string) => {
+    return authService.checkEmailAvailability(email);
+  },
   verifyOtp: async (email: string, token: string) => {
     return authService.verifyOtp(email, token);
   },
-
   resendOtp: async (email: string) => {
     return authService.resendOtp(email);
   }
-  // --- ENDE IMPLEMENTIERUNG ---
 }));

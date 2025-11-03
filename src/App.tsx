@@ -23,27 +23,34 @@ function App() {
   const { hasCompletedOnboarding } = useAppStore();
 
   useEffect(() => {
+    console.log("[App.tsx] useEffect RUNS. Calling initialize().");
     // Rufe initialize auf und speichere die zurückgegebene Unsubscribe-Funktion
     const unsubscribeAuth = initialize();
 
     // Gib eine Cleanup-Funktion zurück, die beim Unmount der Komponente aufgerufen wird
     return () => {
+      console.log("[App.tsx] Cleanup RUNS. Unsubscribing auth listener.");
       unsubscribeAuth(); // Hier wird der Listener abgemeldet
     };
   }, [initialize]); // initialize als Abhängigkeit behalten
 
-  // --- Ladezustand anzeigen (bleibt gleich) ---
+  // --- Ladezustand anzeigen ---
   if (isLoading) {
+    console.log("[App.tsx] Rendering: isLoading=true");
     return (
       <div className="flex justify-center items-center min-h-screen bg-background">
         <p className="text-foreground">Laden...</p> {/* Oder eine schönere Ladekomponente */}
       </div>
     );
   }
-  // --- ENDE Ladezustand ---
 
+  // --- Logik für Onboarding-Anzeige ---
+  // Zeige Onboarding, wenn (User nicht authentifiziert) ODER (Onboarding-Flag noch nicht gesetzt)
+  const showOnboarding = !isAuthenticated || !hasCompletedOnboarding;
 
-  if (!isAuthenticated || !hasCompletedOnboarding) {
+  console.log(`[App.tsx] Rendering: isLoading=false, isAuthenticated=${isAuthenticated}, hasCompletedOnboarding=${hasCompletedOnboarding}, showOnboarding=${showOnboarding}`);
+
+  if (showOnboarding) {
     return (
       <>
         <OnboardingFlow />
@@ -52,7 +59,7 @@ function App() {
     );
   }
 
-  // Rest der Komponente bleibt gleich...
+  // --- Haupt-App ---
   return (
     <Router>
       <AppShell>

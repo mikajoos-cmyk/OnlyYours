@@ -21,50 +21,42 @@ export interface AuthUser {
 
 export class AuthService {
 
-  /**
-   * (AKTUALISIERT) Registriert einen Benutzer.
-   * Die Erstellung des 'public.users'-Profils wird jetzt
-   * durch den Supabase DB-Trigger 'handle_new_user' übernommen.
-   */
   async register(username: string, email: string, password: string, role: 'fan' | 'creator' = 'creator') {
-
-    // --- KORREKTUR HIER ---
-    // Wir übergeben alle Profildaten (username, display_name, role)
-    // an die 'options.data', damit der DB-Trigger sie lesen kann.
+    console.log("[authService] register CALLED");
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           username: username.toLowerCase(),
-          display_name: username, // Standardmäßig ist display_name gleich username
-          role: role.toUpperCase(), // 'FAN' oder 'CREATOR'
+          display_name: username,
+          role: role.toUpperCase(),
         },
-        // E-Mail-Bestätigung ist standardmäßig aktiviert
       },
     });
-    // --- ENDE KORREKTUR ---
-
     if (authError) throw authError;
     if (!authData.user) throw new Error('Registration failed');
-
-    // Der manuelle .insert() Aufruf wird entfernt, da der DB-Trigger dies übernimmt.
-
+    console.log("[authService] register SUCCEEDED. User needs to verify email.");
     return authData;
   }
 
   async verifyOtp(email: string, token: string) {
+    console.log("[authService] verifyOtp CALLED");
     const { data, error } = await supabase.auth.verifyOtp({
       email,
       token,
       type: 'email',
     });
-
-    if (error) throw error;
+    if (error) {
+       console.error("[authService] verifyOtp FAILED:", error);
+       throw error;
+    }
+    console.log("[authService] verifyOtp SUCCEEDED.");
     return data;
   }
 
   async resendOtp(email: string) {
+    console.log("[authService] resendOtp CALLED");
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email: email,
@@ -73,37 +65,56 @@ export class AuthService {
   }
 
   async checkUsernameAvailability(username: string): Promise<boolean> {
+    console.log(`[authService] checkUsernameAvailability: ${username}`);
     const { data, error } = await supabase
       .from('users')
       .select('username')
       .eq('username', username.toLowerCase())
       .maybeSingle();
-
     if (error) {
       console.error("Error checking username:", error);
       return false;
     }
-
-    return !data; // true (verfügbar), wenn data null ist
+    console.log(`[authService] Username available: ${!data}`);
+    return !data;
   }
 
+  async checkEmailAvailability(email: string): Promise<boolean> {
+    console.log(`[authService] checkEmailAvailability: ${email}`);
+    const { data, error } = await supabase.rpc('check_email_exists', {
+      email_to_check: email.toLowerCase(),
+    });
+    if (error) {
+      console.error('Error checking email availability:', error);
+      return false;
+    }
+    // data=true (existiert) -> return false (nicht verfügbar)
+    console.log(`[authService] Email available: ${!data}`);
+    return !data;
+  }
 
   async login(email: string, password: string): Promise<AuthUser> {
+    console.log("[authService] login CALLED");
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-
     if (authError) throw authError;
     if (!authData.user) throw new Error('Login failed');
 
     const userProfile = await this.getCurrentUserFullProfile();
-    if (!userProfile) throw new Error('User profile not found after login');
 
+    if (!userProfile) {
+      console.error("[authService] login FAILED: User profile not found or email not confirmed after login.");
+      throw new Error('E-Mail-Adresse noch nicht bestätigt. Bitte prüfen Sie Ihr Postfach.');
+    }
+
+    console.log("[authService] login SUCCEEDED and profile fetched.");
     return userProfile;
   }
 
   async logout() {
+    console.log("[authService] logout CALLED");
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   }
@@ -113,27 +124,41 @@ export class AuthService {
   }
 
   async getCurrentUserFullProfile(): Promise<AuthUser | null> {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return null;
+    console.log("[authService] getCurrentUserFullProfile CALLED");
 
-    // Nur fortfahren, wenn die E-Mail bestätigt wurde
-    if (session.user.aud !== 'authenticated') {
-        console.warn("User session found, but email not verified.");
-        return null;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      console.log("[authService] No session found. Returning null.");
+      return null;
     }
 
+    const { data: { user: freshUser }, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !freshUser) {
+       console.warn("[authService] Error fetching fresh user (auth.getUser):", userError);
+       return null;
+    }
+
+    console.log(`[authService] Fresh user email_confirmed_at: ${freshUser.email_confirmed_at}`);
+    if (!freshUser.email_confirmed_at) {
+      console.warn("[authService] User email NOT confirmed. Returning null.");
+      return null;
+    }
+
+    console.log("[authService] User email IS confirmed. Fetching public.users profile.");
     const { data: userData, error } = await supabase
       .from('users')
       .select('*')
-      .eq('id', session.user.id)
+      .eq('id', freshUser.id)
       .single();
 
     if (error || !userData) {
-        console.error("Fehler beim Abrufen des vollen Profils:", error);
+        console.error("[authService] Error fetching public.users profile:", error);
         return null;
     }
 
-    return this.mapUserRowToAuthUser(userData, session.user.email);
+    console.log("[authService] Successfully fetched full profile.");
+    return this.mapUserRowToAuthUser(userData, freshUser.email);
   }
 
   async updateProfile(userId: string, updates: {
@@ -158,18 +183,24 @@ export class AuthService {
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
     });
-
     if (error) throw error;
   }
 
+  /**
+   * (KORRIGIERT) Überwacht Auth-Änderungen.
+   * Gibt jetzt das volle Subscription-Objekt zurück, wie vom Store erwartet.
+   */
   onAuthStateChange(callback: (user: AuthUser | null) => void) {
+    // GIB DAS GANZE OBJEKT ZURÜCK (nicht destrukturieren)
     return supabase.auth.onAuthStateChange((_event, session) => {
+      console.log(`[authService] onAuthStateChange FIRED. Event: ${_event}, Session: ${!!session}`);
       (async () => {
-        // Nur als eingeloggt betrachten, wenn die E-Mail bestätigt ist
-        if (session?.user && session.user.aud === 'authenticated') {
+        if (session?.user) {
+          console.log("[authService] Session found, checking full profile (incl. email verification)...");
           const user = await this.getCurrentUserFullProfile();
           callback(user);
         } else {
+          console.log("[authService] No session. Calling callback(null).");
           callback(null);
         }
       })();
