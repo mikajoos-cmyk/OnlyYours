@@ -26,11 +26,7 @@ interface GridPost {
 }
 
 export default function CreatorProfile() {
-  // --- HIER IST DIE ÄNDERUNG ---
-  // Holt den ':username' Parameter aus der URL (z.B. /profile/creator-name)
   const { username } = useParams<{ username: string }>();
-  // --- ENDE DER ÄNDERUNG ---
-
   const navigate = useNavigate();
   const { user: currentUser } = useAuthStore();
   const { toast } = useToast();
@@ -48,7 +44,7 @@ export default function CreatorProfile() {
   const [selectedPostIndex, setSelectedPostIndex] = useState<number>(0);
   const [showPostFeed, setShowPostFeed] = useState(false);
 
-  // 1. Creator-Profil laden (Verwendet jetzt getUserByUsername)
+  // 1. Creator-Profil laden
   useEffect(() => {
     const fetchCreator = async () => {
       if (!username) {
@@ -64,11 +60,7 @@ export default function CreatorProfile() {
       setIsLoadingSubscription(true);
 
       try {
-        // --- HIER IST DIE ÄNDERUNG ---
-        // Ruft das Profil basierend auf dem 'username' aus der URL ab
         const profile = await userService.getUserByUsername(username);
-        // --- ENDE DER ÄNDERUNG ---
-
         if (!profile) {
           setError('Benutzer nicht gefunden.');
         } else {
@@ -82,15 +74,14 @@ export default function CreatorProfile() {
       }
     };
     fetchCreator();
-  }, [username]); // Neu laden, wenn sich der 'username' in der URL ändert
+  }, [username]);
 
-  // 2. Posts laden, NACHDEM das Creator-Profil geladen wurde
+  // 2. Posts laden
   useEffect(() => {
     const fetchPosts = async () => {
       if (!creator || !creator.id) return;
       setIsLoadingPosts(true);
       try {
-        // Ruft die Posts über die ID des gefundenen Creators ab
         const fetchedPosts = await postService.getCreatorPosts(creator.id);
         setPosts(fetchedPosts);
       } catch (err: any) {
@@ -100,7 +91,7 @@ export default function CreatorProfile() {
       }
     };
     fetchPosts();
-  }, [creator]); // Abhängig vom geladenen Creator-Objekt
+  }, [creator]);
 
   // 3. Abonnement-Status prüfen
   useEffect(() => {
@@ -127,7 +118,6 @@ export default function CreatorProfile() {
     }
   }, [creator, currentUser, isLoadingProfile]);
 
-  // --- Rendern ---
   if (isLoadingProfile) {
     return <div className="flex justify-center items-center h-screen"><p className="text-foreground">Lade Profil...</p></div>;
   }
@@ -138,7 +128,6 @@ export default function CreatorProfile() {
     return <div className="flex justify-center items-center h-screen"><p className="text-muted-foreground">Benutzer konnte nicht geladen werden.</p></div>;
   }
 
-  // --- Event Handlers ---
   const handlePostClick = (index: number) => {
     if (index >= 0 && index < posts.length) {
         setSelectedPostIndex(index);
@@ -160,7 +149,14 @@ export default function CreatorProfile() {
     toast({ title: "Abonnement", description: "Verwalte deine Abonnements in deinem Profil." });
   };
 
-  // --- Daten für die Ansicht transformieren ---
+  // --- NEU: Callback für erfolgreiches Abo ---
+  const handleSubscriptionComplete = (subscribedCreatorId: string) => {
+    // UI sofort aktualisieren
+    setIsSubscribed(true);
+    setShowSubscriptionModal(false);
+  };
+  // --- ENDE NEU ---
+
   const gridPosts: GridPost[] = posts.map(p => ({
       id: p.id,
       thumbnailUrl: p.thumbnail_url || p.mediaUrl,
@@ -190,7 +186,6 @@ export default function CreatorProfile() {
     return gridPosts.filter(post => post.type === type);
   };
 
-  // --- JSX (bleibt gleich, außer Hinzufügung von @username) ---
   return (
     <>
       <div className={`min-h-screen ${showPostFeed ? 'hidden' : ''} pb-16 md:pb-0`}>
@@ -211,7 +206,6 @@ export default function CreatorProfile() {
                 <h1 className="text-3xl font-serif text-foreground">{creator.displayName}</h1>
                 {creator.isVerified && ( <Badge className="bg-secondary text-secondary-foreground font-normal">Verifiziert</Badge> )}
               </div>
-              {/* (AKTUALISIERT) @username hinzugefügt */}
               <p className="text-lg text-secondary">@{creator.username}</p>
 
               <p className="text-muted-foreground max-w-md">{creator.bio || 'Keine Bio vorhanden.'}</p>
@@ -301,7 +295,20 @@ export default function CreatorProfile() {
         </div>
       </div>
 
-       <SubscriptionModal isOpen={showSubscriptionModal} onClose={() => setShowSubscriptionModal(false)} creator={{ name: creator.displayName, subscriptionPrice: creator.subscriptionPrice }}/>
+      {/* --- HIER IST DIE KORREKTUR --- */}
+      <SubscriptionModal
+        isOpen={showSubscriptionModal}
+        onClose={() => setShowSubscriptionModal(false)}
+        creator={{
+          id: creator.id, // <-- DIESE ZEILE WURDE HINZUGEFÜGT
+          name: creator.displayName,
+          subscriptionPrice: creator.subscriptionPrice,
+        }}
+        // Callback für UI-Update
+        onSubscriptionComplete={() => handleSubscriptionComplete(creator.id)}
+      />
+      {/* --- ENDE DER KORREKTUR --- */}
+
 
       {showPostFeed && formattedPostsForViewer.length > 0 && (
         <ProfilePostViewer

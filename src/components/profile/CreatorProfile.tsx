@@ -10,16 +10,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Switch } from '../ui/switch';
 import { useAuthStore } from '../../stores/authStore';
 import { CameraIcon, ImageIcon, DollarSignIcon, MessageSquareIcon, Loader2Icon } from 'lucide-react';
-// --- NEUE IMPORTS ---
 import { storageService } from '../../services/storageService';
 import { useToast } from '../../hooks/use-toast';
-// --- ENDE NEUE IMPORTS ---
 
 export default function CreatorProfile() {
   const { user, updateProfile } = useAuthStore();
   const { toast } = useToast();
-  
-  // Refs für Datei-Inputs
+
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
 
@@ -29,22 +26,24 @@ export default function CreatorProfile() {
   const [isBannerLoading, setIsBannerLoading] = useState(false);
   const [isInfoLoading, setIsInfoLoading] = useState(false);
   const [isMonetizationLoading, setIsMonetizationLoading] = useState(false);
-  
+  const [isCommunicationLoading, setIsCommunicationLoading] = useState(false); // <-- NEU
+
   // States für Formular "Branding"
   const [displayName, setDisplayName] = useState(user?.name || '');
   const [username, setUsername] = useState(user?.username || '');
-  const [watermarkEnabled, setWatermarkEnabled] = useState(true); // UI-only
+  const [watermarkEnabled, setWatermarkEnabled] = useState(true);
 
   // States für Formular "Informationen"
   const [bio, setBio] = useState(user?.bio || '');
-  
+
   // States für Formular "Monetarisierung"
   const [subscriptionPrice, setSubscriptionPrice] = useState(
     user?.subscriptionPrice ? user.subscriptionPrice.toFixed(2) : '0.00'
   );
 
-  // States für Formular "Kommunikation"
-  const [welcomeMessage, setWelcomeMessage] = useState(''); // DB-Feld fehlt noch
+  // --- AKTUALISIERT: State für "Kommunikation" ---
+  const [welcomeMessage, setWelcomeMessage] = useState(user?.welcomeMessage || '');
+  // --- ENDE ---
 
   // Daten synchronisieren, wenn sich der User im Store ändert
   useEffect(() => {
@@ -53,11 +52,12 @@ export default function CreatorProfile() {
       setUsername(user.username || '');
       setBio(user.bio || '');
       setSubscriptionPrice(user.subscriptionPrice ? user.subscriptionPrice.toFixed(2) : '0.00');
+      setWelcomeMessage(user.welcomeMessage || ''); // <-- NEU
     }
   }, [user]);
-  
+
   // --- HANDLER FÜR PROFIL-UPDATES ---
-  
+
   // --- Branding ---
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -73,7 +73,7 @@ export default function CreatorProfile() {
         setIsAvatarLoading(false);
     }
   };
-  
+
   const handleBannerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -88,12 +88,11 @@ export default function CreatorProfile() {
         setIsBannerLoading(false);
     }
   };
-  
+
   const handleBrandingSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsBrandingLoading(true);
     try {
-        // 'username' (handle) kann nicht geändert werden, nur 'display_name'
         await updateProfile({
             display_name: displayName,
         });
@@ -112,8 +111,6 @@ export default function CreatorProfile() {
     try {
         await updateProfile({
             bio: bio,
-            // Weitere Felder wie location/socials hier hinzufügen,
-            // wenn das DB-Schema (users table) sie unterstützt.
         });
         toast({ title: "Informationen gespeichert!" });
     } catch (error: any) {
@@ -146,11 +143,22 @@ export default function CreatorProfile() {
     }
   };
 
-  // --- Kommunikation (noch nicht implementiert) ---
+  // --- AKTUALISIERT: Kommunikation (jetzt implementiert) ---
   const handleCommunicationSave = async (e: React.FormEvent) => {
       e.preventDefault();
-      toast({ title: "Noch nicht implementiert", description: "Das Speichern von automatischen Nachrichten ist noch nicht verfügbar." });
+      setIsCommunicationLoading(true);
+      try {
+          await updateProfile({
+              welcome_message: welcomeMessage
+          });
+          toast({ title: "Willkommensnachricht gespeichert!" });
+      } catch (error: any) {
+          toast({ title: "Speichern fehlgeschlagen", description: error.message, variant: "destructive" });
+      } finally {
+          setIsCommunicationLoading(false);
+      }
   };
+  // --- ENDE ---
 
 
   return (
@@ -171,6 +179,8 @@ export default function CreatorProfile() {
             </TabsTrigger>
           </TabsList>
 
+          {/* ... (TabsContent 'branding', 'info', 'monetization' bleiben unverändert) ... */}
+
           <TabsContent value="branding" className="mt-6">
             <Card className="bg-card border-border">
               <CardHeader>
@@ -178,6 +188,7 @@ export default function CreatorProfile() {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleBrandingSave} className="space-y-6">
+                  {/* ... (Inhalt Branding) ... */}
                   <div className="space-y-4">
                     <Label className="text-foreground">Profilbild</Label>
                     <div className="flex items-center gap-6">
@@ -300,6 +311,7 @@ export default function CreatorProfile() {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleInfoSave} className="space-y-6">
+                  {/* ... (Inhalt Informationen) ... */}
                   <div className="space-y-2">
                     <Label htmlFor="bio" className="text-foreground">Biografie</Label>
                     <Textarea
@@ -311,8 +323,6 @@ export default function CreatorProfile() {
                       disabled={isInfoLoading}
                     />
                   </div>
-
-                  {/* Platzhalter für zukünftige Felder */}
                   <div className="space-y-2 opacity-50">
                     <Label htmlFor="location" className="text-foreground">Standort (optional)</Label>
                     <Input
@@ -331,7 +341,6 @@ export default function CreatorProfile() {
                       disabled
                     />
                   </div>
-
                   <Button
                     type="submit"
                     className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
@@ -355,7 +364,8 @@ export default function CreatorProfile() {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleMonetizationSave} className="space-y-6">
-                  <div className="space-y-2">
+                  {/* ... (Inhalt Monetarisierung) ... */}
+                   <div className="space-y-2">
                     <Label htmlFor="subscription-price" className="text-foreground">
                       Monatlicher Abonnementpreis
                     </Label>
@@ -376,7 +386,6 @@ export default function CreatorProfile() {
                     </div>
                     <p className="text-sm text-muted-foreground">Empfohlen: 4,99€ - 49,99€. (0€ für kostenloses Profil).</p>
                   </div>
-
                   <div className="border-t border-border pt-6 opacity-50">
                     <h3 className="text-foreground font-medium mb-4">Abonnement-Stufen (Tiers)</h3>
                     <Button
@@ -388,7 +397,6 @@ export default function CreatorProfile() {
                       Neue Stufe hinzufügen (Nicht implementiert)
                     </Button>
                   </div>
-
                   <Button
                     type="submit"
                     className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
@@ -402,12 +410,14 @@ export default function CreatorProfile() {
             </Card>
           </TabsContent>
 
+
+          {/* --- AKTUALISIERT: Tab "Kommunikation" --- */}
           <TabsContent value="communication" className="mt-6">
             <Card className="bg-card border-border">
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <MessageSquareIcon className="w-5 h-5" strokeWidth={1.5} />
-                  Automatische Nachrichten (Nicht implementiert)
+                  Automatische Nachrichten
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -422,24 +432,27 @@ export default function CreatorProfile() {
                         className="min-h-32 bg-background text-foreground border-border"
                         value={welcomeMessage}
                         onChange={(e) => setWelcomeMessage(e.target.value)}
-                        disabled
+                        disabled={isCommunicationLoading} // <-- 'disabled' entfernt
                     />
                     <p className="text-sm text-muted-foreground">
-                        Diese Funktion ist noch nicht implementiert, da sie ein separates DB-Feld erfordert.
+                        Diese Nachricht wird automatisch an jeden neuen Abonnenten gesendet.
                     </p>
                     </div>
 
-                    <Button 
+                    <Button
                         type="submit"
                         className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
-                        disabled
+                        disabled={isCommunicationLoading || welcomeMessage === (user?.welcomeMessage || '')} // <-- 'disabled' entfernt
                     >
+                     {isCommunicationLoading && <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />}
                     Änderungen speichern
                     </Button>
                 </form>
               </CardContent>
             </Card>
           </TabsContent>
+          {/* --- ENDE --- */}
+
         </Tabs>
     </div>
   );

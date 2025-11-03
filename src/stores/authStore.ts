@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { authService, AuthUser } from '../services/authService';
 import { Subscription } from '@supabase/supabase-js';
-import { useAppStore } from './appStore'; // <-- WICHTIGER IMPORT
+import { useAppStore } from './appStore';
 
 interface AppUser extends AuthUser {}
 
@@ -21,6 +21,8 @@ interface AuthState {
     avatar_url?: string;
     banner_url?: string;
     subscription_price?: number;
+    role?: 'FAN' | 'CREATOR'; // <-- Hinzugefügt aus vorherigem Schritt
+    welcome_message?: string; // <-- NEU
   }) => Promise<void>;
   changePassword: (newPassword: string) => Promise<void>;
   checkUsernameAvailability: (username: string) => Promise<boolean>;
@@ -45,29 +47,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
      if (!authListenerSubscription) {
         console.log("[authStore] Initializing auth listener...");
 
-        // --- HIER IST DER FIX (Zeile 49 in deinen Logs) ---
-        // 'authService.onAuthStateChange' gibt jetzt das Subscription-Objekt korrekt zurück
         const authSubscription = authService.onAuthStateChange(async (userFullProfile: AppUser | null) => {
           console.log("[authStore] Auth state change received:", userFullProfile);
 
           if (userFullProfile) {
-            // User ist authentifiziert UND E-Mail-verifiziert
             set({
               isAuthenticated: true,
               user: userFullProfile,
               isLoading: false
             });
-            // Stelle sicher, dass Onboarding als abgeschlossen markiert wird
             useAppStore.getState().completeOnboarding();
             console.log("[authStore] User is Authenticated. Onboarding marked complete.");
           } else {
-            // User ist NICHT authentifiziert (oder E-Mail nicht verifiziert)
             set({
               isAuthenticated: false,
               user: null,
               isLoading: false
             });
-            // Setze Onboarding-Status zurück, wenn User ausgeloggt ist
             useAppStore.getState().resetOnboarding();
             console.log("[authStore] User is NOT Authenticated. Onboarding reset.");
           }
@@ -75,9 +71,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           initializationEnsured = true;
         });
 
-        // Weise die Subscription-Eigenschaft des zurückgegebenen Objekts zu
         authListenerSubscription = authSubscription.data.subscription;
-        // --- ENDE FIX ---
      }
 
     return () => {
@@ -122,11 +116,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user });
   },
 
+  // --- AKTUALISIERT: Typ von 'updates' erweitert ---
   updateProfile: async (updates) => {
     const currentUser = get().user;
     if (!currentUser) throw new Error('Not authenticated');
     try {
+      // 'updates' enthält jetzt { welcome_message: "..." }
       await authService.updateProfile(currentUser.id, updates);
+
+      // WICHTIG: Profil neu laden, damit der Store (user.welcomeMessage) aktuell ist
       const updatedUser = await authService.getCurrentUserFullProfile();
       if (updatedUser) {
         set({ user: updatedUser });
@@ -136,6 +134,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error;
     }
   },
+  // --- ENDE ---
 
   changePassword: async (newPassword: string) => {
     try {

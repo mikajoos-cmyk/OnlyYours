@@ -16,13 +16,13 @@ export interface Message {
     id: string;
     name: string;
     avatar: string;
-    isVerified?: boolean; // Optional hinzugefügt
+    isVerified?: boolean;
   };
   receiver?: {
     id: string;
     name: string;
     avatar: string;
-    isVerified?: boolean; // Optional hinzugefügt
+    isVerified?: boolean;
   };
 }
 
@@ -37,6 +37,9 @@ export interface Chat {
 }
 
 export class MessageService {
+  /**
+   * Sendet eine Standardnachricht vom *aktuell angemeldeten Benutzer*.
+   */
   async sendMessage(receiverId: string, content: string): Promise<Database['public']['Tables']['messages']['Row']> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
@@ -45,7 +48,7 @@ export class MessageService {
       sender_id: user.id,
       receiver_id: receiverId,
       content,
-      is_read: false, // Neue Nachrichten sind standardmäßig ungelesen
+      is_read: false,
     };
 
     const { data, error } = await supabase
@@ -55,10 +58,45 @@ export class MessageService {
       .single();
 
     if (error) throw error;
-    if (!data) throw new Error('Failed to send message'); // Zusätzliche Prüfung
+    if (!data) throw new Error('Failed to send message');
 
     return data;
   }
+
+  // --- NEUE FUNKTION ---
+  /**
+   * Sendet eine Willkommensnachricht VOM CREATOR AN DEN FAN.
+   * Diese Funktion wird vom FAN aufgerufen, direkt nachdem er abonniert hat.
+   * Die RLS-Policy (siehe Migration) prüft, ob der Aufrufer (Fan)
+   * tatsächlich ein Abo beim Sender (Creator) hat.
+   */
+  async sendWelcomeMessage(creatorId: string, fanId: string, content: string): Promise<void> {
+    console.log(`[MessageService] Sende Willkommensnachricht von ${creatorId} an ${fanId}`);
+
+    // WICHTIG: Hier ist sender_id der Creator und receiver_id der Fan
+    const messageData: MessageInsert = {
+      sender_id: creatorId,
+      receiver_id: fanId,
+      content,
+      is_read: false, // Ist für den Fan (Empfänger) ungelesen
+    };
+
+    // Der angemeldete Benutzer ist der Fan (receiver_id).
+    // Die RLS-Policy prüft: auth.uid() == receiver_id UND ob Abo für sender_id existiert.
+    const { error } = await supabase
+      .from('messages')
+      .insert(messageData);
+
+    if (error) {
+      console.error("Fehler beim Senden der Willkommensnachricht:", error);
+      // Wir werfen den Fehler nicht unbedingt weiter,
+      // damit der Abo-Vorgang nicht fehlschlägt, nur weil die Nachricht scheitert.
+    } else {
+      console.log("Willkommensnachricht erfolgreich gesendet.");
+    }
+  }
+  // --- ENDE NEUE FUNKTION ---
+
 
   async getConversation(otherUserId: string, limit: number = 50, offset: number = 0): Promise<Message[]> {
     const { data: { user } } = await supabase.auth.getUser();
@@ -82,7 +120,7 @@ export class MessageService {
         )
       `)
       .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`)
-      .order('created_at', { ascending: true }) // Älteste zuerst für Chat-Anzeige
+      .order('created_at', { ascending: true })
       .range(offset, offset + limit - 1);
 
     if (error) throw error;
@@ -94,10 +132,6 @@ export class MessageService {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Hole die *letzte* Nachricht für jede Konversation des aktuellen Benutzers
-    // Dies ist komplexer und wird oft serverseitig mit einer View oder Funktion gelöst.
-    // Hier eine clientseitige Annäherung: Hole alle Nachrichten und gruppiere sie.
-    // **Achtung:** Dies kann bei sehr vielen Nachrichten ineffizient werden!
     const { data: messages, error } = await supabase
       .from('messages')
       .select(`
@@ -114,23 +148,21 @@ export class MessageService {
         )
       `)
       .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-      .order('created_at', { ascending: false }); // Neueste zuerst
+      .order('created_at', { ascending: false });
 
     if (error) throw error;
 
-    const chatsMap = new Map<string, ServiceChat>(); // Verwende ServiceChat hier intern
+    const chatsMap = new Map<string, Chat>();
 
     for (const message of messages || []) {
       const isReceived = message.receiver_id === user.id;
       const otherUserId = isReceived ? message.sender_id : message.receiver_id;
       const otherUser = isReceived ? message.sender : message.receiver;
 
-      // Wenn noch kein Eintrag für diesen Chat existiert, füge ihn hinzu (da nach Zeit sortiert, ist dies die letzte Nachricht)
-      if (!chatsMap.has(otherUserId) && otherUser) { // Stelle sicher, dass otherUser existiert
-        // Zähle ungelesene Nachrichten für diesen Chat
+      if (!chatsMap.has(otherUserId) && otherUser) {
         const { count: unreadCount, error: countError } = await supabase
           .from('messages')
-          .select('id', { count: 'exact', head: true }) // effizienteres Zählen
+          .select('id', { count: 'exact', head: true })
           .eq('sender_id', otherUserId)
           .eq('receiver_id', user.id)
           .eq('is_read', false);
@@ -144,13 +176,12 @@ export class MessageService {
           userName: otherUser.display_name || 'Unbekannt',
           userAvatar: otherUser.avatar_url || 'https://placehold.co/100x100',
           lastMessage: message.content,
-          lastMessageTime: message.created_at, // Behalte ISO String
+          lastMessageTime: message.created_at,
           unreadCount: unreadCount || 0,
         });
       }
     }
 
-    // Konvertiere Map-Werte zu Array und sortiere optional erneut nach Zeit
     return Array.from(chatsMap.values()).sort((a, b) => new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime());
 }
 
@@ -163,7 +194,7 @@ export class MessageService {
       .from('messages')
       .update({ is_read: true })
       .eq('id', messageId)
-      .eq('receiver_id', user.id); // Nur als Empfänger markieren
+      .eq('receiver_id', user.id);
 
     if (error) throw error;
   }
@@ -175,14 +206,13 @@ export class MessageService {
     const { error } = await supabase
       .from('messages')
       .update({ is_read: true })
-      .eq('sender_id', otherUserId) // Nachrichten *vom* anderen User...
-      .eq('receiver_id', user.id)   // *an* mich...
-      .eq('is_read', false);         // die noch ungelesen sind.
+      .eq('sender_id', otherUserId)
+      .eq('receiver_id', user.id)
+      .eq('is_read', false);
 
     if (error) throw error;
   }
 
-  // NEUE METHODE: Neue Nachrichten per Polling abrufen
   async getNewMessages(otherUserId: string, sinceTimestamp: string): Promise<Message[]> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
@@ -205,16 +235,14 @@ export class MessageService {
         )
       `)
       .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`)
-      .gt('created_at', sinceTimestamp) // Nur Nachrichten GRÖSSER (neuer) als der Zeitstempel
-      .order('created_at', { ascending: true }); // Aufsteigend sortieren
+      .gt('created_at', sinceTimestamp)
+      .order('created_at', { ascending: true });
 
     if (error) {
       console.error("Fehler beim Abrufen neuer Nachrichten:", error);
       throw error;
     }
 
-    // Markiere die neuen Nachrichten direkt als gelesen, wenn sie abgerufen werden
-    // (nur die, die an den aktuellen Benutzer gerichtet sind)
     const newReceivedMessageIds = (messages || [])
         .filter(msg => msg.receiver_id === user.id && !msg.is_read)
         .map(msg => msg.id);
@@ -227,7 +255,6 @@ export class MessageService {
                 .in('id', newReceivedMessageIds);
         } catch (updateError) {
             console.error("Fehler beim Markieren neuer Nachrichten als gelesen:", updateError);
-            // Fehler hier nicht weiterwerfen, damit Nachrichten trotzdem zurückgegeben werden
         }
 
     }
@@ -235,7 +262,6 @@ export class MessageService {
     return this.mapMessagesToFrontend(messages || []);
   }
 
-  // Hilfsmethode zum Mappen einer einzelnen Nachricht
   private mapSingleMessageToFrontend(msg: any, sender?: any, receiver?: any): Message {
      return {
        id: msg.id,
@@ -243,7 +269,7 @@ export class MessageService {
        receiverId: msg.receiver_id,
        content: msg.content,
        isRead: msg.is_read,
-       createdAt: msg.created_at, // ISO String
+       createdAt: msg.created_at,
        sender: sender ? {
          id: sender.id,
          name: sender.display_name || 'Unbekannt',
@@ -259,11 +285,9 @@ export class MessageService {
      };
   }
 
-  // Mappt ein Array von Datenbankzeilen in das Frontend-Format
   private mapMessagesToFrontend(messages: any[]): Message[] {
     return messages.map(msg => this.mapSingleMessageToFrontend(msg, msg.sender, msg.receiver));
  }
 }
 
-// Service Instanz exportieren
 export const messageService = new MessageService();

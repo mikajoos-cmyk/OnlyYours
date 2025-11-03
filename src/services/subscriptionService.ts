@@ -1,6 +1,7 @@
 // src/services/subscriptionService.ts
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
+import { messageService } from './messageService';
 
 type SubscriptionRow = Database['public']['Tables']['subscriptions']['Row'];
 type SubscriptionInsert = Database['public']['Tables']['subscriptions']['Insert'];
@@ -33,15 +34,10 @@ export class SubscriptionService {
       throw new Error('Cannot subscribe to yourself');
     }
 
-    // --- KORREKTUR HIER ---
-    // Wenn 'price' (aus dem Modal) übergeben wird, verwenden wir diesen.
-    // Wir fragen die DB nur ab, wenn 'price' NICHT übergeben wurde.
     let subscriptionPrice = price;
     if (subscriptionPrice === undefined || subscriptionPrice === null) {
-      // Dieser Block wird jetzt (wahrscheinlich) nicht mehr aufgerufen,
-      // aber der 'creatorId'-Check ist trotzdem wichtig.
       if (!creatorId) throw new Error("Creator ID is missing for price lookup.");
-      
+
       const { data: creator } = await supabase
         .from('users')
         .select('subscription_price')
@@ -50,14 +46,13 @@ export class SubscriptionService {
 
       subscriptionPrice = creator?.subscription_price || 0;
     }
-    // --- ENDE KORREKTUR ---
 
     const endDate = new Date();
     endDate.setMonth(endDate.getMonth() + 1);
 
     const subscriptionData: SubscriptionInsert = {
       fan_id: user.id,
-      creator_id: creatorId, // creatorId wird von PaymentModal durchgereicht
+      creator_id: creatorId,
       tier_id: tierId || null,
       price: subscriptionPrice,
       status: 'ACTIVE',
@@ -73,7 +68,32 @@ export class SubscriptionService {
 
     if (error) throw error;
 
+    // Diese Funktion ruft die korrigierte Hilfsfunktion auf
     await this.updateFollowersCount(creatorId, 1);
+
+    try {
+      const { data: creatorProfile } = await supabase
+        .from('users')
+        .select('display_name, welcome_message')
+        .eq('id', creatorId)
+        .single();
+
+      const customMessage = creatorProfile?.welcome_message;
+      const creatorName = creatorProfile?.display_name || 'dem Creator';
+
+      let messageToSend: string;
+
+      if (customMessage && customMessage.trim() !== '') {
+        messageToSend = customMessage;
+      } else {
+        messageToSend = `Vielen Dank für dein Abonnement bei ${creatorName}! Ich freue mich, dich hier zu haben.`;
+      }
+
+      await messageService.sendWelcomeMessage(creatorId, user.id, messageToSend);
+
+    } catch (msgError) {
+      console.error("Fehler beim Senden der Willkommensnachricht:", msgError);
+    }
 
     return data;
   }
@@ -101,6 +121,7 @@ export class SubscriptionService {
 
     if (error) throw error;
 
+    // Diese Funktion ruft die korrigierte Hilfsfunktion auf
     await this.updateFollowersCount(subscription.creator_id, -1);
   }
 
@@ -121,8 +142,7 @@ export class SubscriptionService {
         )
       `)
       .eq('fan_id', user.id)
-      // (Geändert) Holt alle, damit 'FanProfile' den Status 'CANCELED' anzeigen kann
-      .in('status', ['ACTIVE', 'CANCELED']) 
+      .in('status', ['ACTIVE', 'CANCELED'])
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -169,7 +189,6 @@ export class SubscriptionService {
       .select('*')
       .eq('fan_id', fanId)
       .eq('creator_id', creatorId)
-      // (Geändert) Berücksichtigt auch noch laufende gekündigte Abos
       .or(`status.eq.ACTIVE,and(status.eq.CANCELED,end_date.gt.now())`)
       .maybeSingle();
 
@@ -177,12 +196,15 @@ export class SubscriptionService {
     return data;
   }
 
+  // --- HIER IST DIE KORREKTUR ---
   private async updateFollowersCount(creatorId: string, delta: number) {
+    // Der Parametername wurde von 'creator_id' in 'creator_id_input' geändert.
     await supabase.rpc('update_followers_count', {
-      creator_id: creatorId,
+      creator_id_input: creatorId,
       delta_value: delta,
     });
   }
+  // --- ENDE DER KORREKTUR ---
 
   private mapSubscriptionsToFrontend(subscriptions: any[]): Subscription[] {
     return subscriptions.map(sub => ({

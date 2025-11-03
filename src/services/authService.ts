@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
 
 type UserRow = Database['public']['Tables']['users']['Row'];
+type UserUpdate = Database['public']['Tables']['users']['Update'];
 
 export interface AuthUser {
   id: string;
@@ -17,6 +18,7 @@ export interface AuthUser {
   bio?: string;
   bannerUrl?: string | null;
   subscriptionPrice?: number;
+  welcomeMessage?: string; // <-- NEU
 }
 
 export class AuthService {
@@ -146,11 +148,13 @@ export class AuthService {
     }
 
     console.log("[authService] User email IS confirmed. Fetching public.users profile.");
+    // --- AKTUALISIERT: 'welcome_message' hinzugefügt ---
     const { data: userData, error } = await supabase
       .from('users')
       .select('*')
       .eq('id', freshUser.id)
       .single();
+    // --- ENDE ---
 
     if (error || !userData) {
         console.error("[authService] Error fetching public.users profile:", error);
@@ -161,16 +165,22 @@ export class AuthService {
     return this.mapUserRowToAuthUser(userData, freshUser.email);
   }
 
+  // --- AKTUALISIERT: 'role' und 'welcome_message' hinzugefügt ---
   async updateProfile(userId: string, updates: {
     display_name?: string;
     bio?: string;
     avatar_url?: string;
     banner_url?: string;
     subscription_price?: number;
+    role?: 'FAN' | 'CREATOR';
+    welcome_message?: string; // <-- NEU
   }) {
+
+    const dbUpdates: UserUpdate = { ...updates };
+
     const { data, error } = await supabase
       .from('users')
-      .update(updates)
+      .update(dbUpdates)
       .eq('id', userId)
       .select()
       .single();
@@ -178,6 +188,7 @@ export class AuthService {
     if (error) throw error;
     return data;
   }
+  // --- ENDE ---
 
   async changePassword(newPassword: string) {
     const { error } = await supabase.auth.updateUser({
@@ -186,12 +197,7 @@ export class AuthService {
     if (error) throw error;
   }
 
-  /**
-   * (KORRIGIERT) Überwacht Auth-Änderungen.
-   * Gibt jetzt das volle Subscription-Objekt zurück, wie vom Store erwartet.
-   */
   onAuthStateChange(callback: (user: AuthUser | null) => void) {
-    // GIB DAS GANZE OBJEKT ZURÜCK (nicht destrukturieren)
     return supabase.auth.onAuthStateChange((_event, session) => {
       console.log(`[authService] onAuthStateChange FIRED. Event: ${_event}, Session: ${!!session}`);
       (async () => {
@@ -207,7 +213,8 @@ export class AuthService {
     });
   }
 
-  private mapUserRowToAuthUser(userData: UserRow, email?: string): AuthUser {
+  // --- AKTUALISIERT: 'welcomeMessage' gemappt ---
+  private mapUserRowToAuthUser(userData: any, email?: string): AuthUser {
     return {
       id: userData.id,
       name: userData.display_name,
@@ -221,6 +228,7 @@ export class AuthService {
       bio: userData.bio,
       bannerUrl: userData.banner_url,
       subscriptionPrice: userData.subscription_price,
+      welcomeMessage: userData.welcome_message || '', // <-- NEU
     };
   }
 }
