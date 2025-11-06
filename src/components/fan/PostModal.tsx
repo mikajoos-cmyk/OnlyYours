@@ -1,260 +1,474 @@
-import { useState, useEffect } from 'react';
-// import { Dialog, DialogContent } from '../ui/dialog';
-import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+import { useState, useRef, useEffect } from 'react'; // useEffect importiert
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Label } from '../ui/label';
+import { Textarea } from '../ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { UploadIcon, CalendarIcon, Loader2Icon, Trash2Icon, XIcon, LockIcon, GlobeIcon, UsersIcon } from 'lucide-react'; // Icons hinzugefügt
+import { useToast } from '../../hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../../stores/authStore';
+import { storageService } from '../../services/storageService';
+import { postService } from '../../services/postService';
+import { cn } from '../../lib/utils';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Calendar } from '../ui/calendar';
+import { TimePicker } from '../ui/time-picker';
+import { format } from 'date-fns';
+import { de } from 'date-fns/locale';
+// --- NEUE IMPORTS ---
+import { tierService, Tier } from '../../services/tierService';
+// --- ENDE NEUE IMPORTS ---
 
-interface PostModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  creator: {
-    id: string;
-    name: string;
-    avatarUrl: string;
-    username: string;
-  };
-  allPosts: any[];
-  currentIndex: number;
-  onNext: () => void;
-  onPrevious: () => void;
-}
-
-export default function PostModal({ isOpen, onClose, creator, allPosts, currentIndex, onNext, onPrevious }: PostModalProps) {
+export default function PostEditor() {
+  const { user } = useAuthStore();
+  const { toast } = useToast();
   const navigate = useNavigate();
-  const currentPost = allPosts[currentIndex];
-  const [isLiked, setIsLiked] = useState(currentPost?.isLiked || false);
-  const [likes, setLikes] = useState(currentPost?.likes || 0);
-  const [comment, setComment] = useState('');
-  const [showComments, setShowComments] = useState(false);
 
+  // Formular-States
+  const [caption, setCaption] = useState('');
+  const [price, setPrice] = useState(''); // Dies ist jetzt der PPV-Preis
+
+  // --- AKTUALISIERT: tier-State ---
+  const [accessLevel, setAccessLevel] = useState('all_subscribers'); // 'public', 'all_subscribers', oder tier.id
+  const [tiers, setTiers] = useState<Tier[]>([]);
+  const [loadingTiers, setLoadingTiers] = useState(true);
+  // --- ENDE ---
+
+  // Date/Time States
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [selectedTime, setSelectedTime] = useState<string>("12:00");
+  const [popoverOpen, setPopoverOpen] = useState(false);
+
+  // Datei-States
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<'IMAGE' | 'VIDEO' | null>(null);
+
+  // UI-State
+  const [isLoading, setIsLoading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- NEU: Tiers laden ---
   useEffect(() => {
-    if (isOpen && currentPost) {
-      setIsLiked(currentPost.isLiked || false);
-      setLikes(currentPost.likes || 0);
-      setShowComments(false);
+    const fetchTiers = async () => {
+      if (!user?.id) return;
+      setLoadingTiers(true);
+      try {
+        const fetchedTiers = await tierService.getCreatorTiers(user.id);
+        setTiers(fetchedTiers);
+      } catch (error) {
+        toast({ title: "Fehler", description: "Abo-Stufen konnten nicht geladen werden.", variant: "destructive" });
+      } finally {
+        setLoadingTiers(false);
+      }
+    };
+    fetchTiers();
+  }, [user?.id, toast]);
+  // --- ENDE ---
+
+  // ... (handleFileChange, onDragOver, onDragLeave, onDrop, clearFile bleiben gleich) ...
+    // Handler für Dateiauswahl (Klick oder Drag & Drop)
+  const handleFileChange = (file: File | undefined) => {
+    if (!file) return;
+
+    // Medientyp prüfen
+    if (file.type.startsWith('image/')) {
+      setMediaType('IMAGE');
+    } else if (file.type.startsWith('video/')) {
+      setMediaType('VIDEO');
+    } else {
+      toast({
+        title: 'Ungültiger Dateityp',
+        description: 'Bitte laden Sie nur Bilder oder Videos hoch.',
+        variant: 'destructive',
+      });
+      return;
     }
-  }, [isOpen, currentPost]);
 
-  if (!currentPost) {
-    return null; // Don't render if there's no current post
-  }
+    setSelectedFile(file);
 
-  const comments = [
-    {
-      id: '1',
-      user: { name: 'Anna Schmidt', avatar: 'https://placehold.co/100x100' },
-      text: 'Wow, das sieht fantastisch aus! 😍',
-      timestamp: 'vor 2 Std',
-      likes: 24,
-    },
-    {
-      id: '2',
-      user: { name: 'Max Müller', avatar: 'https://placehold.co/100x100' },
-      text: 'Wo kann ich das kaufen?',
-      timestamp: 'vor 3 Std',
-      likes: 12,
-    },
-    {
-      id: '3',
-      user: { name: 'Lisa Weber', avatar: 'https://placehold.co/100x100' },
-      text: 'Absolut inspirierend! 💫',
-      timestamp: 'vor 5 Std',
-      likes: 45,
-    },
-  ];
-
-  const handleLike = () => {
-    setIsLiked(!isLiked);
-    setLikes(isLiked ? likes - 1 : likes + 1);
+    // Vorschau generieren
+    const previewUrl = URL.createObjectURL(file);
+    setFilePreview(previewUrl);
   };
 
-  const handleCommentSubmit = () => {
-    if (comment.trim()) {
-      setComment('');
+  // Aufräumen der Object-URL, wenn die Komponente verlässt oder die Datei ändert
+  useState(() => () => {
+    if (filePreview) {
+      URL.revokeObjectURL(filePreview);
+    }
+  });
+
+  // Handler für Drag & Drop
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+  const onDragLeave = () => setDragOver(false);
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    handleFileChange(file);
+  };
+
+  // Handler zum Entfernen der Datei
+  const clearFile = () => {
+    if (filePreview) {
+      URL.revokeObjectURL(filePreview);
+    }
+    setSelectedFile(null);
+    setFilePreview(null);
+    setMediaType(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''; // Input-Feld zurücksetzen
     }
   };
 
-  if (!isOpen || !currentPost) {
-    return null;
-  }
+
+  // Helper: Datum/Zeit
+  const getCombinedIsoString = (): string | null => {
+    if (!selectedDate) return null;
+    const [hours, minutes] = selectedTime.split(':').map(Number);
+    const combinedDate = new Date(selectedDate);
+    combinedDate.setHours(hours);
+    combinedDate.setMinutes(minutes);
+    combinedDate.setSeconds(0);
+    combinedDate.setMilliseconds(0);
+    return combinedDate.toISOString();
+  };
+
+  const displayScheduledDate = () => {
+    if (!selectedDate) return 'Zeitplan (optional)';
+    const [hours, minutes] = selectedTime.split(':').map(Number);
+    const combinedDate = new Date(selectedDate);
+    combinedDate.setHours(hours);
+    combinedDate.setMinutes(minutes);
+    return format(combinedDate, "dd. MMMM yyyy 'um' HH:mm", { locale: de });
+  };
+  // --- ENDE HELPER ---
+
+
+  // Haupt-Submit-Handler
+  const handleSubmit = async (isDraft: boolean) => {
+    if (!selectedFile || !mediaType) {
+      toast({ title: 'Fehler', description: 'Bitte wählen Sie eine Mediendatei aus.', variant: 'destructive' });
+      return;
+    }
+    if (!user) {
+      toast({ title: 'Fehler', description: 'Nicht authentifiziert.', variant: 'destructive' });
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      let thumbnailUrl: string | null = null;
+
+      // 1. Mediendatei hochladen
+      const mediaUrl = await storageService.uploadMedia(selectedFile, user.id);
+
+      // 2. Thumbnail generieren und hochladen (nur für Bilder)
+      if (mediaType === 'IMAGE') {
+        try {
+          const thumbFile = await storageService.generateThumbnail(selectedFile);
+          thumbnailUrl = await storageService.uploadMedia(thumbFile, user.id);
+        } catch (thumbError) {
+          console.error("Thumbnail-Erstellung fehlgeschlagen:", thumbError);
+        }
+      }
+
+      const scheduledForISO = getCombinedIsoString();
+
+      // --- AKTUALISIERTE POST-DATEN LOGIK ---
+      let postPrice = parseFloat(price) || 0;
+      let postTierId: string | null = null;
+
+      if (accessLevel === 'public') {
+        postPrice = 0; // Public ist immer kostenlos
+        postTierId = null;
+      } else if (accessLevel === 'all_subscribers') {
+        postTierId = null; // 'null' bedeutet "Alle Abonnenten"
+        // postPrice bleibt der vom Benutzer eingegebene PPV-Preis
+      } else {
+        postTierId = accessLevel; // UUID der Tier
+        // postPrice bleibt der vom Benutzer eingegebene PPV-Preis
+      }
+
+      if (postPrice > 0 && accessLevel === 'public') {
+         toast({ title: 'Logikfehler', description: 'Öffentliche Posts können keinen Preis haben.', variant: 'destructive' });
+         setIsLoading(false);
+         return;
+      }
+      // --- ENDE ---
+
+
+      // 3. Post-Daten für den Service vorbereiten
+      const postData = {
+        mediaUrl: mediaUrl,
+        thumbnail_url: thumbnailUrl,
+        mediaType: mediaType,
+        caption: caption,
+        price: postPrice,
+        tierId: postTierId,
+        scheduledFor: scheduledForISO,
+        is_published: !isDraft,
+      };
+
+      // 4. Post in der Datenbank erstellen
+      await postService.createPost(postData);
+
+      setIsLoading(false);
+
+      // Erfolgs-Feedback
+      if (isDraft) {
+        toast({ title: 'Entwurf gespeichert!', description: 'Ihr Beitrag wurde im Content Vault gespeichert.' });
+      } else if (postData.scheduledFor) {
+        toast({ title: 'Beitrag geplant!', description: 'Ihr Beitrag wird automatisch veröffentlicht.' });
+      } else {
+        toast({ title: 'Beitrag veröffentlicht!', description: 'Ihr Beitrag ist jetzt live.' });
+      }
+
+      navigate('/vault'); // Zurück zum Vault
+
+    } catch (error: any) {
+      setIsLoading(false);
+      console.error("Fehler beim Erstellen des Beitrags:", error);
+      toast({
+        title: 'Fehler beim Erstellen des Beitrags',
+        description: error.message || 'Ein unbekannter Fehler ist aufgetreten.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const isPublic = accessLevel === 'public';
 
   return (
-    <div className="fixed inset-0 top-16 z-40 bg-background md:left-64 pb-16 md:pb-0">
-      {/* Previous Post Button */}
-      {currentIndex > 0 && (
-        <Button
-          onClick={onPrevious}
-          size="icon"
-          className="absolute left-4 top-1/2 -translate-y-1/2 z-50 bg-black/50 text-foreground hover:bg-black/70 rounded-full"
-        >
-          <ChevronLeftIcon className="w-6 h-6" strokeWidth={1.5} />
-        </Button>
-      )}
+    <div className="min-h-screen py-8 px-4">
+      <div className="max-w-4xl mx-auto space-y-8">
+        <h1 className="text-3xl font-serif text-foreground">Neuer Beitrag</h1>
 
-      {/* Next Post Button */}
-      {currentIndex < allPosts.length - 1 && (
-        <Button
-          onClick={onNext}
-          size="icon"
-          className="absolute right-4 top-1/2 -translate-y-1/2 z-50 bg-black/50 text-foreground hover:bg-black/70 rounded-full"
-        >
-          <ChevronRightIcon className="w-6 h-6" strokeWidth={1.5} />
-        </Button>
-      )}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
-      <div className="relative w-full h-full overflow-hidden bg-background rounded-lg max-w-7xl mx-auto">
-        {/* Background Image */}
-        <img
-          src={currentPost.thumbnailUrl}
-          alt={currentPost.caption}
-          className="w-full h-full object-cover"
-        />
-
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
-
-        {/* Close Button */}
-        <Button
-          onClick={onClose}
-          size="icon"
-          className="absolute top-4 right-4 z-50 bg-black/50 text-foreground hover:bg-black/70 rounded-full"
-        >
-          <XIcon className="w-6 h-6" strokeWidth={1.5} />
-        </Button>
-
-        {/* Creator Info */}
-        <AnimatePresence>
-          {!showComments && (
-            <motion.div
-              initial={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute top-4 left-4 right-20 z-10"
-            >
-              <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/profile/${creator.username}`)}>
-                <Avatar className="w-12 h-12 border-2 border-foreground">
-                  <AvatarImage src={creator.avatarUrl} alt={creator.name} />
-                  <AvatarFallback className="bg-secondary text-secondary-foreground">
-                    {creator.name.charAt(0)}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="font-medium text-foreground drop-shadow-lg">
-                    {creator.name}
-                  </p>
+          {/* --- DATEI-UPLOAD-KARTE (Unverändert) --- */}
+          <Card className="bg-card border-border">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-foreground">Medien hochladen</CardTitle>
+              {filePreview && (
+                <Button variant="ghost" size="icon" onClick={clearFile} disabled={isLoading}>
+                  <Trash2Icon className="w-5 h-5 text-destructive" />
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {filePreview ? (
+                <div className="w-full aspect-square rounded-lg overflow-hidden bg-background">
+                  {mediaType === 'IMAGE' && (
+                    <img src={filePreview} alt="Vorschau" className="w-full h-full object-cover" />
+                  )}
+                  {mediaType === 'VIDEO' && (
+                    <video src={filePreview} controls className="w-full h-full object-cover" />
+                  )}
                 </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Caption */}
-        <AnimatePresence>
-          {!showComments && (
-            <motion.div
-              initial={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute bottom-4 left-4 right-20 z-10"
-            >
-              <p className="text-foreground drop-shadow-lg mb-2">{currentPost.caption}</p>
-              <div className="flex flex-wrap gap-2">
-                {currentPost.hashtags.map((tag: string) => (
-                  <span key={tag} className="text-secondary text-sm drop-shadow-lg">
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Comments Section */}
-        <AnimatePresence>
-          {showComments && (
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              className="absolute bottom-0 left-0 right-0 bg-card/95 backdrop-blur-md border-t border-border max-h-[70vh] flex flex-col rounded-t-3xl"
-            >
-              <div className="p-4 border-b border-border flex-shrink-0 flex items-center justify-between">
-                <h3 className="text-foreground text-center font-medium flex-1">
-                  {currentPost.comments} Kommentare
-                </h3>
-                <Button
-                  onClick={() => setShowComments(false)}
-                  size="icon"
-                  variant="ghost"
-                  className="text-foreground hover:text-secondary hover:bg-neutral flex-shrink-0"
+              ) : (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={onDragOver}
+                  onDragLeave={onDragLeave}
+                  onDrop={onDrop}
+                  className={cn(
+                    "border-2 border-dashed border-border rounded-lg p-12 text-center hover:border-secondary transition-colors cursor-pointer",
+                    dragOver && "border-secondary bg-secondary/10"
+                  )}
                 >
-                  <XIcon className="w-5 h-5" strokeWidth={1.5} />
+                  <UploadIcon className="w-12 h-12 text-muted-foreground mx-auto mb-4" strokeWidth={1.5} />
+                  <p className="text-foreground mb-2">
+                    Klicken oder ziehen Sie Dateien hierher
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Unterstützt: Bilder und Videos
+                  </p>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={(e) => handleFileChange(e.target.files?.[0])}
+                    accept="image/*,video/*"
+                    className="hidden"
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* --- POST-DETAILS-KARTE (Aktualisiert) --- */}
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground">Beitragsdetails</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="caption" className="text-foreground">
+                  Beschreibung
+                </Label>
+                <Textarea
+                  id="caption"
+                  placeholder="Schreiben Sie eine Beschreibung..."
+                  value={caption}
+                  onChange={(e) => setCaption(e.target.value)}
+                  className="min-h-32 bg-background text-foreground border-border"
+                  disabled={isLoading}
+                />
+              </div>
+
+              {/* --- AKTUALISIERT: Zugriffsstufe --- */}
+              <div className="space-y-2">
+                <Label htmlFor="access-level" className="text-foreground">
+                  Wer kann diesen Beitrag sehen?
+                </Label>
+                <Select value={accessLevel} onValueChange={setAccessLevel} disabled={isLoading || loadingTiers}>
+                  <SelectTrigger className="bg-background text-foreground border-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card text-foreground border-border">
+                    <SelectItem value="public">
+                      <div className="flex items-center gap-2">
+                        <GlobeIcon className="w-4 h-4" />
+                        Alle Benutzer (Öffentlich & Kostenlos)
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="all_subscribers">
+                       <div className="flex items-center gap-2">
+                        <UsersIcon className="w-4 h-4" />
+                        Alle Abonnenten
+                      </div>
+                    </SelectItem>
+                    {tiers.map((tier) => (
+                      <SelectItem key={tier.id} value={tier.id}>
+                         <div className="flex items-center gap-2">
+                          <LockIcon className="w-4 h-4" />
+                          {tier.name} (Stufe)
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* --- AKTUALISIERT: Preis (PPV) --- */}
+              <div className="space-y-2">
+                <Label htmlFor="price" className="text-foreground">
+                  Pay-per-View Preis (optional)
+                </Label>
+                <Input
+                  id="price"
+                  type="number"
+                  placeholder="0.00"
+                  value={isPublic ? '0.00' : price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  className="bg-background text-foreground border-border"
+                  disabled={isLoading || isPublic}
+                />
+                {isPublic && (
+                  <p className="text-xs text-muted-foreground">Öffentliche Posts sind immer kostenlos.</p>
+                )}
+                {!isPublic && (
+                  <p className="text-xs text-muted-foreground">
+                    Abonnenten (mit passender Stufe) erhalten diesen Inhalt kostenlos.
+                    Andere müssen diesen Preis bezahlen.
+                  </p>
+                )}
+              </div>
+
+
+              {/* --- KALENDER/ZEIT-PICKER (Unverändert) --- */}
+              <div className="space-y-2">
+                <Label className="text-foreground">
+                  Zeitplan (optional)
+                </Label>
+                <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal h-10 px-3 py-2 bg-background text-foreground border-border hover:bg-neutral",
+                        !selectedDate && "text-muted-foreground"
+                      )}
+                      disabled={isLoading}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {displayScheduledDate()}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={setSelectedDate}
+                      disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                      initialFocus
+                      locale={de}
+                    />
+                    <div className="p-4 border-t border-border flex items-center justify-between">
+                      <Label className="text-foreground">Uhrzeit</Label>
+                      <TimePicker
+                        value={selectedTime}
+                        onChange={setSelectedTime}
+                        disabled={!selectedDate}
+                      />
+                    </div>
+                    <div className="p-4 pt-0 flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        onClick={() => setSelectedDate(undefined)}
+                        disabled={!selectedDate}
+                      >
+                        Löschen
+                      </Button>
+                       <Button
+                        className="bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                        onClick={() => setPopoverOpen(false)}
+                      >
+                        Übernehmen
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* --- SUBMIT-BUTTONS (Unverändert) --- */}
+              <div className="flex gap-4 pt-4">
+                <Button
+                  onClick={() => handleSubmit(false)} // 'false' = kein Entwurf
+                  className="flex-1 bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
+                  disabled={isLoading || !selectedFile}
+                >
+                  {isLoading ? (
+                    <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />
+                  ) : (
+                    getCombinedIsoString() ? 'Planen' : 'Veröffentlichen'
+                  )}
+                </Button>
+                <Button
+                  onClick={() => handleSubmit(true)} // 'true' = Entwurf
+                  variant="outline"
+                  className="flex-1 bg-background text-foreground border-border hover:bg-neutral font-normal"
+                  disabled={isLoading || !selectedFile}
+                >
+                  {isLoading ? (
+                    <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />
+                  ) : (
+                    'Als Entwurf speichern'
+                  )}
                 </Button>
               </div>
-
-              <div className="flex-1 overflow-y-auto p-4">
-                <div className="space-y-4">
-                  {comments.map((comment) => (
-                    <div key={comment.id} className="flex gap-3">
-                      <Avatar className="w-10 h-10 flex-shrink-0">
-                        <AvatarImage src={comment.user.avatar} alt={comment.user.name} />
-                        <AvatarFallback className="bg-secondary text-secondary-foreground">
-                          {comment.user.name.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-foreground font-medium text-sm">
-                              {comment.user.name}
-                            </p>
-                            <p className="text-foreground text-sm mt-1 break-words">
-                              {comment.text}
-                            </p>
-                            <div className="flex items-center gap-4 mt-2">
-                              <span className="text-xs text-muted-foreground">
-                                {comment.timestamp}
-                              </span>
-                              <button className="text-xs text-muted-foreground hover:text-foreground">
-                                {comment.likes} Likes
-                              </button>
-                              <button className="text-xs text-muted-foreground hover:text-foreground">
-                                Antworten
-                              </button>
-                            </div>
-                          </div>
-                          <button className="text-muted-foreground hover:text-secondary flex-shrink-0">
-                            <HeartIcon className="w-4 h-4" strokeWidth={1.5} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="p-4 border-t border-border bg-card flex-shrink-0">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Kommentar hinzufügen..."
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleCommentSubmit()}
-                    className="bg-background text-foreground border-border flex-1"
-                  />
-                  <Button
-                    onClick={handleCommentSubmit}
-                    disabled={!comment.trim()}
-                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
-                  >
-                    Posten
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

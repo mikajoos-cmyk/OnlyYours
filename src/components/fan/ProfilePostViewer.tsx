@@ -1,13 +1,20 @@
 import { useState, useRef, useEffect } from 'react';
-import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon } from 'lucide-react'; // XIcon hinzugefügt
+import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, LockIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
-import { Button } from '../ui/button'; // Button hinzugefügt
+import { Button } from '../ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
 import CommentsSheet from './CommentsSheet';
 import { useNavigate } from 'react-router-dom';
-import { cn } from '../../lib/utils'; // cn importieren
+import { cn } from '../../lib/utils';
+// --- NEUE IMPORTS ---
+import { useAuthStore } from '../../stores/authStore';
+import { useSubscriptionStore } from '../../stores/subscriptionStore';
+import PpvModal from './PpvModal';
+import type { Post as ServicePostData } from '../../services/postService';
+// --- ENDE ---
 
-// --- Interface für Posts (ähnlich DiscoveryFeed, ggf. anpassen) ---
+
+// --- Interface für Posts (angepasst an ServicePostData) ---
 export interface CreatorInfo {
   name: string;
   avatar: string;
@@ -15,16 +22,9 @@ export interface CreatorInfo {
   isVerified?: boolean;
 }
 
-export interface PostData {
-  id: string;
+export interface PostData extends Omit<ServicePostData, 'creator'> {
   creator: CreatorInfo;
-  media: string; // Angepasst von mediaUrl in DiscoveryFeed
-  caption: string;
-  hashtags: string[];
-  likes: number;
-  comments: number;
-  isLiked?: boolean; // Optional
-  // mediaType wird nicht direkt benötigt, wenn nur Bilder angezeigt werden
+  media: string; // mediaUrl wird als 'media' übergeben
 }
 // --- Ende Interface ---
 
@@ -34,28 +34,31 @@ interface ProfilePostViewerProps {
   onClose: () => void;     // Schließen-Funktion
 }
 
-// Komponente umbenannt und Props angepasst
 export default function ProfilePostViewer({
   initialPosts,
   initialIndex,
   onClose
 }: ProfilePostViewerProps) {
   const navigate = useNavigate();
-  // State verwendet jetzt die übergebenen Props
-  const [posts, setPosts] = useState<PostData[]>(initialPosts);
+  const { user } = useAuthStore();
+  const { checkAccess, addPurchasedPost, isLoading: isLoadingSubs } = useSubscriptionStore();
+
+  const [posts] = useState<PostData[]>(initialPosts);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+
+  // Lokaler Like-State (da dieser Viewer nicht an den FeedStore angebunden ist)
   const [isLiked, setIsLiked] = useState<{ [key: string]: boolean }>({});
   const [likes, setLikes] = useState<{ [key: string]: number }>({});
+
   const [showComments, setShowComments] = useState(false);
   const [selectedPostIdForComments, setSelectedPostIdForComments] = useState<string | null>(null);
+  const [showPpvModal, setShowPpvModal] = useState(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
 
-  // Initialisiere Likes und isLiked basierend auf initialPosts
+  // Likes initialisieren
   useEffect(() => {
-    setPosts(initialPosts); // Update posts if initialPosts change
-    setCurrentIndex(initialIndex); // Reset index if initialIndex changes
-
     const initialLikesState: { [key: string]: number } = {};
     const initialIsLikedState: { [key: string]: boolean } = {};
     initialPosts.forEach((post) => {
@@ -64,33 +67,29 @@ export default function ProfilePostViewer({
     });
     setLikes(initialLikesState);
     setIsLiked(initialIsLikedState);
-  }, [initialPosts, initialIndex]); // Abhängigkeiten
+  }, [initialPosts]);
+
+  // Index zurücksetzen
+  useEffect(() => {
+    setCurrentIndex(initialIndex);
+  }, [initialIndex]);
 
 
-  // ----- Scrolling/Swiping Logic (aus DiscoveryFeed übernommen) -----
-   useEffect(() => {
-     // Tastaturnavigation ist hier vielleicht nicht gewünscht, kann entfernt werden
-    // const handleKeyDown = (e: KeyboardEvent) => { ... };
-    // window.addEventListener('keydown', handleKeyDown);
-    // return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [posts.length]);
-
+  // ----- Scrolling/Swiping Logic -----
   const scrollThreshold = 50;
-
   const handleScroll = (e: React.WheelEvent) => {
-    if (isScrolling.current || Math.abs(e.deltaY) < scrollThreshold || posts.length <= 1) return;
+    if (isScrolling.current || Math.abs(e.deltaY) < scrollThreshold || posts.length <= 1 || showPpvModal || showComments) return;
     isScrolling.current = true;
     if (e.deltaY > 0 && currentIndex < posts.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else if (e.deltaY < 0 && currentIndex > 0) {
       setCurrentIndex(currentIndex - 1);
     }
-    setTimeout(() => { isScrolling.current = false; }, 800); // Dauer wie in DiscoveryFeed
+    setTimeout(() => { isScrolling.current = false; }, 800);
   };
-
   const handleTouchStart = useRef({ y: 0 });
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (posts.length <= 1) return;
+    if (posts.length <= 1 || showPpvModal || showComments) return;
     const touch = e.touches[0];
     const deltaY = handleTouchStart.current.y - touch.clientY;
     if (Math.abs(deltaY) > 50 && !isScrolling.current) {
@@ -100,16 +99,18 @@ export default function ProfilePostViewer({
       } else if (deltaY < 0 && currentIndex > 0) {
         setCurrentIndex(currentIndex - 1);
       }
-      setTimeout(() => { isScrolling.current = false; }, 800); // Dauer wie in DiscoveryFeed
+      setTimeout(() => { isScrolling.current = false; }, 800);
     }
   };
   const handleTouchStartCapture = (e: React.TouchEvent) => {
     handleTouchStart.current = { y: e.touches[0].clientY };
   };
-  // ----- Ende Scrolling/Swiping Logic -----
+  // ----- Ende Scrolling -----
 
-  // Like/Comment Handler (aus DiscoveryFeed angepasst, Post-ID verwenden)
+  // Like/Comment Handler
   const handleLike = (postId: string) => {
+    // TODO: Lokale Like-Logik implementieren (Optimistic Update + Service Call)
+    // Vorerst nur lokaler State:
     setIsLiked((prev) => ({ ...prev, [postId]: !prev[postId] }));
     setLikes((prev) => {
         const currentLikes = prev[postId] ?? posts.find(p => p.id === postId)?.likes ?? 0;
@@ -118,6 +119,7 @@ export default function ProfilePostViewer({
           [postId]: currentLikes + (isLiked[postId] ? -1 : 1),
         };
     });
+    // await postService.toggleLike(postId); // Echter Aufruf
   };
 
   const handleCommentClick = (postId: string) => {
@@ -125,9 +127,21 @@ export default function ProfilePostViewer({
     setShowComments(true);
   };
 
+  const handleMediaClick = (hasAccess: boolean) => {
+    if (!hasAccess) {
+      setShowPpvModal(true);
+    }
+  };
+
+  const handlePurchaseSuccess = (postId: string) => {
+    addPurchasedPost(postId);
+    // Da wir in einem Modal sind, müssen wir den Parent (CreatorProfile) nicht
+    // unbedingt neu laden. Der `checkAccess` wird beim nächsten Rendern (durch addPurchasedPost)
+    // den Zugriff korrekt (optimistisch) bewerten.
+  };
+
   const currentPost = posts[currentIndex];
 
-  // Fallback, falls etwas schiefgeht
   if (!currentPost) {
      return (
         <div className="fixed top-16 left-0 right-0 bottom-16 z-40 bg-background flex items-center justify-center md:left-64 md:bottom-0 md:h-[calc(100vh-4rem)]">
@@ -137,20 +151,27 @@ export default function ProfilePostViewer({
      );
   }
 
+  // Zugriff prüfen
+  // Wir müssen das `PostData`-Objekt in ein `Post`-Objekt umwandeln, das `checkAccess` erwartet
+  const postForCheck: ServicePostData = {
+    ...currentPost,
+    mediaUrl: currentPost.media,
+    thumbnail_url: currentPost.thumbnail_url || currentPost.media,
+  };
+  const hasAccess = checkAccess(postForCheck, user?.id);
+
   return (
     <>
-      {/* Container mit korrekter Positionierung */}
       <div
         ref={containerRef}
         className={cn(
-          "fixed top-16 left-0 right-0 bottom-16 z-40 overflow-hidden bg-background", // Grundlegende Stile
-          "md:left-64 md:bottom-0 md:h-[calc(100vh-4rem)]" // Desktop-Anpassungen
+          "fixed top-16 left-0 right-0 bottom-16 z-40 overflow-hidden bg-black", // bg-black Fallback
+          "md:left-64 md:bottom-0 md:h-[calc(100vh-4rem)]"
         )}
         onWheel={handleScroll}
         onTouchStart={handleTouchStartCapture}
         onTouchMove={handleTouchMove}
       >
-         {/* Schließen-Button */}
          <Button
             onClick={onClose}
             size="icon"
@@ -160,43 +181,62 @@ export default function ProfilePostViewer({
             <XIcon className="w-6 h-6" strokeWidth={1.5} />
            </Button>
 
-        {/* Motion Div für den Post-Inhalt und Übergänge */}
         <motion.div
            key={currentIndex}
-           initial={{ opacity: 0, /* y: 100 */ }} // Animation wie in DiscoveryFeed
-           animate={{ opacity: 1, /* y: 0 */ }}
-           exit={{ opacity: 0, /* y: -100 */ }}
-           transition={{ duration: 0.5 }} // Dauer wie in DiscoveryFeed
-           className="h-full w-full relative" // Wichtig: h-full
+           initial={{ opacity: 0 }}
+           animate={{ opacity: 1 }}
+           exit={{ opacity: 0 }}
+           transition={{ duration: 0.3 }}
+           className="h-full w-full relative"
          >
-           {/* Bild/Video */}
-           {/* --- NEU: Bedingtes Rendern für Video/Bild --- */}
-           {/* HINWEIS: Annahme, dass 'currentPost.mediaType' vorhanden ist.
-               Wenn nicht, muss der Typ aus 'initialPosts' korrekt durchgereicht werden. */}
-           {currentPost.mediaType === 'video' ? (
-              <video
-                src={currentPost.media}
-                autoPlay
-                muted // WICHTIG: Autoplay funktioniert in Browsern nur ohne Ton
-                loop
-                playsInline // Wichtig für iOS-Geräte
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <img
-                src={currentPost.media}
-                alt={currentPost.caption}
-                className="w-full h-full object-cover"
-              />
+            {/* --- VERPIXELTE LOGIK --- */}
+            <div
+              className="w-full h-full"
+              onClick={() => handleMediaClick(hasAccess)}
+            >
+              {currentPost.mediaType === 'video' ? (
+                <video
+                  src={currentPost.media}
+                  autoPlay muted loop playsInline
+                  className={cn(
+                    "w-full h-full object-cover",
+                    !hasAccess && "filter blur-2xl"
+                  )}
+                />
+              ) : (
+                <img
+                  src={hasAccess ? currentPost.media : (currentPost.thumbnail_url || currentPost.media)}
+                  alt={currentPost.caption}
+                  className={cn(
+                    "w-full h-full object-cover",
+                    !hasAccess && "filter blur-2xl"
+                  )}
+                />
+              )}
+            </div>
+
+            {/* Gesperrt-Overlay */}
+            {!hasAccess && (
+              <div
+                className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-pointer"
+                onClick={() => handleMediaClick(hasAccess)}
+              >
+                <LockIcon className="w-16 h-16 text-foreground" />
+                <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6">
+                  {currentPost.price > 0
+                    ? `Beitrag für ${currentPost.price.toFixed(2)}€ freischalten`
+                    : `Abonnieren, um zu sehen`
+                  }
+                </Button>
+              </div>
             )}
-           {/* --- ENDE --- */}
 
-           {/* Gradient Overlay */}
-           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />
+            {/* Gradient (nur bei Zugriff) */}
+            {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
 
-           {/* Creator Info (aus DiscoveryFeed übernommen) */}
+
+           {/* Creator Info */}
            <div className="absolute top-4 left-4 right-20 z-10">
-             {/* Kein navigate onClick hier, da wir schon im Profil sind */}
              <div className="flex items-center gap-3">
                <Avatar className="w-12 h-12 border-2 border-foreground">
                  <AvatarImage src={currentPost.creator.avatar} alt={currentPost.creator.name} />
@@ -208,27 +248,29 @@ export default function ProfilePostViewer({
                  <p className="font-medium text-foreground drop-shadow-lg">
                    {currentPost.creator.name}
                  </p>
-                 {/* Username wird hier nicht angezeigt, da wir im Profil sind */}
                </div>
              </div>
            </div>
 
-           {/* Icons rechts (aus DiscoveryFeed übernommen) */}
-           <div className="absolute right-4 bottom-32 z-10 flex flex-col gap-6"> {/* Position wie in DiscoveryFeed */}
+           {/* Icons rechts */}
+           <div className="absolute right-4 bottom-32 z-10 flex flex-col gap-6">
                 <motion.button
                     whileTap={{ scale: 0.9 }}
-                    onClick={() => handleLike(currentPost.id)}
+                    onClick={() => hasAccess && handleLike(currentPost.id)}
                     className="flex flex-col items-center gap-1"
+                    disabled={!hasAccess}
                 >
                     <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
                         <HeartIcon
-                        className={`w-7 h-7 ${
-                            isLiked[currentPost.id] ? 'fill-secondary text-secondary' : 'text-foreground'
-                        }`}
+                        className={cn(
+                            "w-7 h-7",
+                            isLiked[currentPost.id] ? 'fill-secondary text-secondary' : 'text-foreground',
+                            !hasAccess && "opacity-50"
+                        )}
                         strokeWidth={1.5}
                         />
                     </div>
-                    <span className="text-sm font-medium text-foreground drop-shadow-lg">
+                    <span className={cn("text-sm font-medium text-foreground drop-shadow-lg", !hasAccess && "opacity-50")}>
                         {(likes[currentPost.id] ?? currentPost.likes).toLocaleString()}
                     </span>
                 </motion.button>
@@ -244,23 +286,14 @@ export default function ProfilePostViewer({
                         {currentPost.comments}
                     </span>
                 </button>
-
-                <button className="flex flex-col items-center gap-1">
-                    <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
-                        <Share2Icon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
-                    </div>
-                </button>
-
-                <button className="flex flex-col items-center gap-1">
-                    <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
-                        <DollarSignIcon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
-                    </div>
-                </button>
+                {/* ... (Share, Tip) ... */}
            </div>
 
-           {/* Caption & Hashtags (aus DiscoveryFeed übernommen) */}
-           <div className="absolute bottom-4 left-4 right-20 z-10"> {/* Position wie in DiscoveryFeed */}
-                <p className="text-foreground drop-shadow-lg mb-2">{currentPost.caption}</p>
+           {/* Caption & Hashtags */}
+           <div className="absolute bottom-4 left-4 right-20 z-10">
+                <p className={cn("text-foreground drop-shadow-lg mb-2", !hasAccess && "filter blur-sm select-none")}>
+                  {hasAccess ? currentPost.caption : "Gesperrter Inhalt"}
+                </p>
                 <div className="flex flex-wrap gap-2">
                     {currentPost.hashtags.map((tag) => (
                         <span key={tag} className="text-secondary text-sm drop-shadow-lg">
@@ -269,10 +302,10 @@ export default function ProfilePostViewer({
                     ))}
                 </div>
            </div>
-         </motion.div> {/* Ende motion.div */}
-      </div> {/* Ende Haupt-Container */}
+         </motion.div>
+      </div>
 
-      {/* Comments Sheet (unverändert) */}
+      {/* Comments Sheet */}
        <AnimatePresence>
         {selectedPostIdForComments !== null && showComments && (
           <CommentsSheet
@@ -285,6 +318,16 @@ export default function ProfilePostViewer({
           />
         )}
       </AnimatePresence>
+
+      {/* PPV Modal */}
+      {showPpvModal && (
+         <PpvModal
+            isOpen={showPpvModal}
+            onClose={() => setShowPpvModal(false)}
+            post={postForCheck} // Übergibt das ServicePostData-Objekt
+            onPaymentSuccess={handlePurchaseSuccess}
+         />
+      )}
     </>
   );
 }

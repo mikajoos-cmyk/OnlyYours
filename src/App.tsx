@@ -3,6 +3,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useEffect } from 'react';
 import { useAuthStore } from './stores/authStore';
 import { useAppStore } from './stores/appStore';
+// --- NEUER IMPORT ---
+import { useSubscriptionStore } from './stores/subscriptionStore';
+// --- ENDE ---
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
 import AppShell from './components/layout/AppShell';
 import DiscoveryFeed from './components/fan/DiscoveryFeed';
@@ -19,33 +22,46 @@ import ProfilePage from './components/profile/ProfilePage';
 import { Toaster } from './components/ui/toaster';
 
 function App() {
-  const { isAuthenticated, isLoading, initialize } = useAuthStore();
+  const { isAuthenticated, isLoading, initialize, user } = useAuthStore(); // <-- user holen
   const { hasCompletedOnboarding } = useAppStore();
+  // --- NEUER STORE ---
+  const { loadSubscriptions, clearSubscriptions } = useSubscriptionStore();
 
   useEffect(() => {
     console.log("[App.tsx] useEffect RUNS. Calling initialize().");
-    // Rufe initialize auf und speichere die zurückgegebene Unsubscribe-Funktion
     const unsubscribeAuth = initialize();
 
-    // Gib eine Cleanup-Funktion zurück, die beim Unmount der Komponente aufgerufen wird
     return () => {
       console.log("[App.tsx] Cleanup RUNS. Unsubscribing auth listener.");
-      unsubscribeAuth(); // Hier wird der Listener abgemeldet
+      unsubscribeAuth();
     };
-  }, [initialize]); // initialize als Abhängigkeit behalten
+  }, [initialize]);
+
+  // --- NEUER EFFEKT ---
+  // Lade Abos, wenn der Benutzer authentifiziert ist, oder lösche sie beim Logout
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      console.log("[App.tsx] User authenticated, loading subscriptions.");
+      loadSubscriptions();
+    } else {
+      console.log("[App.tsx] User logged out, clearing subscriptions.");
+      clearSubscriptions();
+    }
+  }, [isAuthenticated, user, loadSubscriptions, clearSubscriptions]);
+  // --- ENDE NEUER EFFEKT ---
+
 
   // --- Ladezustand anzeigen ---
   if (isLoading) {
     console.log("[App.tsx] Rendering: isLoading=true");
     return (
       <div className="flex justify-center items-center min-h-screen bg-background">
-        <p className="text-foreground">Laden...</p> {/* Oder eine schönere Ladekomponente */}
+        <p className="text-foreground">Laden...</p>
       </div>
     );
   }
 
   // --- Logik für Onboarding-Anzeige ---
-  // Zeige Onboarding, wenn (User nicht authentifiziert) ODER (Onboarding-Flag noch nicht gesetzt)
   const showOnboarding = !isAuthenticated || !hasCompletedOnboarding;
 
   console.log(`[App.tsx] Rendering: isLoading=false, isAuthenticated=${isAuthenticated}, hasCompletedOnboarding=${hasCompletedOnboarding}, showOnboarding=${showOnboarding}`);

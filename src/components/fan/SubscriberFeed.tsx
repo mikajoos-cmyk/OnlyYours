@@ -1,47 +1,51 @@
 // src/components/fan/SubscriberFeed.tsx
 import { useState, useRef, useEffect } from 'react';
-import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon } from 'lucide-react';
+import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, LockIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
 import CommentsSheet from './CommentsSheet';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-import { useFeedStore } from '../../stores/feedStore'; // Importiere den FeedStore
-import type { Post as ServicePostData } from '../../services/postService'; // Importiere den Post-Typ vom Service
+import { useFeedStore } from '../../stores/feedStore';
+import type { Post as ServicePostData } from '../../services/postService';
+// --- NEUE IMPORTS ---
+import { useAuthStore } from '../../stores/authStore';
+import { useSubscriptionStore } from '../../stores/subscriptionStore';
+import PpvModal from './PpvModal';
+// --- ENDE ---
 
-// Interface für CreatorInfo (kann bleiben oder aus Service importiert werden)
-interface CreatorInfo {
-  name: string;
-  avatar: string;
-  username: string; // Wird für Navigation benötigt
-  isVerified?: boolean;
-}
 
-// Interface für PostData anpassen, um dem ServicePostData-Typ besser zu entsprechen
-// oder ServicePostData direkt verwenden
-interface PostData extends Omit<ServicePostData, 'creatorId' | 'creator'> {
-  media: string; // Behalte 'media' für Konsistenz mit bestehendem Code ODER refactor zu mediaUrl
-  creator: CreatorInfo; // Verwende das vereinfachte CreatorInfo
+// Interface für PostData anpassen
+interface PostData extends Omit<ServicePostData, 'creator'> {
+  creator: {
+    id: string; // ID hinzugefügt
+    name: string;
+    avatar: string;
+    username: string;
+    isVerified?: boolean;
+  };
+  media: string; // 'media' statt 'mediaUrl'
 }
 
 
 interface SubscriberFeedProps {
-  initialPosts?: PostData[] | ServicePostData[]; // Kann beide Typen akzeptieren
+  initialPosts?: PostData[] | ServicePostData[];
   initialIndex?: number;
   isProfileView?: boolean;
   onClose?: () => void;
 }
 
 export default function SubscriberFeed({
-  initialPosts: initialPostsProp, // Umbenannt, um Konflikt mit State zu vermeiden
+  initialPosts: initialPostsProp,
   initialIndex = 0,
   isProfileView = false,
   onClose
 }: SubscriberFeedProps) {
   const navigate = useNavigate();
 
-  // Zustand aus dem Store holen
+  // Zustand aus Stores holen
+  const { user } = useAuthStore();
   const {
     posts: storePosts,
     currentIndex: storeCurrentIndex,
@@ -52,37 +56,38 @@ export default function SubscriberFeed({
     toggleLike: toggleLikeAction
   } = useFeedStore();
 
-  // Lokaler State für Posts und Index, abhängig davon, ob es die Profilansicht ist
+  // Neuer Store für Zugriffs-Check
+  const { checkAccess, addPurchasedPost, isLoading: isLoadingSubs } = useSubscriptionStore();
+
+  // Lokaler State
   const [posts, setPosts] = useState<ServicePostData[]>([]);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [isLoading, setIsLoading] = useState(!isProfileView); // Ladezustand nur im Feed-Modus initial true
-
-  // Lokaler State für Likes (kann entfernt werden, wenn Store verwendet wird)
-  // const [isLiked, setIsLiked] = useState<{ [key: string]: boolean }>({});
-  // const [likes, setLikes] = useState<{ [key: string]: number }>({});
-
+  const [isLoading, setIsLoading] = useState(!isProfileView);
   const [showComments, setShowComments] = useState(false);
   const [selectedPostIdForComments, setSelectedPostIdForComments] = useState<string | null>(null);
+  const [showPpvModal, setShowPpvModal] = useState(false); // PPV Modal
+
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
 
   // Daten laden oder aus Props übernehmen
   useEffect(() => {
     if (isProfileView && initialPostsProp) {
-        // Transformiere initialPostsProp, falls nötig, um ServicePostData zu entsprechen
-        const transformedPosts = initialPostsProp.map(p => ({
-            ...p,
-            mediaUrl: (p as PostData).media || (p as ServicePostData).mediaUrl, // Passe media/mediaUrl an
-        }));
+      const transformedPosts = initialPostsProp.map(p => ({
+        ...p,
+        mediaUrl: (p as PostData).media || (p as ServicePostData).mediaUrl,
+        creator: (p as ServicePostData).creator || (p as PostData).creator,
+        creatorId: (p as ServicePostData).creatorId || (p as PostData).creator.id,
+      }));
       setPosts(transformedPosts as ServicePostData[]);
       setCurrentIndex(initialIndex);
-      setIsLoading(false); // Keine Ladeanzeige bei Props
+      setIsLoading(false);
     } else if (!isProfileView) {
-      loadSubscriberPosts(); // Lade Daten über den Store für den Feed
+      loadSubscriberPosts();
     }
   }, [isProfileView, initialPostsProp, initialIndex, loadSubscriberPosts]);
 
-  // Store-Daten in lokalen State spiegeln (nur für Feed-Ansicht)
+  // Store-Daten in lokalen State spiegeln
   useEffect(() => {
     if (!isProfileView) {
       setPosts(storePosts);
@@ -92,68 +97,59 @@ export default function SubscriberFeed({
   }, [isProfileView, storePosts, storeCurrentIndex, storeIsLoading]);
 
 
-  // ----- Scrolling/Swiping Logic (Funktionen aus Store verwenden) -----
-   useEffect(() => {
+  // ----- Scrolling/Swiping Logic -----
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isProfileView) { // Tastaturnavigation nur im normalen Feed
-        if (e.key === 'ArrowDown') {
-            nextPostAction(); // Store-Aktion verwenden
-        } else if (e.key === 'ArrowUp') {
-            previousPostAction(); // Store-Aktion verwenden
-        }
+      if (showPpvModal || showComments) return; // Modale blockieren Navigation
+      if (!isProfileView) {
+        if (e.key === 'ArrowDown') nextPostAction();
+        else if (e.key === 'ArrowUp') previousPostAction();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isProfileView, nextPostAction, previousPostAction]); // Store-Aktionen als Abhängigkeiten
+  }, [isProfileView, nextPostAction, previousPostAction, showPpvModal, showComments]);
 
   const scrollThreshold = 50;
 
   const handleScroll = (e: React.WheelEvent) => {
-    if (isScrolling.current || Math.abs(e.deltaY) < scrollThreshold || posts.length <= 1) return;
+    if (isScrolling.current || Math.abs(e.deltaY) < scrollThreshold || posts.length <= 1 || showPpvModal || showComments) return;
     isScrolling.current = true;
     if (e.deltaY > 0 && currentIndex < posts.length - 1) {
-        if (isProfileView) setCurrentIndex(i => i + 1); else nextPostAction();
+      if (isProfileView) setCurrentIndex(i => i + 1); else nextPostAction();
     } else if (e.deltaY < 0 && currentIndex > 0) {
-        if (isProfileView) setCurrentIndex(i => i - 1); else previousPostAction();
+      if (isProfileView) setCurrentIndex(i => i - 1); else previousPostAction();
     }
     setTimeout(() => { isScrolling.current = false; }, 800);
   };
 
-   const handleTouchStart = useRef({ y: 0 });
-   const handleTouchMove = (e: React.TouchEvent) => {
-      if (posts.length <= 1) return;
-      const touch = e.touches[0];
-      const deltaY = handleTouchStart.current.y - touch.clientY;
-
-      if (Math.abs(deltaY) > 50 && !isScrolling.current) {
-        isScrolling.current = true;
-
-        if (deltaY > 0 && currentIndex < posts.length - 1) {
-            if (isProfileView) setCurrentIndex(i => i + 1); else nextPostAction();
-        } else if (deltaY < 0 && currentIndex > 0) {
-             if (isProfileView) setCurrentIndex(i => i - 1); else previousPostAction();
-        }
-
-        setTimeout(() => {
-          isScrolling.current = false;
-        }, 800);
+  const handleTouchStart = useRef({ y: 0 });
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (posts.length <= 1 || showPpvModal || showComments) return;
+    const touch = e.touches[0];
+    const deltaY = handleTouchStart.current.y - touch.clientY;
+    if (Math.abs(deltaY) > 50 && !isScrolling.current) {
+      isScrolling.current = true;
+      if (deltaY > 0 && currentIndex < posts.length - 1) {
+        if (isProfileView) setCurrentIndex(i => i + 1); else nextPostAction();
+      } else if (deltaY < 0 && currentIndex > 0) {
+        if (isProfileView) setCurrentIndex(i => i - 1); else previousPostAction();
       }
-    };
+      setTimeout(() => { isScrolling.current = false; }, 800);
+    }
+  };
+  const handleTouchStartCapture = (e: React.TouchEvent) => {
+    handleTouchStart.current = { y: e.touches[0].clientY };
+  };
+  // ----- Ende Scrolling -----
 
-    const handleTouchStartCapture = (e: React.TouchEvent) => {
-      handleTouchStart.current = { y: e.touches[0].clientY };
-    };
-  // ----- Ende Scrolling/Swiping Logic -----
-
-  // Like-Handler (Store-Aktion verwenden)
+  // --- INTERAKTIONEN ---
   const handleLike = async (postId: string) => {
-      if (isProfileView) {
-          // TODO: Implementiere lokale Like-Logik für Profilansicht ODER erweitere den Store
-          console.warn("Like-Funktion im Profil-Viewer noch nicht implementiert.");
-      } else {
-         await toggleLikeAction(postId); // Store-Aktion aufrufen
-      }
+    if (isProfileView) {
+      // TODO: Lokale Like-Logik für Profilansicht
+    } else {
+      await toggleLikeAction(postId);
+    }
   };
 
   const handleCommentClick = (postId: string) => {
@@ -161,45 +157,59 @@ export default function SubscriberFeed({
     setShowComments(true);
   };
 
-  // --- Aktuellen Post bestimmen ---
+  const handleMediaClick = (hasAccess: boolean) => {
+    if (!hasAccess) {
+      setShowPpvModal(true);
+    }
+  };
+
+  const handlePurchaseSuccess = (postId: string) => {
+    addPurchasedPost(postId);
+    // Im Subscriber-Feed laden wir neu, um sicherzustellen, dass die RLS greift
+    // (obwohl addPurchasedPost es optimistisch setzt)
+    if (!isProfileView) {
+      loadSubscriberPosts();
+    }
+  };
+
+  // --- RENDER-LOGIK ---
   const currentPost = posts[currentIndex];
 
-  // --- Ladezustand oder "Keine Posts" ---
-  if (isLoading && !isProfileView) {
-      return (
-        <div className="flex items-center justify-center h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]">
-            <p className="text-muted-foreground">Lade Feed...</p>
-        </div>
-     );
+  if (isLoading || (isLoadingSubs && !isProfileView)) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]">
+        <p className="text-muted-foreground">Lade Feed...</p>
+      </div>
+    );
   }
-
   if (!currentPost && isProfileView) {
-     return (
-        <div className="fixed inset-0 top-16 z-40 bg-background flex items-center justify-center md:left-64 md:bottom-0 md:h-[calc(100vh-4rem)]">
-            {onClose && <Button onClick={onClose} variant="ghost" size="icon" className="absolute top-4 right-4 z-50"><XIcon/></Button>}
-            <p className="text-muted-foreground">Post nicht gefunden oder Ladefehler.</p>
-        </div>
-     );
-  } else if (!currentPost && !isLoading) { // Nur anzeigen, wenn nicht mehr geladen wird
-      return (
-        <div className="flex items-center justify-center h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]">
-            <p className="text-muted-foreground">Keine abonnierten Posts zum Anzeigen.</p>
-        </div>
-     );
+    return (
+      <div className="fixed inset-0 top-16 z-40 bg-background flex items-center justify-center md:left-64 md:bottom-0 md:h-[calc(100vh-4rem)]">
+        {onClose && <Button onClick={onClose} variant="ghost" size="icon" className="absolute top-4 right-4 z-50"><XIcon/></Button>}
+        <p className="text-muted-foreground">Post nicht gefunden.</p>
+      </div>
+    );
   }
-   // Fallback, wenn currentPost noch undefiniert ist während des Ladens
+  if (!currentPost && !isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]">
+        <p className="text-muted-foreground">Keine abonnierten Posts zum Anzeigen.</p>
+      </div>
+    );
+  }
   if (!currentPost) {
-      return null; // Oder eine minimale Ladeanzeige
+    return null;
   }
 
+  // Zugriff prüfen
+  const hasAccess = checkAccess(currentPost, user?.id);
 
-  // --- JSX (bleibt größtenteils gleich, verwendet jetzt `currentPost` aus dem State/Store) ---
   return (
     <>
       <div
         ref={containerRef}
         className={cn(
-          "w-full overflow-hidden relative bg-background",
+          "w-full overflow-hidden relative bg-black", // bg-black als Fallback
           isProfileView
             ? "fixed top-16 left-0 right-0 bottom-16 z-40 md:left-64 md:bottom-0 md:h-[calc(100vh-4rem)]"
             : "h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]"
@@ -208,7 +218,6 @@ export default function SubscriberFeed({
         onTouchStart={handleTouchStartCapture}
         onTouchMove={handleTouchMove}
       >
-         {/* Schließen-Button */}
         {isProfileView && onClose && (
            <Button
             onClick={onClose}
@@ -220,36 +229,58 @@ export default function SubscriberFeed({
            </Button>
         )}
 
-        {/* Motion Div für Übergänge */}
         <motion.div
-           key={currentPost.id} // Verwende die Post-ID als Key
+           key={currentPost.id}
            initial={{ opacity: 0 }}
            animate={{ opacity: 1 }}
            exit={{ opacity: 0 }}
            transition={{ duration: 0.3 }}
            className="h-full w-full relative"
          >
-            {/* Bild/Video */}
-            {/* --- NEU: Bedingtes Rendern für Video/Bild --- */}
-            {currentPost.mediaType === 'video' ? (
-              <video
-                src={currentPost.mediaUrl}
-                autoPlay
-                muted // WICHTIG: Autoplay funktioniert in Browsern nur ohne Ton
-                loop
-                playsInline // Wichtig für iOS-Geräte
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <img
-                src={currentPost.mediaUrl}
-                alt={currentPost.caption}
-                className="w-full h-full object-cover"
-              />
+            {/* --- VERPIXELTE LOGIK --- */}
+            <div
+              className="w-full h-full"
+              onClick={() => handleMediaClick(hasAccess)}
+            >
+              {currentPost.mediaType === 'video' ? (
+                <video
+                  src={currentPost.mediaUrl}
+                  autoPlay muted loop playsInline
+                  className={cn(
+                    "w-full h-full object-cover",
+                    !hasAccess && "filter blur-2xl"
+                  )}
+                />
+              ) : (
+                <img
+                  src={hasAccess ? currentPost.mediaUrl : (currentPost.thumbnail_url || currentPost.mediaUrl)}
+                  alt={currentPost.caption}
+                  className={cn(
+                    "w-full h-full object-cover",
+                    !hasAccess && "filter blur-2xl"
+                  )}
+                />
+              )}
+            </div>
+
+            {/* Gesperrt-Overlay */}
+            {!hasAccess && (
+              <div
+                className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-pointer"
+                onClick={() => handleMediaClick(hasAccess)}
+              >
+                <LockIcon className="w-16 h-16 text-foreground" />
+                <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6">
+                  {currentPost.price > 0
+                    ? `Beitrag für ${currentPost.price.toFixed(2)}€ freischalten`
+                    : `Abonnieren, um zu sehen` // Fallback für Tier-Sperre ohne PPV
+                  }
+                </Button>
+              </div>
             )}
-            {/* --- ENDE --- */}
-            {/* Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />
+
+            {/* Gradient (nur bei Zugriff) */}
+            {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
 
             {/* Creator Info */}
             <div className="absolute top-4 left-4 right-20 z-10">
@@ -266,7 +297,7 @@ export default function SubscriberFeed({
                         </p>
                         {!isProfileView && (
                             <p className="text-sm text-foreground/80 drop-shadow-lg">
-                                @{currentPost.creatorId}
+                                @{currentPost.creator.username || currentPost.creatorId}
                             </p>
                         )}
                     </div>
@@ -274,23 +305,24 @@ export default function SubscriberFeed({
             </div>
 
             {/* Icons rechts */}
-            <div className="absolute right-4 bottom-4 z-20 flex flex-col gap-6 md:bottom-8">
+            <div className="absolute right-4 bottom-32 z-10 flex flex-col gap-6 md:bottom-8">
                 <motion.button
                     whileTap={{ scale: 0.9 }}
-                    onClick={() => handleLike(currentPost.id)}
+                    onClick={() => hasAccess && handleLike(currentPost.id)}
                     className="flex flex-col items-center gap-1"
+                    disabled={!hasAccess}
                 >
                     <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
                         <HeartIcon
-                        // Verwende isLiked direkt aus dem aktuellen Post-Objekt (vom Store oder Prop)
-                        className={`w-7 h-7 ${
-                            currentPost.isLiked ? 'fill-secondary text-secondary' : 'text-foreground'
-                        }`}
+                        className={cn(
+                            "w-7 h-7",
+                            currentPost.isLiked ? 'fill-secondary text-secondary' : 'text-foreground',
+                            !hasAccess && "opacity-50"
+                        )}
                         strokeWidth={1.5}
                         />
                     </div>
-                    <span className="text-sm font-medium text-foreground drop-shadow-lg">
-                        {/* Verwende likes direkt aus dem aktuellen Post-Objekt */}
+                    <span className={cn("text-sm font-medium text-foreground drop-shadow-lg", !hasAccess && "opacity-50")}>
                         {(currentPost.likes).toLocaleString()}
                     </span>
                 </motion.button>
@@ -306,13 +338,12 @@ export default function SubscriberFeed({
                         {currentPost.comments}
                     </span>
                 </button>
-
+                {/* ... (Share, Tip) ... */}
                 <button className="flex flex-col items-center gap-1">
                     <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
                         <Share2Icon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
                     </div>
                 </button>
-
                 <button className="flex flex-col items-center gap-1">
                     <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
                         <DollarSignIcon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
@@ -320,10 +351,11 @@ export default function SubscriberFeed({
                 </button>
             </div>
 
-
             {/* Caption und Hashtags */}
             <div className="absolute bottom-4 left-4 right-20 z-10 md:bottom-8">
-                <p className="text-foreground drop-shadow-lg mb-2">{currentPost.caption}</p>
+                <p className={cn("text-foreground drop-shadow-lg mb-2", !hasAccess && "filter blur-sm select-none")}>
+                  {hasAccess ? currentPost.caption : "Abonnieren oder kaufen, um die Beschreibung zu sehen."}
+                </p>
                 <div className="flex flex-wrap gap-2">
                 {currentPost.hashtags.map((tag) => (
                     <span key={tag} className="text-secondary text-sm drop-shadow-lg">
@@ -332,8 +364,8 @@ export default function SubscriberFeed({
                 ))}
                 </div>
             </div>
-         </motion.div> {/* Ende motion.div */}
-      </div> {/* Ende Haupt-Container */}
+         </motion.div>
+      </div>
 
       {/* Comments Sheet */}
       <AnimatePresence>
@@ -344,11 +376,20 @@ export default function SubscriberFeed({
               setShowComments(false);
               setSelectedPostIdForComments(null);
             }}
-            // Finde den Post anhand der ID aus dem aktuellen `posts`-State
             post={posts.find(p => p.id === selectedPostIdForComments)}
           />
         )}
       </AnimatePresence>
+
+      {/* PPV Modal */}
+      {showPpvModal && currentPost && (
+         <PpvModal
+            isOpen={showPpvModal}
+            onClose={() => setShowPpvModal(false)}
+            post={currentPost}
+            onPaymentSuccess={handlePurchaseSuccess}
+         />
+      )}
     </>
   );
 }
