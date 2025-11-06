@@ -26,6 +26,8 @@ export interface Subscription {
 }
 
 export class SubscriptionService {
+
+  // --- HIER IST DIE ÄNDERUNG (Re-Abo-Logik) ---
   async subscribe(creatorId: string, tierId?: string | null, price?: number) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
@@ -34,69 +36,104 @@ export class SubscriptionService {
       throw new Error('Cannot subscribe to yourself');
     }
 
-    let subscriptionPrice = price;
-    if (subscriptionPrice === undefined || subscriptionPrice === null) {
-      if (!creatorId) throw new Error("Creator ID is missing for price lookup.");
+    // 1. Prüfen, ob ein (noch gültiges) gekündigtes Abo existiert
+    //    Diese Funktion holt 'ACTIVE' oder 'CANCELED' (wenn end_date > now())
+    const existingSub = await this.getActiveSubscription(user.id, creatorId);
 
-      const { data: creator } = await supabase
-        .from('users')
-        .select('subscription_price')
-        .eq('id', creatorId)
+    if (existingSub && existingSub.status === 'CANCELED') {
+      // 2.A RE-AKTIVIEREN (Goal 3)
+      // Das Abo ist gekündigt, aber noch gültig. Wir reaktivieren es.
+      // Die Abrechnung (und das end_date) bleiben unverändert.
+      console.log("Reactivating CANCELED subscription...");
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .update({
+          status: 'ACTIVE',
+          auto_renew: true,
+          // Wir ändern das end_date NICHT, da die aktuelle Periode weiterläuft.
+          // Die Zahlung wird erst am end_date fällig.
+        })
+        .eq('id', existingSub.id)
+        .select()
         .single();
 
-      subscriptionPrice = creator?.subscription_price || 0;
-    }
+      if (error) throw error;
 
-    const endDate = new Date();
-    endDate.setMonth(endDate.getMonth() + 1);
+      // Weder Follower-Zahl noch Willkommensnachricht sind nötig,
+      // da der User technisch gesehen nie "weg" war.
 
-    const subscriptionData: SubscriptionInsert = {
-      fan_id: user.id,
-      creator_id: creatorId,
-      tier_id: tierId || null,
-      price: subscriptionPrice,
-      status: 'ACTIVE',
-      end_date: endDate.toISOString(),
-      auto_renew: true,
-    };
+      return data;
 
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .insert(subscriptionData)
-      .select()
-      .single();
+    } else if (existingSub && existingSub.status === 'ACTIVE') {
+      // Sollte nicht passieren, da der Button "Abonniert" anzeigt
+      throw new Error('Already actively subscribed.');
 
-    if (error) throw error;
+    } else {
+      // 2.B NEUES ABO ERSTELLEN (Standard-Logik)
+      console.log("Creating NEW subscription...");
+      let subscriptionPrice = price;
+      if (subscriptionPrice === undefined || subscriptionPrice === null) {
+        if (!creatorId) throw new Error("Creator ID is missing for price lookup.");
 
-    // Diese Funktion ruft die korrigierte Hilfsfunktion auf
-    await this.updateFollowersCount(creatorId, 1);
+        const { data: creator } = await supabase
+          .from('users')
+          .select('subscription_price')
+          .eq('id', creatorId)
+          .single();
 
-    try {
-      const { data: creatorProfile } = await supabase
-        .from('users')
-        .select('display_name, welcome_message')
-        .eq('id', creatorId)
-        .single();
-
-      const customMessage = creatorProfile?.welcome_message;
-      const creatorName = creatorProfile?.display_name || 'dem Creator';
-
-      let messageToSend: string;
-
-      if (customMessage && customMessage.trim() !== '') {
-        messageToSend = customMessage;
-      } else {
-        messageToSend = `Vielen Dank für dein Abonnement bei ${creatorName}! Ich freue mich, dich hier zu haben.`;
+        subscriptionPrice = creator?.subscription_price || 0;
       }
 
-      await messageService.sendWelcomeMessage(creatorId, user.id, messageToSend);
+      const endDate = new Date();
+      endDate.setMonth(endDate.getMonth() + 1); // Läuft 1 Monat ab JETZT
 
-    } catch (msgError) {
-      console.error("Fehler beim Senden der Willkommensnachricht:", msgError);
+      const subscriptionData: SubscriptionInsert = {
+        fan_id: user.id,
+        creator_id: creatorId,
+        tier_id: tierId || null,
+        price: subscriptionPrice,
+        status: 'ACTIVE',
+        end_date: endDate.toISOString(),
+        auto_renew: true,
+      };
+
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .insert(subscriptionData)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Nur bei NEUEM Abo Follower-Zahl erhöhen
+      await this.updateFollowersCount(creatorId, 1);
+
+      // Nur bei NEUEM Abo Willkommensnachricht senden
+      try {
+        const { data: creatorProfile } = await supabase
+          .from('users')
+          .select('display_name, welcome_message')
+          .eq('id', creatorId)
+          .single();
+
+        const customMessage = creatorProfile?.welcome_message;
+        const creatorName = creatorProfile?.display_name || 'dem Creator';
+        let messageToSend: string;
+
+        if (customMessage && customMessage.trim() !== '') {
+          messageToSend = customMessage;
+        } else {
+          messageToSend = `Vielen Dank für dein Abonnement bei ${creatorName}! Ich freue mich, dich hier zu haben.`;
+        }
+        await messageService.sendWelcomeMessage(creatorId, user.id, messageToSend);
+      } catch (msgError) {
+        console.error("Fehler beim Senden der Willkommensnachricht:", msgError);
+      }
+
+      return data;
     }
-
-    return data;
   }
+  // --- ENDE DER ÄNDERUNG ---
 
   async cancelSubscription(subscriptionId: string) {
     const { data: { user } } = await supabase.auth.getUser();
@@ -121,7 +158,6 @@ export class SubscriptionService {
 
     if (error) throw error;
 
-    // Diese Funktion ruft die korrigierte Hilfsfunktion auf
     await this.updateFollowersCount(subscription.creator_id, -1);
   }
 
@@ -183,6 +219,7 @@ export class SubscriptionService {
     return !!data;
   }
 
+  // Diese Funktion holt Abos, die 'ACTIVE' sind ODER 'CANCELED' und noch gültig
   async getActiveSubscription(fanId: string, creatorId: string) {
     const { data, error } = await supabase
       .from('subscriptions')
@@ -196,15 +233,12 @@ export class SubscriptionService {
     return data;
   }
 
-  // --- HIER IST DIE KORREKTUR ---
   private async updateFollowersCount(creatorId: string, delta: number) {
-    // Der Parametername wurde von 'creator_id' in 'creator_id_input' geändert.
     await supabase.rpc('update_followers_count', {
       creator_id_input: creatorId,
       delta_value: delta,
     });
   }
-  // --- ENDE DER KORREKTUR ---
 
   private mapSubscriptionsToFrontend(subscriptions: any[]): Subscription[] {
     return subscriptions.map(sub => ({

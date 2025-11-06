@@ -68,6 +68,7 @@ export class UserService {
     minPrice?: number;
     maxPrice?: number;
     verified?: boolean;
+    // --- HINWEIS: Filter (price/type) aus SearchPage sind hier nicht implementiert ---
   }) {
     let queryBuilder = supabase
       .from('users')
@@ -96,11 +97,12 @@ export class UserService {
     return (data || []).map(user => this.mapToUserProfile(user));
   }
 
+  // Dies ist die Standardfunktion, die alle Creators lädt (sortiert nach Followern)
   async getTopCreators(limit: number = 20) {
     const { data, error } = await supabase
       .from('users')
       .select('*')
-      .eq('role', 'CREATOR')
+      .eq('role', 'CREATOR') // <-- Stellt sicher, dass nur Creators geladen werden
       .order('followers_count', { ascending: false })
       .limit(limit);
 

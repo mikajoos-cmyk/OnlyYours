@@ -27,14 +27,14 @@ export default function SearchPage() {
   const { toast } = useToast();
 
   const { user: currentUser } = useAuthStore();
-  const [subscribedCreatorIds, setSubscribedCreatorIds] = useState<Set<string>>(new Set());
+  const [subscriptionMap, setSubscriptionMap] = useState<Map<string, 'ACTIVE' | 'CANCELED'>>(new Map());
   const [isLoadingSubscriptions, setIsLoadingSubscriptions] = useState(true);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [selectedCreator, setSelectedCreator] = useState<UserProfile | null>(null);
 
   const popularTags = ['#luxury', '#fitness', '#behindthescenes', '4K', 'Live jetzt'];
 
-  // Effekt zum Laden der Abonnements
+  // Effekt zum Laden der Abonnements (unverändert)
   const fetchSubscriptions = async () => {
     if (!currentUser?.id) {
       setIsLoadingSubscriptions(false);
@@ -43,13 +43,11 @@ export default function SearchPage() {
     setIsLoadingSubscriptions(true);
     try {
       const subs = await subscriptionService.getUserSubscriptions();
-      // Zeigt "Abonniert" nur für 'ACTIVE' Abos
-      const subIds = new Set(
-        subs
-          .filter(s => s.status === 'ACTIVE')
-          .map(s => s.creatorId)
-      );
-      setSubscribedCreatorIds(subIds);
+      const subMap = new Map<string, 'ACTIVE' | 'CANCELED'>();
+      for (const sub of subs) {
+        subMap.set(sub.creatorId, sub.status);
+      }
+      setSubscriptionMap(subMap);
     } catch (err) {
       console.error("Fehler beim Laden der Abonnements:", err);
       toast({ title: "Fehler", description: "Abonnements konnten nicht geladen werden.", variant: "destructive" });
@@ -60,9 +58,9 @@ export default function SearchPage() {
 
   useEffect(() => {
     fetchSubscriptions();
-  }, [currentUser?.id, toast]);
+  }, [currentUser?.id]);
 
-  // Effekt zum Suchen/Laden von Creators
+  // Effekt zum Suchen/Laden von Creators (Goal 1 Fix)
   useEffect(() => {
     const fetchCreators = async () => {
       try {
@@ -70,8 +68,11 @@ export default function SearchPage() {
         setError(null);
 
         if (!searchQuery && priceFilter === 'all' && contentType === 'all') {
+          // --- HIER IST DIE KORREKTUR (Goal 1) ---
+          // Zurück zur ursprünglichen Logik: Lade Top Creators (alle mit Rolle Creator)
           const topCreators = await userService.getTopCreators();
           setCreators(topCreators || []);
+          // --- ENDE DER KORREKTUR ---
         } else {
           const filters = { price: priceFilter, type: contentType };
           const searchResults = await userService.searchCreators(searchQuery, filters);
@@ -101,7 +102,7 @@ export default function SearchPage() {
       toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um zu abonnieren.", variant: "destructive" });
       return;
     }
-    setSelectedCreator(creator); // <-- Speichert das *ganze* Creator-Objekt
+    setSelectedCreator(creator);
     setShowSubscriptionModal(true);
   };
 
@@ -110,13 +111,10 @@ export default function SearchPage() {
     toast({ title: "Abonnement", description: "Verwalte deine Abonnements in deinem Profil." });
   };
 
-  // --- KORREKTUR: Neuer Callback für erfolgreiches Abo ---
   const handleSubscriptionComplete = (subscribedCreatorId: string) => {
-    // UI sofort aktualisieren
-    setSubscribedCreatorIds(prev => new Set(prev).add(subscribedCreatorId));
+    setSubscriptionMap(prev => new Map(prev).set(subscribedCreatorId, 'ACTIVE'));
     setShowSubscriptionModal(false);
   };
-  // --- ENDE KORREKTUR ---
 
   return (
     <>
@@ -207,7 +205,7 @@ export default function SearchPage() {
             {!loading && !error && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {creators.map((creator) => {
-                  const isSubscribed = subscribedCreatorIds.has(creator.id);
+                  const subscriptionStatus = subscriptionMap.get(creator.id);
                   const isOwnProfile = currentUser?.id === creator.id;
 
                   return (
@@ -239,25 +237,37 @@ export default function SearchPage() {
                           </div>
                         </div>
 
+                        {/* --- HIER IST DIE KORREKTUR (Goal 2) --- */}
                         {!isOwnProfile && (
                           <Button
                             onClick={(e) => {
                               e.stopPropagation();
-                              isSubscribed ? handleManageSubscriptionClick() : handleSubscribeClick(creator);
+                              // Nur wenn Status 'ACTIVE' ist -> Verwalten
+                              // Wenn 'CANCELED' oder 'null' -> Abonnieren/Reaktivieren
+                              if (subscriptionStatus === 'ACTIVE') {
+                                handleManageSubscriptionClick();
+                              } else {
+                                handleSubscribeClick(creator);
+                              }
                             }}
                             disabled={isLoadingSubscriptions}
                             className={cn(
                               "font-normal transition-colors duration-200 flex-shrink-0",
-                              isSubscribed
-                                ? "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10 px-3"
-                                : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                              subscriptionStatus === 'ACTIVE' && "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10 px-3",
+                              subscriptionStatus === 'CANCELED' && "bg-transparent border-2 border-border text-muted-foreground hover:bg-neutral px-3", // Gekündigt-Style
+                              !subscriptionStatus && "bg-secondary text-secondary-foreground hover:bg-secondary/90" // Nicht abonniert-Style
                             )}
                           >
                             {isLoadingSubscriptions ? '...' : (
-                              isSubscribed ? (
+                              subscriptionStatus === 'ACTIVE' ? (
                                 <>
                                   <CheckIcon className="w-4 h-4 mr-1" strokeWidth={2} />
                                   Abonniert
+                                </>
+                              ) : subscriptionStatus === 'CANCELED' ? (
+                                <>
+                                  <CheckIcon className="w-4 h-4 mr-1" strokeWidth={2} />
+                                  Gekündigt
                                 </>
                               ) : (
                                 'Abonnieren'
@@ -265,6 +275,7 @@ export default function SearchPage() {
                             )}
                           </Button>
                         )}
+                        {/* --- ENDE DER KORREKTUR --- */}
                       </div>
                     </Card>
                   );
@@ -275,18 +286,16 @@ export default function SearchPage() {
         </div>
       </div>
 
-      {/* --- KORREKTUR: Props an SubscriptionModal übergeben --- */}
       {showSubscriptionModal && selectedCreator && (
         <SubscriptionModal
           isOpen={showSubscriptionModal}
           onClose={() => setShowSubscriptionModal(false)}
           creator={{
-            id: selectedCreator.id, // Die ID wird jetzt korrekt übergeben
+            id: selectedCreator.id,
             name: selectedCreator.displayName,
             subscriptionPrice: selectedCreator.subscriptionPrice,
           }}
-          // Neuer Callback wird übergeben
-          onSubscriptionComplete={() => handleSubscriptionComplete(selectedCreator.id)}
+          onPaymentSuccess={() => handleSubscriptionComplete(selectedCreator.id)}
         />
       )}
     </>

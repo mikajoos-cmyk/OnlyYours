@@ -15,7 +15,6 @@ import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../hooks/use-toast';
 import { cn } from '../../lib/utils';
 
-// Interne Typdefinition für die Grid-Ansicht
 interface GridPost {
   id: string;
   thumbnailUrl: string;
@@ -37,7 +36,7 @@ export default function CreatorProfile() {
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<'ACTIVE' | 'CANCELED' | null>(null);
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
 
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
@@ -56,7 +55,7 @@ export default function CreatorProfile() {
       setError(null);
       setCreator(null);
       setPosts([]);
-      setIsSubscribed(false);
+      setSubscriptionStatus(null);
       setIsLoadingSubscription(true);
 
       try {
@@ -98,16 +97,16 @@ export default function CreatorProfile() {
     const checkSubscriptionStatus = async () => {
       if (!creator || !currentUser || creator.id === currentUser.id) {
           setIsLoadingSubscription(false);
-          setIsSubscribed(false);
+          setSubscriptionStatus(null);
           return;
       }
       setIsLoadingSubscription(true);
       try {
         const activeSubscription = await subscriptionService.getActiveSubscription(currentUser.id, creator.id);
-        setIsSubscribed(!!activeSubscription);
+        setSubscriptionStatus(activeSubscription ? activeSubscription.status : null);
       } catch (error) {
         console.error("Fehler beim Prüfen des Abonnements:", error);
-        setIsSubscribed(false);
+        setSubscriptionStatus(null);
       } finally {
         setIsLoadingSubscription(false);
       }
@@ -118,6 +117,7 @@ export default function CreatorProfile() {
     }
   }, [creator, currentUser, isLoadingProfile]);
 
+  // ... (Lade- und Fehler-JSX) ...
   if (isLoadingProfile) {
     return <div className="flex justify-center items-center h-screen"><p className="text-foreground">Lade Profil...</p></div>;
   }
@@ -149,14 +149,12 @@ export default function CreatorProfile() {
     toast({ title: "Abonnement", description: "Verwalte deine Abonnements in deinem Profil." });
   };
 
-  // --- NEU: Callback für erfolgreiches Abo ---
   const handleSubscriptionComplete = (subscribedCreatorId: string) => {
-    // UI sofort aktualisieren
-    setIsSubscribed(true);
+    setSubscriptionStatus('ACTIVE');
     setShowSubscriptionModal(false);
   };
-  // --- ENDE NEU ---
 
+  // ... (Daten-Transformationen) ...
   const gridPosts: GridPost[] = posts.map(p => ({
       id: p.id,
       thumbnailUrl: p.thumbnail_url || p.mediaUrl,
@@ -189,6 +187,7 @@ export default function CreatorProfile() {
   return (
     <>
       <div className={`min-h-screen ${showPostFeed ? 'hidden' : ''} pb-16 md:pb-0`}>
+         {/* ... (Header/Avatar-JSX) ... */}
          <div className="relative h-64 md:h-80 bg-neutral">
           {creator.bannerUrl && ( <img src={creator.bannerUrl} alt="Banner" className="w-full h-full object-cover" loading="lazy"/> )}
           <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
@@ -207,7 +206,6 @@ export default function CreatorProfile() {
                 {creator.isVerified && ( <Badge className="bg-secondary text-secondary-foreground font-normal">Verifiziert</Badge> )}
               </div>
               <p className="text-lg text-secondary">@{creator.username}</p>
-
               <p className="text-muted-foreground max-w-md">{creator.bio || 'Keine Bio vorhanden.'}</p>
               <div className="flex items-center justify-center gap-2 text-foreground">
                 <UsersIcon className="w-5 h-5" strokeWidth={1.5} />
@@ -215,31 +213,41 @@ export default function CreatorProfile() {
               </div>
             </div>
 
+            {/* --- HIER IST DIE KORREKTUR (Goal 2) --- */}
             {currentUser && currentUser.id !== creator.id && (
                  <Button
-                    onClick={isSubscribed ? handleManageSubscriptionClick : handleSubscribeClick}
+                    // Wenn Status 'ACTIVE' -> Verwalten.
+                    // Wenn 'CANCELED' oder 'null' -> Abonnieren/Reaktivieren (Modal öffnen)
+                    onClick={subscriptionStatus === 'ACTIVE' ? handleManageSubscriptionClick : handleSubscribeClick}
                     disabled={isLoadingSubscription}
                     className={cn(
                         "px-8 py-6 text-base font-normal w-64 transition-colors duration-200",
-                        isSubscribed
-                         ? "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10"
-                         : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                        subscriptionStatus === 'ACTIVE' && "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10",
+                        subscriptionStatus === 'CANCELED' && "bg-transparent border-2 border-border text-muted-foreground hover:bg-neutral", // Gekündigt-Style
+                        !subscriptionStatus && "bg-secondary text-secondary-foreground hover:bg-secondary/90" // Nicht abonniert-Style
                     )}
                  >
                     {isLoadingSubscription ? (
                         'Laden...'
-                    ) : isSubscribed ? (
+                    ) : subscriptionStatus === 'ACTIVE' ? (
                         <>
                             <CheckIcon className="w-5 h-5 mr-2" strokeWidth={2} />
                             Abonniert
+                        </>
+                    ) : subscriptionStatus === 'CANCELED' ? (
+                        <>
+                            <CheckIcon className="w-5 h-5 mr-2" strokeWidth={2} />
+                            Gekündigt
                         </>
                     ) : (
                         `Abonnieren für ${creator.subscriptionPrice.toFixed(2)}€/Monat`
                     )}
                  </Button>
             )}
+            {/* --- ENDE DER KORREKTUR --- */}
           </div>
 
+          {/* ... (Restliches JSX mit Tabs und Posts) ... */}
           <div className="mt-16 mb-8">
              <Tabs defaultValue="all" className="w-full">
               <TabsList className="bg-card border border-border w-full justify-start">
@@ -295,20 +303,16 @@ export default function CreatorProfile() {
         </div>
       </div>
 
-      {/* --- HIER IST DIE KORREKTUR --- */}
-      <SubscriptionModal
+       <SubscriptionModal
         isOpen={showSubscriptionModal}
         onClose={() => setShowSubscriptionModal(false)}
         creator={{
-          id: creator.id, // <-- DIESE ZEILE WURDE HINZUGEFÜGT
+          id: creator.id,
           name: creator.displayName,
           subscriptionPrice: creator.subscriptionPrice,
         }}
-        // Callback für UI-Update
         onSubscriptionComplete={() => handleSubscriptionComplete(creator.id)}
       />
-      {/* --- ENDE DER KORREKTUR --- */}
-
 
       {showPostFeed && formattedPostsForViewer.length > 0 && (
         <ProfilePostViewer
