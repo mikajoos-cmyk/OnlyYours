@@ -8,17 +8,21 @@ import { Label } from '../ui/label';
 import { useToast } from '../../hooks/use-toast';
 import { subscriptionService } from '../../services/subscriptionService'; // <-- Importiert
 
+// Erwartet jetzt dbId
+interface ModalTier {
+  id: string;
+  dbId: string | null; // Die ID für die Datenbank
+  name: string;
+  price: number;
+}
+
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  tier: {
-    id: string; // z.B. 'vip'
-    name: string;
-    price: number;
-  };
-  creatorId: string; // <-- Prop ist jetzt hier
+  tier: ModalTier; // Verwendet das aktualisierte Interface
+  creatorId: string;
   creatorName: string;
-  onPaymentSuccess: () => void; // <-- Prop ist jetzt hier
+  onPaymentSuccess: () => void;
 }
 
 export default function PaymentModal({ isOpen, onClose, tier, creatorId, creatorName, onPaymentSuccess }: PaymentModalProps) {
@@ -34,10 +38,10 @@ export default function PaymentModal({ isOpen, onClose, tier, creatorId, creator
   const handlePayment = async () => {
     setIsProcessing(true);
     try {
-      // --- KORREKTUR: creatorId wird jetzt hier verwendet ---
+      // --- KORREKTUR: tier.dbId wird jetzt hier verwendet ---
       await subscriptionService.subscribe(
         creatorId,
-        null, // tierId (null = Standard-Abo)
+        tier.dbId, // Übergibt 'null' (Basis) oder die Tier-UUID
         tier.price
       );
       // --- ENDE KORREKTUR ---

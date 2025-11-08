@@ -38,7 +38,7 @@ export default function CreatorProfile() {
   const [isAvatarLoading, setIsAvatarLoading] = useState(false);
   const [isBannerLoading, setIsBannerLoading] = useState(false);
   const [isInfoLoading, setIsInfoLoading] = useState(false);
-  const [isMonetizationLoading, setIsMonetizationLoading] = useState(false);
+  // const [isMonetizationLoading, setIsMonetizationLoading] = useState(false); // Entfernt
   const [isCommunicationLoading, setIsCommunicationLoading] = useState(false);
 
   // States für Formular "Branding"
@@ -50,10 +50,12 @@ export default function CreatorProfile() {
   const [bio, setBio] = useState(user?.bio || '');
 
   // States für Formular "Monetarisierung"
-  const [subscriptionPrice, setSubscriptionPrice] = useState(
-    user?.subscriptionPrice ? user.subscriptionPrice.toFixed(2) : '0.00'
-  );
-  // --- NEU: Tiers ---
+  // --- ENTFERNT: Basis-Abo-Preis ---
+  // const [subscriptionPrice, setSubscriptionPrice] = useState(
+  //   user?.subscriptionPrice ? user.subscriptionPrice.toFixed(2) : '0.00'
+  // );
+  // --- ENDE ---
+
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [isTierLoading, setIsTierLoading] = useState(false);
   const [showTierDialog, setShowTierDialog] = useState(false);
@@ -61,7 +63,6 @@ export default function CreatorProfile() {
   const [tierName, setTierName] = useState('');
   const [tierPrice, setTierPrice] = useState('');
   const [tierDescription, setTierDescription] = useState('');
-  // --- ENDE NEU ---
 
   // States für Formular "Kommunikation"
   const [welcomeMessage, setWelcomeMessage] = useState(user?.welcomeMessage || '');
@@ -72,12 +73,12 @@ export default function CreatorProfile() {
       setDisplayName(user.name || '');
       setUsername(user.username || '');
       setBio(user.bio || '');
-      setSubscriptionPrice(user.subscriptionPrice ? user.subscriptionPrice.toFixed(2) : '0.00');
+      // setSubscriptionPrice(user.subscriptionPrice ? user.subscriptionPrice.toFixed(2) : '0.00'); // Entfernt
       setWelcomeMessage(user.welcomeMessage || '');
     }
   }, [user]);
 
-  // --- NEU: Tiers laden ---
+  // Tiers laden
   const fetchTiers = async () => {
     if (!user?.id) return;
     setIsTierLoading(true);
@@ -94,11 +95,9 @@ export default function CreatorProfile() {
   useEffect(() => {
     fetchTiers();
   }, [user?.id]);
-  // --- ENDE NEU ---
 
 
   // --- HANDLER FÜR PROFIL-UPDATES ---
-  // ... (handleAvatarUpload, handleBannerUpload, handleBrandingSave, handleInfoSave bleiben gleich) ...
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -159,28 +158,9 @@ export default function CreatorProfile() {
     }
   };
 
-  // --- Monetarisierung (Standard-Preis) ---
-  const handleMonetizationSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsMonetizationLoading(true);
-    const price = parseFloat(subscriptionPrice);
-    if (isNaN(price) || price < 0) {
-        toast({ title: "Fehler", description: "Ungültiger Preis. Bitte geben Sie eine positive Zahl ein.", variant: "destructive" });
-        setIsMonetizationLoading(false);
-        return;
-    }
-
-    try {
-        await updateProfile({
-            subscription_price: price, // Dies ist der *Basis-Preis*
-        });
-        toast({ title: "Monetarisierung gespeichert!" });
-    } catch (error: any) {
-         toast({ title: "Speichern fehlgeschlagen", description: error.message, variant: "destructive" });
-    } finally {
-        setIsMonetizationLoading(false);
-    }
-  };
+  // --- ENTFERNT: handleMonetizationSave (Basis-Preis) ---
+  // const handleMonetizationSave = ...
+  // --- ENDE ---
 
   // --- Kommunikation ---
   const handleCommunicationSave = async (e: React.FormEvent) => {
@@ -198,7 +178,7 @@ export default function CreatorProfile() {
       }
   };
 
-  // --- NEU: TIER DIALOG HANDLER ---
+  // --- TIER DIALOG HANDLER (Unverändert) ---
   const openNewTierDialog = () => {
     setCurrentTier(null);
     setTierName('');
@@ -230,7 +210,6 @@ export default function CreatorProfile() {
           name: tierName,
           price: price,
           description: tierDescription,
-          // benefits: (Hier könnten Sie eine komplexere Eingabe für Benefits hinzufügen)
         });
         toast({ title: "Stufe aktualisiert!" });
       } else {
@@ -239,11 +218,11 @@ export default function CreatorProfile() {
           name: tierName,
           price: price,
           description: tierDescription,
-          benefits: [], // Vorerst leere Benefits
+          benefits: [],
         });
         toast({ title: "Stufe erstellt!" });
       }
-      await fetchTiers(); // Liste neu laden
+      await fetchTiers();
       setShowTierDialog(false);
     } catch (error: any) {
       toast({ title: "Speichern fehlgeschlagen", description: error.message, variant: "destructive" });
@@ -267,7 +246,7 @@ export default function CreatorProfile() {
       setIsTierLoading(false);
     }
   };
-  // --- ENDE NEU ---
+  // --- ENDE TIER HANDLER ---
 
 
   return (
@@ -419,7 +398,6 @@ export default function CreatorProfile() {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleInfoSave} className="space-y-6">
-                    {/* ... (Bio, Standort, Twitter) ... */}
                     <div className="space-y-2">
                       <Label htmlFor="bio" className="text-foreground">Biografie</Label>
                       <Textarea
@@ -472,43 +450,10 @@ export default function CreatorProfile() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {/* Formular für den *Basis*-Abonnementpreis */}
-                  <form onSubmit={handleMonetizationSave} className="space-y-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="subscription-price" className="text-foreground">
-                        Basis-Abonnementpreis (Standard)
-                      </Label>
-                      <div className="relative">
-                        <Input
-                          id="subscription-price"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={subscriptionPrice}
-                          onChange={(e) => setSubscriptionPrice(e.target.value)}
-                          className="bg-background text-foreground border-border pr-12"
-                          disabled={isMonetizationLoading}
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                          €/Monat
-                        </span>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Dies ist der Standardpreis für "Alle Abonnenten". (0€ für kostenloses Profil).
-                      </p>
-                    </div>
-                    <Button
-                      type="submit"
-                      className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
-                      disabled={isMonetizationLoading}
-                    >
-                      {isMonetizationLoading && <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />}
-                      Basis-Preis speichern
-                    </Button>
-                  </form>
+                  {/* --- Formular für Basis-Abo ENTFERNT --- */}
 
                   {/* Abschnitt für Abonnement-Stufen (Tiers) */}
-                  <div className="border-t border-border pt-6 mt-6">
+                  <div className="pt-6 mt-6">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-foreground font-medium">
                         Abonnement-Stufen (Tiers)
@@ -524,12 +469,17 @@ export default function CreatorProfile() {
                       </Button>
                     </div>
 
+                    <p className="text-sm text-muted-foreground mb-4">
+                        Fans können nur die Stufen abonnieren, die Sie hier erstellen.
+                        Wenn keine Stufen vorhanden sind, können Fans Ihr Profil nicht abonnieren.
+                    </p>
+
                     {isTierLoading && <p className="text-muted-foreground">Lade Stufen...</p>}
 
                     <div className="space-y-4">
                       {tiers.length === 0 && !isTierLoading && (
                         <p className="text-sm text-muted-foreground">
-                          Sie haben noch keine zusätzlichen Abonnement-Stufen erstellt.
+                          Sie haben noch keine Abonnement-Stufen erstellt.
                         </p>
                       )}
                       {tiers.map((tier) => (
@@ -572,7 +522,6 @@ export default function CreatorProfile() {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleCommunicationSave} className="space-y-6">
-                    {/* ... (Willkommensnachricht) ... */}
                     <div className="space-y-2">
                       <Label htmlFor="welcome-message" className="text-foreground">
                           Willkommensnachricht für neue Abonnenten
@@ -586,7 +535,7 @@ export default function CreatorProfile() {
                           disabled={isCommunicationLoading}
                       />
                       <p className="text-sm text-muted-foreground">
-                          Diese Nachricht wird automatisch an jeden neuen Abonnenten gesendet.
+                          Diese Nachricht wird automatisch an jeden neuen Abonnenten gesendet (gilt für alle Stufen).
                       </p>
                     </div>
 
@@ -605,7 +554,7 @@ export default function CreatorProfile() {
           </Tabs>
       </div>
 
-      {/* --- NEU: Dialog für Tier Erstellung/Bearbeitung --- */}
+      {/* --- Dialog für Tier Erstellung/Bearbeitung (Unverändert) --- */}
       <Dialog open={showTierDialog} onOpenChange={setShowTierDialog}>
         <DialogContent className="bg-card border-border">
           <DialogHeader>
@@ -648,7 +597,6 @@ export default function CreatorProfile() {
                 className="bg-background text-foreground border-border"
               />
             </div>
-            {/* Hier könnte eine dynamische Liste für "Benefits" hinzugefügt werden */}
           </div>
           <DialogFooter>
             <DialogClose asChild>
@@ -667,7 +615,6 @@ export default function CreatorProfile() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* --- ENDE DIALOG --- */}
     </>
   );
 }

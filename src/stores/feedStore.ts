@@ -1,33 +1,16 @@
 import { create } from 'zustand';
 import { postService } from '../services/postService';
+// Importiere den Post-Typ direkt vom Service, um Duplizierung zu vermeiden
+import type { Post as ServicePostData } from '../services/postService';
 
-interface Creator {
-  id: string;
-  name: string;
-  avatar: string;
-  isVerified: boolean;
-  bio: string;
-  followers: number;
-  subscriptionPrice: number;
-}
-
-interface Post {
-  id: string;
-  creatorId: string;
-  creator: Creator;
-  mediaUrl: string;
-  mediaType: 'image' | 'video';
-  caption: string;
-  hashtags: string[];
-  likes: number;
-  comments: number;
-  isLiked: boolean;
-}
+// Verwende den Service-Post-Typ (der jetzt price/tier_id enthält)
+interface Post extends ServicePostData {}
 
 interface FeedState {
   posts: Post[];
   currentIndex: number;
   isLoading: boolean;
+  error: string | null; // Fehler-Handling hinzugefügt
   loadDiscoveryPosts: () => Promise<void>;
   loadSubscriberPosts: () => Promise<void>;
   loadCreatorPosts: (creatorId: string) => Promise<void>;
@@ -40,34 +23,35 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   posts: [],
   currentIndex: 0,
   isLoading: false,
+  error: null, // Initialer Fehlerstatus
   loadDiscoveryPosts: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, error: null }); // Fehler zurücksetzen
     try {
       const posts = await postService.getDiscoveryFeed(20);
       set({ posts, currentIndex: 0, isLoading: false });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load discovery posts:', error);
-      set({ isLoading: false });
+      set({ isLoading: false, error: error.message || 'Fehler beim Laden' });
     }
   },
   loadSubscriberPosts: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, error: null });
     try {
       const posts = await postService.getSubscriberFeed(20);
       set({ posts, currentIndex: 0, isLoading: false });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load subscriber posts:', error);
-      set({ isLoading: false });
+      set({ isLoading: false, error: error.message || 'Fehler beim Laden' });
     }
   },
   loadCreatorPosts: async (creatorId: string) => {
-    set({ isLoading: true });
+    set({ isLoading: true, error: null });
     try {
       const posts = await postService.getCreatorPosts(creatorId, 20);
       set({ posts, currentIndex: 0, isLoading: false });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load creator posts:', error);
-      set({ isLoading: false });
+      set({ isLoading: false, error: error.message || 'Fehler beim Laden' });
     }
   },
   nextPost: () =>

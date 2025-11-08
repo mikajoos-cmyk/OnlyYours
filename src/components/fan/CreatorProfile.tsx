@@ -4,34 +4,29 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { UsersIcon, GridIcon, VideoIcon, CheckIcon, LockIcon } from 'lucide-react'; // LockIcon hinzugefügt
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { UsersIcon, GridIcon, VideoIcon, CheckIcon, LockIcon, MessageCircleIcon, HeartIcon, LayoutGrid, Image as ImageIcon, Film as FilmIcon } from 'lucide-react';
 import SubscriptionModal from './SubscriptionModal';
-// WICHTIG: Importiere den aktualisierten ProfilePostViewer
 import ProfilePostViewer from './ProfilePostViewer';
-import type { PostData as ViewerPostData } from './ProfilePostViewer'; // Typimport
+import type { PostData as ViewerPostData } from './ProfilePostViewer';
 import { userService, UserProfile } from '../../services/userService';
 import { postService, Post as ServicePostData } from '../../services/postService';
-import { subscriptionService } from '../../services/subscriptionService';
+import { tierService, Tier } from '../../services/tierService';
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../hooks/use-toast';
 import { cn } from '../../lib/utils';
-// --- NEUE IMPORTS ---
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
-import PpvModal from './PpvModal'; // PPV Modal für das Grid
-// --- ENDE ---
+import PpvModal from './PpvModal';
 
-
-// Interne Typdefinition für die Grid-Ansicht (jetzt mit Zugriffs-Info)
+// Interne Typdefinition für die Grid-Ansicht
 interface GridPost {
   id: string;
   thumbnailUrl: string;
   type: 'image' | 'video';
-  caption: string;
+  caption: string | null;
   likes: number;
   comments: number;
-  hasAccess: boolean; // <-- NEU
-  price: number; // <-- NEU
+  hasAccess: boolean;
+  price: number;
 }
 
 export default function CreatorProfile() {
@@ -39,338 +34,416 @@ export default function CreatorProfile() {
   const navigate = useNavigate();
   const { user: currentUser } = useAuthStore();
   const { toast } = useToast();
-
-  // --- NEUER STORE ---
   const { checkAccess, addPurchasedPost, isLoading: isLoadingSubs } = useSubscriptionStore();
-  // --- ENDE ---
 
   const [creator, setCreator] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<ServicePostData[]>([]);
+  const [creatorTiers, setCreatorTiers] = useState<Tier[]>([]);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [isSubscribed, setIsSubscribed] = useState(false);
-  // isLoadingSubscription wird durch isLoadingSubs aus dem Store ersetzt
-  // const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<'ACTIVE' | 'CANCELED' | null>(null);
 
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [selectedPostIndex, setSelectedPostIndex] = useState<number>(0);
   const [showPostFeed, setShowPostFeed] = useState(false);
 
-  // --- NEU: PPV Modal State ---
   const [showPpvModal, setShowPpvModal] = useState(false);
   const [selectedPostForPpv, setSelectedPostForPpv] = useState<ServicePostData | null>(null);
-  // --- ENDE ---
 
+  // --- AKTUALISIERT: Filter-State akzeptiert jetzt Tier-IDs ---
+  const [postFilter, setPostFilter] = useState<string>('all'); // z.B. 'all', 'images', 'videos', oder tier-uuid
 
-  // 1. Creator-Profil laden
+  // 1. Creator-Profil UND Tiers laden
   useEffect(() => {
-    const fetchCreator = async () => {
+    const fetchCreatorData = async () => {
       if (!username) {
-          setError('Kein Benutzername in der URL gefunden.');
-          setIsLoadingProfile(false);
-          return;
-      };
+        setError('Kein Benutzername in der URL gefunden.');
+        setIsLoadingProfile(false);
+        return;
+      }
       setIsLoadingProfile(true);
       setError(null);
       setCreator(null);
       setPosts([]);
-      setIsSubscribed(false);
-      // setIsLoadingSubscription(true); // Ersetzt durch isLoadingSubs
+      setCreatorTiers([]);
+      setSubscriptionStatus(null);
 
       try {
         const profile = await userService.getUserByUsername(username);
         if (!profile) {
           setError('Benutzer nicht gefunden.');
-        } else {
-            setCreator(profile);
+          setIsLoadingProfile(false);
+          return;
         }
+        setCreator(profile);
+
+        // Tiers sortiert nach Preis laden
+        const tiers = await tierService.getCreatorTiers(profile.id);
+        setCreatorTiers(tiers.sort((a, b) => a.price - b.price) || []);
+
+        setIsLoadingPosts(true);
+        const fetchedPosts = await postService.getCreatorPosts(profile.id);
+        setPosts(fetchedPosts);
+
       } catch (err: any) {
-        console.error("Fehler beim Laden des Profils:", err);
+        console.error("Fehler beim Laden des Profils oder der Tiers:", err);
         setError('Profil konnte nicht geladen werden.');
       } finally {
         setIsLoadingProfile(false);
-      }
-    };
-    fetchCreator();
-  }, [username]);
-
-  // 2. Posts laden
-  useEffect(() => {
-    const fetchPosts = async () => {
-      if (!creator || !creator.id) return;
-      setIsLoadingPosts(true);
-      try {
-        const fetchedPosts = await postService.getCreatorPosts(creator.id);
-        setPosts(fetchedPosts);
-      } catch (err: any) {
-        console.error("Fehler beim Laden der Posts:", err);
-      } finally {
         setIsLoadingPosts(false);
       }
     };
-    fetchPosts();
-  }, [creator]);
+    fetchCreatorData();
+  }, [username]);
 
-  // 3. Abonnement-Status prüfen (über den Store)
+  // 2. Abonnement-Status prüfen
   useEffect(() => {
     if (!isLoadingProfile && !isLoadingSubs && creator && currentUser) {
-      const sub = useSubscriptionStore.getState().subscriptionMap.get(creator.id);
-      const isActive = sub && (sub.status === 'ACTIVE' || (sub.status === 'CANCELED' && sub.endDate && new Date(sub.endDate) > new Date()));
-      setIsSubscribed(!!isActive);
+      const subMap = useSubscriptionStore.getState().subscriptionMap;
+      const activeSub = Array.from(subMap.values()).find(s => {
+          if (s.creatorId !== creator.id) return false;
+          const isStillValid = s.endDate && new Date(s.endDate) > new Date();
+          if (s.status === 'ACTIVE') return true;
+          if (s.status === 'CANCELED' && isStillValid) return true;
+          return false;
+      });
+
+      if (!activeSub) {
+        setSubscriptionStatus(null);
+        return;
+      }
+
+      const allActiveSubs = Array.from(subMap.values()).filter(s => s.creatorId === creator.id && (s.status === 'ACTIVE' || (s.status === 'CANCELED' && s.endDate && new Date(s.endDate) > new Date())));
+      const isAnyActive = allActiveSubs.some(s => s.status === 'ACTIVE');
+      setSubscriptionStatus(isAnyActive ? 'ACTIVE' : 'CANCELED');
+
+    } else if (!currentUser || creator?.id === creator?.id) {
+        setSubscriptionStatus(null);
     }
-    if (!currentUser || creator?.id === currentUser?.id) {
-        setIsSubscribed(false);
-    }
-  }, [creator, currentUser, isLoadingProfile, isLoadingSubs]);
+  }, [creator, currentUser, isLoadingProfile, isLoadingSubs, useSubscriptionStore.getState().subscriptionMap]);
 
 
-  if (isLoadingProfile || isLoadingSubs) { // Ladeanzeige, während Profil ODER Abos laden
-    return <div className="flex justify-center items-center h-screen"><p className="text-foreground">Lade Profil...</p></div>;
+  if (isLoadingProfile) {
+    return <div className="flex justify-center items-center h-screen bg-background"><p className="text-muted-foreground">Lade Profil...</p></div>;
   }
   if (error && !creator) {
-    return <div className="flex justify-center items-center h-screen"><p className="text-destructive">{error}</p></div>;
+    return <div className="flex justify-center items-center h-screen bg-background"><p className="text-destructive">{error}</p></div>;
   }
   if (!creator) {
-    return <div className="flex justify-center items-center h-screen"><p className="text-muted-foreground">Benutzer konnte nicht geladen werden.</p></div>;
+    return <div className="flex justify-center items-center h-screen bg-background"><p className="text-muted-foreground">Benutzer konnte nicht geladen werden.</p></div>;
   }
 
-  // --- AKTUALISIERTE HANDLER ---
+  // --- HANDLER ---
+
+  // Klick auf Abo-Button (im Header ODER im PpvModal)
+  const handleSubscribeClick = () => {
+    if (!currentUser) {
+      toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um zu abonnieren.", variant: "destructive" });
+      return;
+    }
+    setShowPpvModal(false);
+    setTimeout(() => {
+        setShowSubscriptionModal(true);
+    }, 150);
+  };
+
+  // --- AKTUALISIERTER GRID-KLICK ---
   const handlePostClick = (index: number, hasAccess: boolean) => {
-    setSelectedPostIndex(index);
+    const postFromGrid = filteredPosts[index];
+    if (!postFromGrid) return;
+
+    const originalPost = posts.find(p => p.id === postFromGrid.id);
+    if (!originalPost) return;
+
     if (hasAccess) {
-      setShowPostFeed(true); // Zugriff -> Öffne Viewer
+      const originalPostIndex = posts.findIndex(p => p.id === postFromGrid.id);
+      if (originalPostIndex > -1) {
+        setSelectedPostIndex(originalPostIndex);
+        setShowPostFeed(true);
+      }
     } else {
-      // Kein Zugriff -> Öffne PPV-Modal
-      setSelectedPostForPpv(posts[index]);
+      // WENN KEIN ZUGRIFF:
+      // Öffne das PPV-Modal, das die "ODER"-Logik enthält
+      setSelectedPostForPpv(originalPost);
       setShowPpvModal(true);
     }
   };
+
   const handleClosePostFeed = () => {
     setShowPostFeed(false);
   };
-  const handleSubscribeClick = () => {
-    if (!currentUser) {
-        toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um zu abonnieren.", variant: "destructive" });
-        return;
-    }
-    setShowSubscriptionModal(true);
-  };
+
   const handleManageSubscriptionClick = () => {
     navigate('/profile');
     toast({ title: "Abonnement", description: "Verwalte deine Abonnements in deinem Profil." });
   };
 
   const handleSubscriptionComplete = (subscribedCreatorId: string) => {
-    setIsSubscribed(true); // UI sofort aktualisieren
+    setSubscriptionStatus('ACTIVE');
     setShowSubscriptionModal(false);
-    // Store neu laden (wird automatisch beim nächsten Check Access berücksichtigt)
     useSubscriptionStore.getState().loadSubscriptions();
-    // Posts neu laden, da sich der Zugriff geändert hat (optional, aber gut für RLS)
     if (creator) postService.getCreatorPosts(creator.id).then(setPosts);
   };
 
   const handlePurchaseSuccess = (postId: string) => {
-    addPurchasedPost(postId); // UI optimistisch aktualisieren
+    addPurchasedPost(postId);
     setShowPpvModal(false);
-    // Öffne den Post-Viewer, nachdem der Kauf erfolgreich war
-    setShowPostFeed(true);
-  };
-  // --- ENDE HANDLER ---
-
-  const formatCurrency = (value: number) => {
-    return `€${value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const postIndex = posts.findIndex(p => p.id === postId);
+    if (postIndex > -1) {
+      setSelectedPostIndex(postIndex);
+      setShowPostFeed(true);
+    }
+    if (creator) postService.getCreatorPosts(creator.id).then(setPosts);
   };
 
   const isOwnProfile = currentUser?.id === creator.id;
 
-  // Posts für das Grid und den Viewer aufbereiten
-  // WICHTIG: Wir verwenden checkAccess HIER, um zu bestimmen, ob der Post gesperrt ist
-  const gridPosts: GridPost[] = posts.map((post) => {
-    // Führe den Zugriffs-Check für jeden Post durch
+  // --- AKTUALISIERTE FILTER-LOGIK ---
+  const filteredPosts = posts.filter(post => {
+    if (postFilter === 'all') {
+      return true; // Zeige alle
+    }
+    if (postFilter === 'images') {
+      return post.mediaType === 'image';
+    }
+    if (postFilter === 'videos') {
+      return post.mediaType === 'video';
+    }
+    // Wenn der Filter eine Tier-ID ist
+    return post.tier_id === postFilter;
+  });
+  // --- ENDE ---
+
+  const gridPosts: GridPost[] = filteredPosts.map((post) => {
     const hasAccess = checkAccess(post, currentUser?.id);
     return {
       id: post.id,
-      thumbnailUrl: post.thumbnail_url || post.mediaUrl, // Thumbnail oder mediaUrl
+      thumbnailUrl: post.thumbnail_url || post.mediaUrl,
       type: post.mediaType.toLowerCase() as 'image' | 'video',
       caption: post.caption,
       likes: post.likes,
       comments: post.comments,
-      hasAccess: hasAccess, // <-- Das Ergebnis des Checks
-      price: post.price, // <-- Preis für PPV-Logik
+      hasAccess: hasAccess,
+      price: post.price,
     };
   });
 
   const viewerPosts: ViewerPostData[] = posts.map(post => ({
-    id: post.id,
+    ...post,
     media: post.mediaUrl,
-    caption: post.caption,
-    hashtags: post.hashtags,
-    likes: post.likes,
-    comments: post.comments,
-    isLiked: post.isLiked,
-    mediaType: post.mediaType,
-    price: post.price,
-    tier_id: post.tier_id,
-    creatorId: post.creatorId,
     creator: {
+      id: creator.id,
       name: creator.displayName,
       username: creator.username,
       avatar: creator.avatarUrl || '',
       isVerified: creator.isVerified,
     },
-    // Wichtige Felder für checkAccess (obwohl schon in gridPosts geprüft)
-    thumbnail_url: post.thumbnail_url,
-    mediaUrl: post.mediaUrl,
-    is_published: post.is_published,
-    scheduled_for: post.scheduled_for,
-    created_at: post.created_at,
   }));
 
+  const renderSubscribeButton = () => {
+    if (isOwnProfile) {
+      return (
+        <Button
+          onClick={() => navigate('/profile')}
+          className="mt-4 md:mt-0 font-normal text-lg py-6 px-12 bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-full"
+        >
+          Profil bearbeiten
+        </Button>
+      );
+    }
+
+    if (creatorTiers.length === 0 && subscriptionStatus === null && !isLoadingSubs) {
+        return (
+            <Button
+                disabled={true}
+                className="mt-4 md:mt-0 font-normal text-lg py-6 px-12 bg-neutral text-muted-foreground rounded-full"
+            >
+                Keine Abos verfügbar
+            </Button>
+        );
+    }
+
+    const baseButtonClasses = "mt-4 md:mt-0 font-normal transition-colors duration-200 min-w-[200px] text-lg py-6 px-12 rounded-full shadow-lg";
+
+    switch (subscriptionStatus) {
+      case 'ACTIVE':
+        return (
+          <Button
+            onClick={handleManageSubscriptionClick}
+            disabled={isLoadingSubs}
+            className={cn(baseButtonClasses, "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10")}
+          >
+            <CheckIcon className="w-5 h-5 mr-2" strokeWidth={2} />
+            Abonniert
+          </Button>
+        );
+      case 'CANCELED':
+        return (
+          <Button
+            onClick={handleSubscribeClick}
+            disabled={isLoadingSubs}
+            className={cn(baseButtonClasses, "bg-secondary text-secondary-foreground hover:bg-secondary/90")}
+          >
+            Gekündigt (Reaktivieren)
+          </Button>
+        );
+      case null:
+      default:
+        if (creatorTiers.length > 0 || isLoadingSubs) {
+           return (
+            <Button
+              onClick={handleSubscribeClick}
+              disabled={isLoadingSubs}
+              className={cn(baseButtonClasses, "bg-secondary text-secondary-foreground hover:bg-secondary/90")}
+            >
+              {creatorTiers.length > 0 ? `Abonnieren ab ${creatorTiers[0]?.price.toFixed(2)}€/Monat` : "Abonnieren"}
+            </Button>
+          );
+        }
+        return null;
+    }
+  };
 
   return (
-    <>
-      <div className="min-h-screen">
-        {/* Banner */}
-        <div
-          className="h-48 md:h-64 bg-neutral relative"
-        >
-          {creator.bannerUrl && (
-            <img src={creator.bannerUrl} alt={creator.displayName} className="w-full h-full object-cover" />
-          )}
+    <div className="min-h-screen bg-background text-foreground">
+
+      <div className="relative h-64 md:h-80 bg-neutral">
+        {creator.bannerUrl && (
+          <img src={creator.bannerUrl} alt={`${creator.displayName} Banner`} className="w-full h-full object-cover" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-background/90" />
+      </div>
+
+      <div className="max-w-4xl mx-auto px-4 -mt-24 md:-mt-32 relative z-10">
+
+        <div className="flex flex-col items-center justify-center text-center">
+          <Avatar className="w-40 h-40 border-4 border-background shadow-lg">
+            <AvatarImage src={creator.avatarUrl || undefined} alt={creator.displayName} />
+            <AvatarFallback className="bg-secondary text-secondary-foreground text-5xl">
+              {creator.displayName.charAt(0)}
+            </AvatarFallback>
+          </Avatar>
+
+          <h1 className="text-4xl font-extrabold font-serif text-foreground mt-4 flex items-center gap-2">
+            {creator.displayName}
+            {creator.isVerified && <Badge className="bg-secondary text-secondary-foreground rounded-full px-3 py-1 text-sm">Verifiziert</Badge>}
+          </h1>
+          <p className="text-lg text-muted-foreground mt-1 font-semibold">{creator.bio}</p>
+
+          <div className="flex items-center gap-2 text-foreground mt-4 text-lg">
+            <UsersIcon className="w-5 h-5 text-secondary" />
+            <span className="font-bold">{creator.followersCount?.toLocaleString() || '0'}</span>
+            <span className="text-muted-foreground">Follower</span>
+          </div>
+
+          <div className="mt-8">
+            {renderSubscribeButton()}
+          </div>
         </div>
 
-        {/* Profil-Header */}
-        <div className="max-w-4xl mx-auto px-4 -mt-16">
-          <div className="flex flex-col md:flex-row items-center md:items-end justify-between">
-            <div className="flex flex-col md:flex-row items-center gap-4">
-              <Avatar className="w-32 h-32 border-4 border-background">
-                <AvatarImage src={creator.avatarUrl || undefined} alt={creator.displayName} />
-                <AvatarFallback className="bg-secondary text-secondary-foreground text-4xl">
-                  {creator.displayName.charAt(0)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="text-center md:text-left pt-4">
-                <h1 className="text-3xl font-serif text-foreground">{creator.displayName}</h1>
-                <p className="text-muted-foreground">@{creator.username}</p>
-              </div>
-            </div>
+        {/* --- AKTUALISIERTE FILTER-BUTTONS --- */}
+        <div className="flex justify-center items-center gap-2 p-2 bg-card rounded-full shadow-lg mt-12 mb-8 border border-border flex-wrap">
+          <Button
+            onClick={() => setPostFilter('all')}
+            size="sm" // Kleinere Buttons für mehr Platz
+            className={cn(
+              "px-5 py-2 rounded-full text-sm font-semibold", // Kleinere Schrift
+              postFilter === 'all' ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
+            )}
+          >
+            <LayoutGrid className="w-4 h-4 mr-2" /> Alle
+          </Button>
+          <Button
+            onClick={() => setPostFilter('images')}
+            size="sm"
+            className={cn(
+              "px-5 py-2 rounded-full text-sm font-semibold",
+              postFilter === 'images' ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
+            )}
+          >
+            <ImageIcon className="w-4 h-4 mr-2" /> Bilder
+          </Button>
+          <Button
+            onClick={() => setPostFilter('videos')}
+            size="sm"
+            className={cn(
+              "px-5 py-2 rounded-full text-sm font-semibold",
+              postFilter === 'videos' ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
+            )}
+          >
+            <FilmIcon className="w-4 h-4 mr-2" /> Videos
+          </Button>
 
-            {/* Abo-Button */}
-            {!isOwnProfile && (
-              <Button
-                onClick={() => isSubscribed ? handleManageSubscriptionClick() : handleSubscribeClick()}
-                disabled={isLoadingSubs}
+          {/* Dynamische Tier-Filter */}
+          {creatorTiers.map((tier) => (
+             <Button
+                key={tier.id}
+                onClick={() => setPostFilter(tier.id)}
+                size="sm"
                 className={cn(
-                  "mt-4 md:mt-0 font-normal transition-colors duration-200 min-w-[150px] text-base py-5",
-                  isSubscribed
-                    ? "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10"
-                    : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                  "px-5 py-2 rounded-full text-sm font-semibold",
+                  postFilter === tier.id ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
                 )}
               >
-                {isLoadingSubs ? '...' : (
-                  isSubscribed ? (
-                    <>
-                      <CheckIcon className="w-5 h-5 mr-2" strokeWidth={2} />
-                      Abonniert
-                    </>
-                  ) : (
-                    `Abonnieren für ${formatCurrency(creator.subscriptionPrice)}`
-                  )
-                )}
+                <LockIcon className="w-4 h-4 mr-2" /> {tier.name}
               </Button>
-            )}
-            {isOwnProfile && (
-                 <Button
-                    onClick={() => navigate('/profile')}
-                    variant="outline"
-                    className="mt-4 md:mt-0 font-normal text-base py-5 bg-card text-foreground border-border hover:bg-neutral"
+          ))}
+        </div>
+        {/* --- ENDE FILTER-BUTTONS --- */}
+
+
+        {/* Post Grid Section */}
+        <div className="mt-6">
+          {isLoadingPosts && <p className="text-muted-foreground text-center py-12">Lade Beiträge...</p>}
+          {!isLoadingPosts && filteredPosts.length === 0 && (
+            <p className="text-muted-foreground text-center py-12">
+              {postFilter === 'all' ? 'Dieser Creator hat noch nichts gepostet.' : `Keine Posts für ${postFilter === 'images' ? 'Bilder' : postFilter === 'videos' ? 'Videos' : 'diese Stufe'} gefunden.`}
+            </p>
+          )}
+          {!isLoadingPosts && filteredPosts.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
+              {gridPosts.map((post, index) => (
+                <div
+                  key={post.id}
+                  className="relative aspect-square rounded-lg overflow-hidden cursor-pointer group bg-card"
+                  onClick={() => handlePostClick(index, post.hasAccess)}
                 >
-                    Profil bearbeiten
-                </Button>
-            )}
-          </div>
+                  <img
+                    src={post.thumbnailUrl}
+                    alt={post.caption || ""}
+                    className={cn(
+                        "w-full h-full object-cover transition-transform duration-200 group-hover:scale-105",
+                        !post.hasAccess && "filter blur-2xl" // Starke Verpixelung
+                    )}
+                  />
+                  {post.type === 'video' && (
+                    <VideoIcon className="absolute top-2 right-2 w-5 h-5 text-foreground drop-shadow-lg" strokeWidth={2} />
+                  )}
 
-          {/* Bio & Stats */}
-          <div className="mt-8 space-y-4">
-            <p className="text-foreground text-center md:text-left max-w-2xl">{creator.bio}</p>
-            <div className="flex items-center justify-center md:justify-start gap-6 text-foreground">
-              <div className="flex items-center gap-1">
-                <UsersIcon className="w-4 h-4 text-muted-foreground" />
-                <span className="font-medium">{creator.followersCount}</span>
-                <span className="text-muted-foreground">Abonnenten</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <GridIcon className="w-4 h-4 text-muted-foreground" />
-                <span className="font-medium">{posts.length}</span>
-                <span className="text-muted-foreground">Beiträge</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Tabs */}
-          <Tabs defaultValue="posts" className="w-full mt-8">
-            <TabsList className="bg-card border border-border">
-              <TabsTrigger value="posts" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">Beiträge</TabsTrigger>
-              <TabsTrigger value="media" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">Medien</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="posts" className="mt-6">
-              {isLoadingPosts && <p className="text-muted-foreground">Lade Beiträge...</p>}
-              {!isLoadingPosts && gridPosts.length === 0 && (
-                <p className="text-muted-foreground text-center py-12">Dieser Creator hat noch nichts gepostet.</p>
-              )}
-              {!isLoadingPosts && gridPosts.length > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
-                  {gridPosts.map((post, index) => (
-                    <div
-                      key={post.id}
-                      className="relative aspect-square rounded-lg overflow-hidden cursor-pointer group bg-neutral"
-                      onClick={() => handlePostClick(index, post.hasAccess)}
-                    >
-                      <img
-                        src={post.thumbnailUrl}
-                        alt=""
-                        className={cn(
-                            "w-full h-full object-cover transition-transform group-hover:scale-105",
-                            !post.hasAccess && "filter blur-lg" // <-- VERPIXELUNG
-                        )}
-                      />
-                      {post.type === 'video' && (
-                        <VideoIcon className="absolute top-2 right-2 w-5 h-5 text-white drop-shadow-lg" strokeWidth={2} />
-                      )}
-
-                      {/* --- SPERR-OVERLAY --- */}
-                      {!post.hasAccess && (
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                          <LockIcon className="w-8 h-8 text-foreground" />
-                        </div>
-                      )}
-
-                      {/* Hover-Overlay (nur wenn Zugriff besteht) */}
-                      {post.hasAccess && (
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                          <div className="flex items-center gap-1 text-foreground">
-                            <HeartIcon className="w-5 h-5" />
-                            <span>{post.likes}</span>
-                          </div>
-                          <div className="flex items-center gap-1 text-foreground">
-                            <MessageCircleIcon className="w-5 h-5" />
-                            <span>{post.comments}</span>
-                          </div>
-                        </div>
-                      )}
+                  {!post.hasAccess && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <LockIcon className="w-8 h-8 text-secondary" />
                     </div>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-            <TabsContent value="media" className="mt-6">
-                 <p className="text-muted-foreground text-center py-12">Medien-Tab (nicht implementiert).</p>
-            </TabsContent>
-          </Tabs>
+                  )}
 
+                  {post.hasAccess && (
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-4">
+                      <div className="flex items-center gap-1 text-foreground">
+                        <HeartIcon className="w-5 h-5" />
+                        <span>{post.likes}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-foreground">
+                        <MessageCircleIcon className="w-5 h-5" />
+                        <span>{post.comments}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -382,8 +455,8 @@ export default function CreatorProfile() {
           creator={{
             id: creator.id,
             name: creator.displayName,
-            subscriptionPrice: creator.subscriptionPrice,
           }}
+          tiers={creatorTiers}
           onSubscriptionComplete={() => handleSubscriptionComplete(creator.id)}
         />
       )}
@@ -404,8 +477,10 @@ export default function CreatorProfile() {
             onClose={() => setShowPpvModal(false)}
             post={selectedPostForPpv}
             onPaymentSuccess={handlePurchaseSuccess}
+            creatorTiers={creatorTiers} // Übergibt die Tiers an das Modal
+            onSubscribeClick={handleSubscribeClick} // Übergibt die Abo-Funktion
          />
       )}
-    </>
+    </div>
   );
 }

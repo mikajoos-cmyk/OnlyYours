@@ -1,31 +1,32 @@
+// src/components/fan/DiscoveryFeed.tsx
 import { useState, useRef, useEffect } from 'react';
-import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, LockIcon } from 'lucide-react'; // LockIcon hinzugefügt
+import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, LockIcon, UserCheckIcon } from 'lucide-react'; // UserCheckIcon hinzugefügt
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
-import { Button } from '../ui/button'; // Button hinzugefügt
+import { Button } from '../ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
 import CommentsSheet from './CommentsSheet';
 import { useNavigate } from 'react-router-dom';
+import { cn } from '../../lib/utils';
 import { useFeedStore } from '../../stores/feedStore';
-import ProfilePostViewer from './ProfilePostViewer'; // Alter Viewer (könnte veraltet sein)
-import { useAuthStore } from '../../stores/authStore'; // AuthStore für User-ID
-import { useSubscriptionStore } from '../../stores/subscriptionStore'; // Sub-Store für Zugriffs-Check
-import PpvModal from './PpvModal'; // Import PPV Modal
-import { cn } from '../../lib/utils'; // cn importieren
+import ProfilePostViewer from './ProfilePostViewer';
+import { useAuthStore } from '../../stores/authStore';
+import { useSubscriptionStore } from '../../stores/subscriptionStore';
+import PpvModal from './PpvModal';
+import { useToast } from '../../hooks/use-toast';
+import { Separator } from '../ui/separator'; // Separator importieren
 
 export default function DiscoveryFeed() {
   const [showComments, setShowComments] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
 
-  // Viewer-Logik (kann evtl. entfernt/angepasst werden, wenn Klick = PPV-Modal)
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [selectedPostIndex, setSelectedPostIndex] = useState(0);
-
-  // PPV Modal State
   const [showPpvModal, setShowPpvModal] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   // Stores
   const { user } = useAuthStore();
@@ -42,7 +43,7 @@ export default function DiscoveryFeed() {
   // Tastatur-Navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (showPpvModal || showComments || isViewerOpen) return; // Nicht navigieren, wenn Modal offen ist
+      if (showPpvModal || showComments || isViewerOpen) return;
       if (e.key === 'ArrowDown') nextPost();
       else if (e.key === 'ArrowUp') previousPost();
     };
@@ -85,24 +86,27 @@ export default function DiscoveryFeed() {
     setShowComments(true);
   };
 
-  // --- AKTUALISIERTE KLICK-LOGIK ---
-  const handleMediaClick = (index: number, hasAccess: boolean) => {
-    if (hasAccess) {
-      // alter Viewer (optional)
-      // setSelectedPostIndex(index);
-      // setIsViewerOpen(true);
-      // ODER: Nichts tun, da der Inhalt bereits sichtbar ist
-    } else {
-      // PPV-Modal öffnen
-      setShowPpvModal(true);
-    }
+  // --- Klick-Handler für die Buttons im Overlay ---
+  const handlePpvClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Verhindert Klick auf das Div
+    setShowPpvModal(true);
   };
+
+  const handleSubscribeClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Verhindert Klick auf das Div
+    const post = posts[currentIndex];
+    toast({
+      title: "Zum Abonnieren weitergeleitet",
+      description: "Wähle eine Stufe auf dem Profil des Creators.",
+    });
+    navigate(`/profile/${post.creator.username || post.creatorId}`);
+  };
+  // --- ENDE ---
 
   // Callback nach erfolgreichem Kauf
   const handlePurchaseSuccess = (postId: string) => {
     addPurchasedPost(postId);
-    // Optional: Feed neu laden, um RLS-Änderung zu erhalten
-    // loadDiscoveryPosts();
+    setShowPpvModal(false);
   };
 
   const currentPost = posts[currentIndex];
@@ -133,6 +137,10 @@ export default function DiscoveryFeed() {
   // Zugriff prüfen
   const hasAccess = checkAccess(currentPost, user?.id);
 
+  // Optionen prüfen
+  const canPpv = currentPost.price > 0;
+  const canSubscribe = currentPost.tier_id !== null; // Post ist an ein Tier gebunden
+
   return (
     <>
       <div
@@ -144,7 +152,7 @@ export default function DiscoveryFeed() {
       >
         <motion.div
           key={currentIndex}
-          initial={{ opacity: 0 }} // Animation angepasst
+          initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
@@ -153,7 +161,7 @@ export default function DiscoveryFeed() {
           {/* --- LOGIK FÜR VERPIXELTEN INHALT --- */}
           <div
             className="w-full h-full"
-            onClick={() => handleMediaClick(currentIndex, hasAccess)}
+            onClick={() => { if(hasAccess) return; /* Nur klicken, wenn gesperrt */ }}
           >
             {currentPost.mediaType === 'video' ? (
               <video
@@ -164,38 +172,83 @@ export default function DiscoveryFeed() {
                 playsInline
                 className={cn(
                   "w-full h-full object-cover",
-                  !hasAccess && "filter blur-2xl" // Verpixeln
+                  !hasAccess && "filter blur-2xl"
                 )}
               />
             ) : (
               <img
-                src={currentPost.thumbnail_url || currentPost.mediaUrl} // Thumbnail für gesperrte Bilder
-                alt={currentPost.caption}
+                src={hasAccess ? currentPost.mediaUrl : (currentPost.thumbnail_url || currentPost.mediaUrl)}
+                alt={currentPost.caption || ""}
                 className={cn(
                   "w-full h-full object-cover",
-                  !hasAccess && "filter blur-2xl" // Verpixeln
+                  !hasAccess && "filter blur-2xl"
                 )}
               />
             )}
           </div>
 
-          {/* Overlay für gesperrte Inhalte */}
+          {/* --- FIX: Overlay mit Schloss und Button-Auswahl --- */}
           {!hasAccess && (
             <div
-              className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-pointer"
-              onClick={() => handleMediaClick(currentIndex, hasAccess)}
+              className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8"
             >
               <LockIcon className="w-16 h-16 text-foreground" />
-              <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6">
-                Beitrag für {currentPost.price.toFixed(2)}€ freischalten
-              </Button>
+
+              {/* Button 1: PPV (Immer anzeigen, wenn Preis > 0) */}
+              {canPpv && (
+                <Button
+                  className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6 w-full max-w-sm"
+                  onClick={handlePpvClick}
+                >
+                  {`Beitrag für ${currentPost.price.toFixed(2)}€ freischalten`}
+                </Button>
+              )}
+
+              {/* TRENNER */}
+              {canPpv && canSubscribe && (
+                 <div className="relative w-full max-w-sm">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">
+                      ODER
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Button 2: Abo (Immer anzeigen, wenn Tier-gesperrt) */}
+              {canSubscribe && (
+                <Button
+                  variant={canPpv ? "outline" : "secondary"} // Wenn PPV da ist, ist Abo die "outline" Option
+                  className={cn(
+                      "text-lg px-8 py-6 w-full max-w-sm",
+                      canPpv
+                          ? "bg-transparent border-secondary text-secondary hover:bg-secondary/10 hover:text-secondary"
+                          : "bg-secondary text-secondary-foreground hover:bg-secondary/90" // Wenn *nur* Abo geht
+                  )}
+                  onClick={handleSubscribeClick}
+                >
+                  <UserCheckIcon className="w-5 h-5 mr-2" />
+                  Mit Abo freischalten
+                </Button>
+              )}
+
+              {/* Fallback für öffentliche Posts, die PPV sind (canSubscribe = false) */}
+              {!canSubscribe && canPpv && (
+                <p className="text-sm text-muted-foreground max-w-xs text-center">
+                  Dieser Beitrag ist öffentlich, kostet aber extra.
+                </p>
+              )}
+
             </div>
           )}
+          {/* --- ENDE FIX --- */}
 
-          {/* Gradient (nur anzeigen, wenn Zugriff besteht) */}
+
           {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
 
-          {/* Creator Info (immer sichtbar) */}
           <div className="absolute top-4 left-4 right-20 z-10">
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/profile/${currentPost.creator.username || currentPost.creatorId}`)}>
               <Avatar className="w-12 h-12 border-2 border-foreground">
@@ -215,11 +268,10 @@ export default function DiscoveryFeed() {
             </div>
           </div>
 
-          {/* Icons rechts (immer sichtbar) */}
           <div className="absolute right-4 bottom-32 z-10 flex flex-col gap-6">
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={() => hasAccess && handleLike(currentPost.id)} // Like nur bei Zugriff
+              onClick={() => hasAccess && handleLike(currentPost.id)}
               className="flex flex-col items-center gap-1"
               disabled={!hasAccess}
             >
@@ -250,7 +302,6 @@ export default function DiscoveryFeed() {
               </span>
             </button>
 
-            {/* ... (Share & Tip Buttons) ... */}
             <button className="flex flex-col items-center gap-1">
               <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
                 <Share2Icon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
@@ -263,9 +314,13 @@ export default function DiscoveryFeed() {
             </button>
           </div>
 
-          {/* Caption (immer sichtbar) */}
           <div className="absolute bottom-4 left-4 right-20 z-10">
-            <p className="text-foreground drop-shadow-lg mb-2">{currentPost.caption}</p>
+            <p className={cn(
+                "text-foreground drop-shadow-lg mb-2",
+                !hasAccess && "filter blur-sm select-none"
+            )}>
+              {hasAccess ? currentPost.caption : "Abonniere oder kaufe diesen Post, um die Beschreibung zu sehen."}
+            </p>
             <div className="flex flex-wrap gap-2">
               {currentPost.hashtags.map((tag) => (
                 <span key={tag} className="text-secondary text-sm drop-shadow-lg">
@@ -277,7 +332,6 @@ export default function DiscoveryFeed() {
         </motion.div>
       </div>
 
-      {/* Comment Sheet Modal */}
       <AnimatePresence>
         {selectedPostId !== null && showComments && (
           <CommentsSheet
@@ -291,17 +345,17 @@ export default function DiscoveryFeed() {
         )}
       </AnimatePresence>
 
-      {/* PPV Modal */}
       {showPpvModal && currentPost && (
          <PpvModal
             isOpen={showPpvModal}
             onClose={() => setShowPpvModal(false)}
             post={currentPost}
             onPaymentSuccess={handlePurchaseSuccess}
+            creatorTiers={[]} // Tiers werden hier nicht benötigt, da der Abo-Button zum Profil navigiert
+            onSubscribeClick={handleSubscribeClick} // Klick-Handler übergeben
          />
       )}
 
-      {/* Alter Post Viewer (optional, falls noch benötigt) */}
       {isViewerOpen && (
         <ProfilePostViewer
           initialPosts={posts.map(p => ({ ...p, media: p.mediaUrl }))}

@@ -1,6 +1,6 @@
 // src/components/fan/SubscriberFeed.tsx
 import { useState, useRef, useEffect } from 'react';
-import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, LockIcon } from 'lucide-react';
+import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, LockIcon, UserCheckIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,25 +9,21 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { useFeedStore } from '../../stores/feedStore';
 import type { Post as ServicePostData } from '../../services/postService';
-// --- NEUE IMPORTS ---
 import { useAuthStore } from '../../stores/authStore';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import PpvModal from './PpvModal';
-// --- ENDE ---
+import { useToast } from '../../hooks/use-toast';
 
-
-// Interface für PostData anpassen
 interface PostData extends Omit<ServicePostData, 'creator'> {
   creator: {
-    id: string; // ID hinzugefügt
+    id: string;
     name: string;
     avatar: string;
     username: string;
     isVerified?: boolean;
   };
-  media: string; // 'media' statt 'mediaUrl'
+  media: string;
 }
-
 
 interface SubscriberFeedProps {
   initialPosts?: PostData[] | ServicePostData[];
@@ -43,8 +39,8 @@ export default function SubscriberFeed({
   onClose
 }: SubscriberFeedProps) {
   const navigate = useNavigate();
+  const { toast } = useToast();
 
-  // Zustand aus Stores holen
   const { user } = useAuthStore();
   const {
     posts: storePosts,
@@ -56,21 +52,18 @@ export default function SubscriberFeed({
     toggleLike: toggleLikeAction
   } = useFeedStore();
 
-  // Neuer Store für Zugriffs-Check
   const { checkAccess, addPurchasedPost, isLoading: isLoadingSubs } = useSubscriptionStore();
 
-  // Lokaler State
   const [posts, setPosts] = useState<ServicePostData[]>([]);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isLoading, setIsLoading] = useState(!isProfileView);
   const [showComments, setShowComments] = useState(false);
   const [selectedPostIdForComments, setSelectedPostIdForComments] = useState<string | null>(null);
-  const [showPpvModal, setShowPpvModal] = useState(false); // PPV Modal
+  const [showPpvModal, setShowPpvModal] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
 
-  // Daten laden oder aus Props übernehmen
   useEffect(() => {
     if (isProfileView && initialPostsProp) {
       const transformedPosts = initialPostsProp.map(p => ({
@@ -87,7 +80,6 @@ export default function SubscriberFeed({
     }
   }, [isProfileView, initialPostsProp, initialIndex, loadSubscriberPosts]);
 
-  // Store-Daten in lokalen State spiegeln
   useEffect(() => {
     if (!isProfileView) {
       setPosts(storePosts);
@@ -96,11 +88,9 @@ export default function SubscriberFeed({
     }
   }, [isProfileView, storePosts, storeCurrentIndex, storeIsLoading]);
 
-
-  // ----- Scrolling/Swiping Logic -----
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (showPpvModal || showComments) return; // Modale blockieren Navigation
+      if (showPpvModal || showComments) return;
       if (!isProfileView) {
         if (e.key === 'ArrowDown') nextPostAction();
         else if (e.key === 'ArrowUp') previousPostAction();
@@ -141,12 +131,10 @@ export default function SubscriberFeed({
   const handleTouchStartCapture = (e: React.TouchEvent) => {
     handleTouchStart.current = { y: e.touches[0].clientY };
   };
-  // ----- Ende Scrolling -----
 
-  // --- INTERAKTIONEN ---
   const handleLike = async (postId: string) => {
     if (isProfileView) {
-      // TODO: Lokale Like-Logik für Profilansicht
+      // TODO: Lokale Like-Logik
     } else {
       await toggleLikeAction(postId);
     }
@@ -157,22 +145,29 @@ export default function SubscriberFeed({
     setShowComments(true);
   };
 
-  const handleMediaClick = (hasAccess: boolean) => {
-    if (!hasAccess) {
-      setShowPpvModal(true);
-    }
+  const handlePpvClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowPpvModal(true);
+  };
+
+  const handleSubscribeClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const post = posts[currentIndex];
+    toast({
+      title: "Höhere Stufe erforderlich",
+      description: "Besuche das Profil des Creators, um dein Abo zu verwalten.",
+    });
+    navigate(`/profile/${post.creator.username || post.creatorId}`);
   };
 
   const handlePurchaseSuccess = (postId: string) => {
     addPurchasedPost(postId);
-    // Im Subscriber-Feed laden wir neu, um sicherzustellen, dass die RLS greift
-    // (obwohl addPurchasedPost es optimistisch setzt)
+    setShowPpvModal(false);
     if (!isProfileView) {
       loadSubscriberPosts();
     }
   };
 
-  // --- RENDER-LOGIK ---
   const currentPost = posts[currentIndex];
 
   if (isLoading || (isLoadingSubs && !isProfileView)) {
@@ -201,15 +196,18 @@ export default function SubscriberFeed({
     return null;
   }
 
-  // Zugriff prüfen
   const hasAccess = checkAccess(currentPost, user?.id);
+
+  const canPpv = currentPost.price > 0;
+  // Im SubscriberFeed bedeutet tier_id-Sperrung *immer*, dass eine HÖHERE Stufe benötigt wird
+  const canSubscribe = currentPost.tier_id !== null && !hasAccess;
 
   return (
     <>
       <div
         ref={containerRef}
         className={cn(
-          "w-full overflow-hidden relative bg-black", // bg-black als Fallback
+          "w-full overflow-hidden relative bg-black",
           isProfileView
             ? "fixed top-16 left-0 right-0 bottom-16 z-40 md:left-64 md:bottom-0 md:h-[calc(100vh-4rem)]"
             : "h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]"
@@ -237,10 +235,9 @@ export default function SubscriberFeed({
            transition={{ duration: 0.3 }}
            className="h-full w-full relative"
          >
-            {/* --- VERPIXELTE LOGIK --- */}
             <div
               className="w-full h-full"
-              onClick={() => handleMediaClick(hasAccess)}
+              onClick={() => { if(hasAccess) return; }}
             >
               {currentPost.mediaType === 'video' ? (
                 <video
@@ -254,7 +251,7 @@ export default function SubscriberFeed({
               ) : (
                 <img
                   src={hasAccess ? currentPost.mediaUrl : (currentPost.thumbnail_url || currentPost.mediaUrl)}
-                  alt={currentPost.caption}
+                  alt={currentPost.caption || ""}
                   className={cn(
                     "w-full h-full object-cover",
                     !hasAccess && "filter blur-2xl"
@@ -263,26 +260,58 @@ export default function SubscriberFeed({
               )}
             </div>
 
-            {/* Gesperrt-Overlay */}
+            {/* --- FIX: Overlay mit Schloss und Button-Auswahl --- */}
             {!hasAccess && (
               <div
-                className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-pointer"
-                onClick={() => handleMediaClick(hasAccess)}
+                className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8"
               >
                 <LockIcon className="w-16 h-16 text-foreground" />
-                <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6">
-                  {currentPost.price > 0
-                    ? `Beitrag für ${currentPost.price.toFixed(2)}€ freischalten`
-                    : `Abonnieren, um zu sehen` // Fallback für Tier-Sperre ohne PPV
-                  }
-                </Button>
+
+                {canPpv && (
+                  <Button
+                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6 w-full max-w-sm"
+                    onClick={handlePpvClick}
+                  >
+                    {`Beitrag für ${currentPost.price.toFixed(2)}€ freischalten`}
+                  </Button>
+                )}
+
+                {canPpv && canSubscribe && (
+                  <div className="relative w-full max-w-sm">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-border" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-card px-2 text-muted-foreground">
+                        ODER
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {canSubscribe && (
+                  <Button
+                    variant={canPpv ? "outline" : "secondary"}
+                    className={cn(
+                        "text-lg px-8 py-6 w-full max-w-sm",
+                        canPpv
+                            ? "bg-transparent border-secondary text-secondary hover:bg-secondary/10 hover:text-secondary"
+                            : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                    )}
+                    onClick={handleSubscribeClick}
+                  >
+                    <UserCheckIcon className="w-5 h-5 mr-2" />
+                    Höhere Stufe erforderlich
+                  </Button>
+                )}
+
               </div>
             )}
+            {/* --- ENDE FIX --- */}
 
-            {/* Gradient (nur bei Zugriff) */}
+
             {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
 
-            {/* Creator Info */}
             <div className="absolute top-4 left-4 right-20 z-10">
                 <div className="flex items-center gap-3 cursor-pointer" onClick={() => !isProfileView && navigate(`/profile/${currentPost.creator.username || currentPost.creatorId}`)}>
                     <Avatar className="w-12 h-12 border-2 border-foreground">
@@ -304,7 +333,6 @@ export default function SubscriberFeed({
                 </div>
             </div>
 
-            {/* Icons rechts */}
             <div className="absolute right-4 bottom-32 z-10 flex flex-col gap-6 md:bottom-8">
                 <motion.button
                     whileTap={{ scale: 0.9 }}
@@ -338,7 +366,6 @@ export default function SubscriberFeed({
                         {currentPost.comments}
                     </span>
                 </button>
-                {/* ... (Share, Tip) ... */}
                 <button className="flex flex-col items-center gap-1">
                     <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
                         <Share2Icon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
@@ -351,7 +378,6 @@ export default function SubscriberFeed({
                 </button>
             </div>
 
-            {/* Caption und Hashtags */}
             <div className="absolute bottom-4 left-4 right-20 z-10 md:bottom-8">
                 <p className={cn("text-foreground drop-shadow-lg mb-2", !hasAccess && "filter blur-sm select-none")}>
                   {hasAccess ? currentPost.caption : "Abonnieren oder kaufen, um die Beschreibung zu sehen."}
@@ -367,7 +393,6 @@ export default function SubscriberFeed({
          </motion.div>
       </div>
 
-      {/* Comments Sheet */}
       <AnimatePresence>
         {selectedPostIdForComments !== null && showComments && (
           <CommentsSheet
@@ -381,13 +406,14 @@ export default function SubscriberFeed({
         )}
       </AnimatePresence>
 
-      {/* PPV Modal */}
       {showPpvModal && currentPost && (
          <PpvModal
             isOpen={showPpvModal}
             onClose={() => setShowPpvModal(false)}
             post={currentPost}
             onPaymentSuccess={handlePurchaseSuccess}
+            creatorTiers={[]} // Tiers werden hier nicht benötigt
+            onSubscribeClick={handleSubscribeClick} // Handler übergeben
          />
       )}
     </>

@@ -1,15 +1,12 @@
 // src/components/creator/PostEditor.tsx
-// HINWEIS: Der Inhalt stammt aus der von Ihnen hochgeladenen Datei 'src/components/fan/PostModal.tsx',
-// da diese die korrekte Logik für Tiers und Zugriffsstufen enthält.
-
-import { useState, useRef, useEffect } from 'react'; // useEffect importiert
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { UploadIcon, CalendarIcon, Loader2Icon, Trash2Icon, XIcon, LockIcon, GlobeIcon, UsersIcon } from 'lucide-react'; // Icons hinzugefügt
+import { UploadIcon, CalendarIcon, Loader2Icon, Trash2Icon, XIcon, LockIcon, GlobeIcon } from 'lucide-react'; // UsersIcon entfernt
 import { useToast } from '../../hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
@@ -21,9 +18,7 @@ import { Calendar } from '../ui/calendar';
 import { TimePicker } from '../ui/time-picker';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-// --- NEUE IMPORTS ---
 import { tierService, Tier } from '../../services/tierService';
-// --- ENDE NEUE IMPORTS ---
 
 export default function PostEditor() {
   const { user } = useAuthStore();
@@ -32,10 +27,10 @@ export default function PostEditor() {
 
   // Formular-States
   const [caption, setCaption] = useState('');
-  const [price, setPrice] = useState(''); // Dies ist jetzt der PPV-Preis
+  const [price, setPrice] = useState(''); // PPV-Preis
 
-  // --- AKTUALISIERT: tier-State ---
-  const [accessLevel, setAccessLevel] = useState('all_subscribers'); // 'public', 'all_subscribers', oder tier.id
+  // --- AKTUALISIERT: accessLevel State ---
+  const [accessLevel, setAccessLevel] = useState('public'); // Standard ist 'public'
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [loadingTiers, setLoadingTiers] = useState(true);
   // --- ENDE ---
@@ -56,7 +51,7 @@ export default function PostEditor() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- NEU: Tiers laden ---
+  // Tiers laden
   useEffect(() => {
     const fetchTiers = async () => {
       if (!user?.id) return;
@@ -72,14 +67,11 @@ export default function PostEditor() {
     };
     fetchTiers();
   }, [user?.id, toast]);
-  // --- ENDE ---
 
-  // ... (handleFileChange, onDragOver, onDragLeave, onDrop, clearFile bleiben gleich) ...
-    // Handler für Dateiauswahl (Klick oder Drag & Drop)
+  // Handler für Dateiauswahl
   const handleFileChange = (file: File | undefined) => {
     if (!file) return;
 
-    // Medientyp prüfen
     if (file.type.startsWith('image/')) {
       setMediaType('IMAGE');
     } else if (file.type.startsWith('video/')) {
@@ -94,15 +86,15 @@ export default function PostEditor() {
     }
 
     setSelectedFile(file);
-
-    // Vorschau generieren
+    if (filePreview) {
+        URL.revokeObjectURL(filePreview);
+    }
     const previewUrl = URL.createObjectURL(file);
     setFilePreview(previewUrl);
   };
 
-  // Aufräumen der Object-URL, wenn die Komponente verlässt oder die Datei ändert
+  // Aufräumen der Object-URL
   useEffect(() => {
-    // Korrektur: Dies sollte in einem useEffect-Cleanup passieren
     return () => {
       if (filePreview) {
         URL.revokeObjectURL(filePreview);
@@ -110,7 +102,7 @@ export default function PostEditor() {
     };
   }, [filePreview]);
 
-  // Handler für Drag & Drop
+  // Drag & Drop Handler
   const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragOver(true);
@@ -123,7 +115,7 @@ export default function PostEditor() {
     handleFileChange(file);
   };
 
-  // Handler zum Entfernen der Datei
+  // Datei entfernen
   const clearFile = () => {
     if (filePreview) {
       URL.revokeObjectURL(filePreview);
@@ -132,10 +124,9 @@ export default function PostEditor() {
     setFilePreview(null);
     setMediaType(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = ''; // Input-Feld zurücksetzen
+      fileInputRef.current.value = '';
     }
   };
-
 
   // Helper: Datum/Zeit
   const getCombinedIsoString = (): string | null => {
@@ -157,8 +148,6 @@ export default function PostEditor() {
     combinedDate.setMinutes(minutes);
     return format(combinedDate, "dd. MMMM yyyy 'um' HH:mm", { locale: de });
   };
-  // --- ENDE HELPER ---
-
 
   // Haupt-Submit-Handler
   const handleSubmit = async (isDraft: boolean) => {
@@ -171,15 +160,18 @@ export default function PostEditor() {
       return;
     }
 
+    // Logik-Prüfung für Tiers
+    if (accessLevel !== 'public' && tiers.length === 0 && !loadingTiers) {
+        toast({ title: 'Fehler', description: 'Sie haben noch keine Abo-Stufen erstellt. Bitte wählen Sie "Öffentlich" oder erstellen Sie zuerst eine Stufe.', variant: 'destructive' });
+        return;
+    }
+
     setIsLoading(true);
 
     try {
       let thumbnailUrl: string | null = null;
-
-      // 1. Mediendatei hochladen
       const mediaUrl = await storageService.uploadMedia(selectedFile, user.id);
 
-      // 2. Thumbnail generieren und hochladen (nur für Bilder)
       if (mediaType === 'IMAGE') {
         try {
           const thumbFile = await storageService.generateThumbnail(selectedFile);
@@ -191,47 +183,29 @@ export default function PostEditor() {
 
       const scheduledForISO = getCombinedIsoString();
 
-      // --- AKTUALISIERTE POST-DATEN LOGIK ---
-      let postPrice = parseFloat(price) || 0;
-      let postTierId: string | null = null;
+      // --- HIER IST DER FIX ---
+      // Stellt sicher, dass die `tierId` korrekt gesetzt wird.
+      const postPrice = parseFloat(price) || 0;
+      // Wenn 'public' gewählt, ist tierId null.
+      // Sonst ist es der Wert aus dem Dropdown (die UUID der Tier).
+      const postTierId: string | null = accessLevel === 'public' ? null : accessLevel;
+      // --- ENDE FIX ---
 
-      if (accessLevel === 'public') {
-        postPrice = 0; // Public ist immer kostenlos
-        postTierId = null;
-      } else if (accessLevel === 'all_subscribers') {
-        postTierId = null; // 'null' bedeutet "Alle Abonnenten"
-        // postPrice bleibt der vom Benutzer eingegebene PPV-Preis
-      } else {
-        postTierId = accessLevel; // UUID der Tier
-        // postPrice bleibt der vom Benutzer eingegebene PPV-Preis
-      }
-
-      if (postPrice > 0 && accessLevel === 'public') {
-         toast({ title: 'Logikfehler', description: 'Öffentliche Posts können keinen Preis haben.', variant: 'destructive' });
-         setIsLoading(false);
-         return;
-      }
-      // --- ENDE ---
-
-
-      // 3. Post-Daten für den Service vorbereiten
       const postData = {
         mediaUrl: mediaUrl,
         thumbnail_url: thumbnailUrl,
         mediaType: mediaType,
         caption: caption,
-        price: postPrice,
-        tierId: postTierId,
+        price: postPrice, // PPV-Preis
+        tierId: postTierId, // Korrekte Tier-ID
         scheduledFor: scheduledForISO,
         is_published: !isDraft,
       };
 
-      // 4. Post in der Datenbank erstellen
       await postService.createPost(postData);
 
       setIsLoading(false);
 
-      // Erfolgs-Feedback
       if (isDraft) {
         toast({ title: 'Entwurf gespeichert!', description: 'Ihr Beitrag wurde im Content Vault gespeichert.' });
       } else if (postData.scheduledFor) {
@@ -240,7 +214,7 @@ export default function PostEditor() {
         toast({ title: 'Beitrag veröffentlicht!', description: 'Ihr Beitrag ist jetzt live.' });
       }
 
-      navigate('/vault'); // Zurück zum Vault
+      navigate('/vault');
 
     } catch (error: any) {
       setIsLoading(false);
@@ -253,16 +227,12 @@ export default function PostEditor() {
     }
   };
 
-  const isPublic = accessLevel === 'public';
-
   return (
     <div className="min-h-screen py-8 px-4">
       <div className="max-w-4xl mx-auto space-y-8">
         <h1 className="text-3xl font-serif text-foreground">Neuer Beitrag</h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-
-          {/* --- DATEI-UPLOAD-KARTE (Unverändert) --- */}
           <Card className="bg-card border-border">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-foreground">Medien hochladen</CardTitle>
@@ -312,7 +282,6 @@ export default function PostEditor() {
             </CardContent>
           </Card>
 
-          {/* --- POST-DETAILS-KARTE (Aktualisiert) --- */}
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="text-foreground">Beitragsdetails</CardTitle>
@@ -332,28 +301,23 @@ export default function PostEditor() {
                 />
               </div>
 
-              {/* --- AKTUALISIERT: Zugriffsstufe --- */}
+              {/* --- Zugriffsstufe --- */}
               <div className="space-y-2">
                 <Label htmlFor="access-level" className="text-foreground">
                   Wer kann diesen Beitrag sehen?
                 </Label>
                 <Select value={accessLevel} onValueChange={setAccessLevel} disabled={isLoading || loadingTiers}>
                   <SelectTrigger className="bg-background text-foreground border-border">
-                    <SelectValue />
+                    <SelectValue placeholder="Zugriffsstufe wählen..." />
                   </SelectTrigger>
                   <SelectContent className="bg-card text-foreground border-border">
                     <SelectItem value="public">
                       <div className="flex items-center gap-2">
                         <GlobeIcon className="w-4 h-4" />
-                        Alle Benutzer (Öffentlich & Kostenlos)
+                        Alle Benutzer (Öffentlich)
                       </div>
                     </SelectItem>
-                    <SelectItem value="all_subscribers">
-                       <div className="flex items-center gap-2">
-                        <UsersIcon className="w-4 h-4" />
-                        Alle Abonnenten
-                      </div>
-                    </SelectItem>
+
                     {tiers.map((tier) => (
                       <SelectItem key={tier.id} value={tier.id}>
                          <div className="flex items-center gap-2">
@@ -364,9 +328,15 @@ export default function PostEditor() {
                     ))}
                   </SelectContent>
                 </Select>
+                {loadingTiers && <p className="text-xs text-muted-foreground">Lade Abo-Stufen...</p>}
+                {!loadingTiers && tiers.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                        Hinweis: Sie haben noch keine Abo-Stufen erstellt. Posts sind standardmäßig "Öffentlich".
+                    </p>
+                )}
               </div>
 
-              {/* --- AKTUALISIERT: Preis (PPV) --- */}
+              {/* --- Preis (PPV) --- */}
               <div className="space-y-2">
                 <Label htmlFor="price" className="text-foreground">
                   Pay-per-View Preis (optional)
@@ -375,22 +345,16 @@ export default function PostEditor() {
                   id="price"
                   type="number"
                   placeholder="0.00"
-                  value={isPublic ? '0.00' : price}
+                  value={price}
                   onChange={(e) => setPrice(e.target.value)}
                   className="bg-background text-foreground border-border"
-                  disabled={isLoading || isPublic}
+                  disabled={isLoading}
                 />
-                {isPublic && (
-                  <p className="text-xs text-muted-foreground">Öffentliche Posts sind immer kostenlos.</p>
-                )}
-                {!isPublic && (
-                  <p className="text-xs text-muted-foreground">
-                    Abonnenten (mit passender Stufe) erhalten diesen Inhalt kostenlos.
-                    Andere müssen diesen Preis bezahlen.
-                  </p>
-                )}
+                <p className="text-xs text-muted-foreground">
+                  Setzen Sie einen Preis (z.B. 5.00), um diesen Post als Pay-per-View anzubieten.
+                  {accessLevel !== 'public' && " Abonnenten dieser Stufe erhalten ihn kostenlos."}
+                </p>
               </div>
-
 
               {/* --- KALENDER/ZEIT-PICKER (Unverändert) --- */}
               <div className="space-y-2">

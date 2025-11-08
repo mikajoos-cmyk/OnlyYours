@@ -30,6 +30,10 @@ export interface Post {
   is_published: boolean;
   scheduled_for: string | null;
   created_at: string;
+  // --- HINZUGEFÜGT ---
+  price: number;
+  tier_id: string | null;
+  // --- ENDE ---
 }
 
 export class PostService {
@@ -310,6 +314,7 @@ export class PostService {
     if (error) throw error;
   }
 
+  // --- AKTUALISIERTE MAPPING-FUNKTION ---
   private mapPostsToFrontend(posts: any[], userLikes: Set<string>): Post[] {
     return posts.map(post => ({
       id: post.id,
@@ -335,6 +340,10 @@ export class PostService {
       is_published: post.is_published,
       scheduled_for: post.scheduled_for,
       created_at: post.created_at,
+      // --- HINZUGEFÜGT ---
+      price: post.price,
+      tier_id: post.tier_id,
+      // --- ENDE ---
     }));
   }
 }
