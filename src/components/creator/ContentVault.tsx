@@ -1,3 +1,4 @@
+// src/components/creator/ContentVault.tsx
 import { useState, useEffect, useMemo } from 'react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
@@ -96,23 +97,21 @@ export default function ContentVault() {
   };
 
   // 4. Daten für den Post-Viewer formatieren (basierend auf gefilterter Liste)
+  // --- KORREKTUR HIER ---
+  // Stellt sicher, dass ALLE Post-Daten (inkl. creatorId, price, tier_id)
+  // an den Viewer übergeben werden, indem ...post verwendet wird.
   const viewerPosts: ViewerPostData[] = useMemo(() =>
     filteredContent.map(post => ({
-      id: post.id,
-      media: post.mediaUrl, // mediaUrl an 'media' mappen
-      caption: post.caption,
-      hashtags: post.hashtags,
-      likes: post.likes,
-      comments: post.comments,
-      isLiked: post.isLiked,
-      mediaType: post.mediaType, // Wichtig für den Viewer
-      creator: { // Creator-Daten für den Viewer bereitstellen
+      ...post, // <-- WICHTIG: Übernimmt creatorId, price, tier_id etc.
+      media: post.mediaUrl, // mediaUrl an 'media' mappen (von ViewerPostData verlangt)
+      creator: { // 'creator'-Objekt überschreiben (von ViewerPostData verlangt)
         name: post.creator.name,
         username: post.creator.username || post.creator.id,
         avatar: post.creator.avatar,
         isVerified: post.creator.isVerified,
       },
   })), [filteredContent]); // Nur neu berechnen, wenn sich filteredContent ändert
+  // --- ENDE KORREKTUR ---
 
   // 5. Post-Viewer öffnen
   const handlePostClick = (index: number) => {

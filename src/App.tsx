@@ -3,8 +3,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useEffect } from 'react';
 import { useAuthStore } from './stores/authStore';
 import { useAppStore } from './stores/appStore';
-// --- NEUER IMPORT ---
 import { useSubscriptionStore } from './stores/subscriptionStore';
+// --- NEUER IMPORT ---
+import { useNotificationStore } from './stores/notificationStore';
 // --- ENDE ---
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
 import AppShell from './components/layout/AppShell';
@@ -24,8 +25,10 @@ import { Toaster } from './components/ui/toaster';
 function App() {
   const { isAuthenticated, isLoading, initialize, user } = useAuthStore(); // <-- user holen
   const { hasCompletedOnboarding } = useAppStore();
-  // --- NEUER STORE ---
   const { loadSubscriptions, clearSubscriptions } = useSubscriptionStore();
+  // --- NEUER STORE ---
+  const { startPolling, stopPolling } = useNotificationStore.getState();
+  // --- ENDE ---
 
   useEffect(() => {
     console.log("[App.tsx] useEffect RUNS. Calling initialize().");
@@ -37,18 +40,19 @@ function App() {
     };
   }, [initialize]);
 
-  // --- NEUER EFFEKT ---
-  // Lade Abos, wenn der Benutzer authentifiziert ist, oder lösche sie beim Logout
+  // Effekt für Abos UND Benachrichtigungen
   useEffect(() => {
     if (isAuthenticated && user) {
-      console.log("[App.tsx] User authenticated, loading subscriptions.");
+      console.log("[App.tsx] User authenticated, loading subscriptions and starting notification polling.");
       loadSubscriptions();
+      startPolling(user.id); // <-- START POLLING
     } else {
-      console.log("[App.tsx] User logged out, clearing subscriptions.");
+      console.log("[App.tsx] User logged out, clearing subscriptions and stopping notification polling.");
       clearSubscriptions();
+      stopPolling(); // <-- STOP POLLING
     }
-  }, [isAuthenticated, user, loadSubscriptions, clearSubscriptions]);
-  // --- ENDE NEUER EFFEKT ---
+  }, [isAuthenticated, user, loadSubscriptions, clearSubscriptions, startPolling, stopPolling]);
+  // --- ENDE ---
 
 
   // --- Ladezustand anzeigen ---

@@ -52,8 +52,10 @@ export default function CreatorProfile() {
   const [showPpvModal, setShowPpvModal] = useState(false);
   const [selectedPostForPpv, setSelectedPostForPpv] = useState<ServicePostData | null>(null);
 
-  // --- AKTUALISIERT: Filter-State akzeptiert jetzt Tier-IDs ---
-  const [postFilter, setPostFilter] = useState<string>('all'); // z.B. 'all', 'images', 'videos', oder tier-uuid
+  // --- NEU: Geteilte Filter-States ---
+  const [mediaTypeFilter, setMediaTypeFilter] = useState<'all' | 'images' | 'videos'>('all');
+  const [tierFilter, setTierFilter] = useState<string>('all'); // 'all' oder tier-uuid
+  // --- ENDE ---
 
   // 1. Creator-Profil UND Tiers laden
   useEffect(() => {
@@ -69,6 +71,9 @@ export default function CreatorProfile() {
       setPosts([]);
       setCreatorTiers([]);
       setSubscriptionStatus(null);
+      // Filter zurücksetzen
+      setMediaTypeFilter('all');
+      setTierFilter('all');
 
       try {
         const profile = await userService.getUserByUsername(username);
@@ -137,7 +142,6 @@ export default function CreatorProfile() {
 
   // --- HANDLER ---
 
-  // Klick auf Abo-Button (im Header ODER im PpvModal)
   const handleSubscribeClick = () => {
     if (!currentUser) {
       toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um zu abonnieren.", variant: "destructive" });
@@ -149,7 +153,6 @@ export default function CreatorProfile() {
     }, 150);
   };
 
-  // --- AKTUALISIERTER GRID-KLICK ---
   const handlePostClick = (index: number, hasAccess: boolean) => {
     const postFromGrid = filteredPosts[index];
     if (!postFromGrid) return;
@@ -164,8 +167,6 @@ export default function CreatorProfile() {
         setShowPostFeed(true);
       }
     } else {
-      // WENN KEIN ZUGRIFF:
-      // Öffne das PPV-Modal, das die "ODER"-Logik enthält
       setSelectedPostForPpv(originalPost);
       setShowPpvModal(true);
     }
@@ -200,19 +201,20 @@ export default function CreatorProfile() {
 
   const isOwnProfile = currentUser?.id === creator.id;
 
-  // --- AKTUALISIERTE FILTER-LOGIK ---
+  // --- AKTUALISIERTE FILTER-LOGIK (ZWEISTUFIG) ---
   const filteredPosts = posts.filter(post => {
-    if (postFilter === 'all') {
-      return true; // Zeige alle
-    }
-    if (postFilter === 'images') {
-      return post.mediaType === 'image';
-    }
-    if (postFilter === 'videos') {
-      return post.mediaType === 'video';
-    }
-    // Wenn der Filter eine Tier-ID ist
-    return post.tier_id === postFilter;
+    // 1. Nach Medientyp filtern
+    const mediaMatch =
+      mediaTypeFilter === 'all' ||
+      (mediaTypeFilter === 'images' && post.mediaType === 'image') ||
+      (mediaTypeFilter === 'videos' && post.mediaType === 'video');
+
+    // 2. Nach Tier filtern
+    const tierMatch =
+      tierFilter === 'all' || // "Alle Stufen"
+      post.tier_id === tierFilter; // Spezifische Tier-ID
+
+    return mediaMatch && tierMatch;
   });
   // --- ENDE ---
 
@@ -343,65 +345,92 @@ export default function CreatorProfile() {
           </div>
         </div>
 
-        {/* --- AKTUALISIERTE FILTER-BUTTONS --- */}
-        <div className="flex justify-center items-center gap-2 p-2 bg-card rounded-full shadow-lg mt-12 mb-8 border border-border flex-wrap">
+        {/* --- NEUES ZWEIZEILIGES FILTER-LAYOUT --- */}
+
+        {/* Zeile 1: Medientyp-Filter */}
+        <div className="flex justify-center items-center gap-2 p-2 bg-card rounded-full shadow-lg mt-12 mb-2 border border-border flex-wrap">
           <Button
-            onClick={() => setPostFilter('all')}
-            size="sm" // Kleinere Buttons für mehr Platz
+            onClick={() => setMediaTypeFilter('all')}
+            size="sm"
             className={cn(
-              "px-5 py-2 rounded-full text-sm font-semibold", // Kleinere Schrift
-              postFilter === 'all' ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
+              "px-5 py-2 rounded-full text-sm font-semibold",
+              mediaTypeFilter === 'all' ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
             )}
           >
             <LayoutGrid className="w-4 h-4 mr-2" /> Alle
           </Button>
           <Button
-            onClick={() => setPostFilter('images')}
+            onClick={() => setMediaTypeFilter('images')}
             size="sm"
             className={cn(
               "px-5 py-2 rounded-full text-sm font-semibold",
-              postFilter === 'images' ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
+              mediaTypeFilter === 'images' ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
             )}
           >
             <ImageIcon className="w-4 h-4 mr-2" /> Bilder
           </Button>
           <Button
-            onClick={() => setPostFilter('videos')}
+            onClick={() => setMediaTypeFilter('videos')}
             size="sm"
             className={cn(
               "px-5 py-2 rounded-full text-sm font-semibold",
-              postFilter === 'videos' ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
+              mediaTypeFilter === 'videos' ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
             )}
           >
             <FilmIcon className="w-4 h-4 mr-2" /> Videos
           </Button>
-
-          {/* Dynamische Tier-Filter */}
-          {creatorTiers.map((tier) => (
-             <Button
-                key={tier.id}
-                onClick={() => setPostFilter(tier.id)}
-                size="sm"
-                className={cn(
-                  "px-5 py-2 rounded-full text-sm font-semibold",
-                  postFilter === tier.id ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
-                )}
-              >
-                <LockIcon className="w-4 h-4 mr-2" /> {tier.name}
-              </Button>
-          ))}
         </div>
-        {/* --- ENDE FILTER-BUTTONS --- */}
+
+        {/* Zeile 2: Tier-Filter (nur wenn Tiers existieren) */}
+        {creatorTiers.length > 0 && (
+          <div className="flex justify-center items-center gap-2 p-2 bg-card rounded-full shadow-lg mb-8 border border-border flex-wrap">
+            <Button
+              onClick={() => setTierFilter('all')}
+              size="sm"
+              className={cn(
+                "px-5 py-2 rounded-full text-sm font-semibold",
+                tierFilter === 'all' ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
+              )}
+            >
+              <GridIcon className="w-4 h-4 mr-2" /> Alle Stufen
+            </Button>
+
+            {/* Dynamische Tier-Filter */}
+            {creatorTiers.map((tier) => (
+              <Button
+                  key={tier.id}
+                  onClick={() => setTierFilter(tier.id)}
+                  size="sm"
+                  className={cn(
+                    "px-5 py-2 rounded-full text-sm font-semibold",
+                    tierFilter === tier.id ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
+                  )}
+                >
+                  <LockIcon className="w-4 h-4 mr-2" /> {tier.name}
+                </Button>
+            ))}
+          </div>
+        )}
+        {/* --- ENDE FILTER-LAYOUT --- */}
 
 
         {/* Post Grid Section */}
         <div className="mt-6">
           {isLoadingPosts && <p className="text-muted-foreground text-center py-12">Lade Beiträge...</p>}
-          {!isLoadingPosts && filteredPosts.length === 0 && (
+
+          {/* Angepasste "Keine Posts" Nachrichten */}
+          {!isLoadingPosts && posts.length === 0 && (
             <p className="text-muted-foreground text-center py-12">
-              {postFilter === 'all' ? 'Dieser Creator hat noch nichts gepostet.' : `Keine Posts für ${postFilter === 'images' ? 'Bilder' : postFilter === 'videos' ? 'Videos' : 'diese Stufe'} gefunden.`}
+              Dieser Creator hat noch nichts gepostet.
             </p>
           )}
+          {!isLoadingPosts && posts.length > 0 && filteredPosts.length === 0 && (
+            <p className="text-muted-foreground text-center py-12">
+              Keine Beiträge für die ausgewählten Filter gefunden.
+            </p>
+          )}
+          {/* Ende angepasste Nachrichten */}
+
           {!isLoadingPosts && filteredPosts.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
               {gridPosts.map((post, index) => (

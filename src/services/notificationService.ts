@@ -1,3 +1,4 @@
+// src/services/notificationService.ts
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
 
@@ -26,7 +27,7 @@ export class NotificationService {
   /**
    * Ruft die neuesten Benachrichtigungen für einen Benutzer ab.
    */
-  async getRecentNotifications(userId: string, limit: number = 3): Promise<NotificationRow[]> {
+  async getRecentNotifications(userId: string, limit: number = 5): Promise<NotificationRow[]> {
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
@@ -40,6 +41,24 @@ export class NotificationService {
     }
     return data || [];
   }
+
+  // --- NEUE FUNKTION ---
+  /**
+   * Markiert alle ungelesenen Benachrichtigungen eines Benutzers als gelesen.
+   */
+  async markAllAsRead(userId: string): Promise<void> {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', userId)
+      .eq('is_read', false);
+
+    if (error) {
+      console.error('Error marking notifications as read:', error);
+      throw error;
+    }
+  }
+  // --- ENDE NEUE FUNKTION ---
 }
 
 export const notificationService = new NotificationService();

@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
 
 type PaymentRow = Database['public']['Tables']['payments']['Row'];
-type PaymentInsert = Database['public']['Tables']['payments']['Insert']; // <-- HINZUGEFÜGT
+type PaymentInsert = Database['public']['Tables']['payments']['Insert'];
 
 // Ein Typ für die Transaktionshistorie im Frontend
 export interface PaymentTransaction {
@@ -55,7 +55,6 @@ export class PaymentService {
     }));
   }
 
-  // --- NEUE FUNKTION: purchasePost ---
   /**
    * Simuliert den Kauf eines Pay-Per-View-Posts.
    */
@@ -78,6 +77,7 @@ export class PaymentService {
 
     const paymentData: PaymentInsert = {
       user_id: user.id,
+      creator_id: creatorId, // Wichtig für Einnahmen-Trigger
       amount: amount,
       currency: 'EUR',
       type: 'PAY_PER_VIEW',
@@ -102,7 +102,39 @@ export class PaymentService {
 
     return newPayment;
   }
+
+  // --- NEUE FUNKTION ---
+  /**
+   * Ruft NUR die IDs aller erfolgreich gekauften PPV-Posts ab.
+   * Hocheffizient für den App-Start.
+   */
+  async getPaidPostIds(userId: string): Promise<Set<string>> {
+    const { data, error } = await supabase
+      .from('payments')
+      .select('related_id')
+      .eq('user_id', userId)
+      .eq('type', 'PAY_PER_VIEW')
+      .eq('status', 'SUCCESS')
+      // --- KORREKTUR HIER ---
+      // .is('related_id', 'not.null'); // FALSCH
+      .not('related_id', 'is', null); // KORREKT
+      // --- ENDE KORREKTUR ---
+
+    if (error) {
+      console.error('Error fetching paid post IDs:', error);
+      return new Set<string>();
+    }
+
+    // Filtere null-Werte (sollte 'is not null' abdecken, aber sicher ist sicher)
+    // und erstelle ein Set
+    const ids = (data || [])
+      .map(p => p.related_id)
+      .filter((id): id is string => id !== null);
+
+    return new Set<string>(ids);
+  }
   // --- ENDE NEUE FUNKTION ---
+
 
   /**
    * Erzeugt eine lesbare Beschreibung für eine Transaktion.
@@ -118,7 +150,6 @@ export class PaymentService {
           }
           return 'Abonnement-Zahlung';
         case 'PAY_PER_VIEW':
-           // --- AKTUALISIERT ---
           if (metadata?.postCaption) {
             return `PPV: ${metadata.postCaption}...`;
           }

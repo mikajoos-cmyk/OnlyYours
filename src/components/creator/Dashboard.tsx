@@ -1,3 +1,4 @@
+// src/components/creator/Dashboard.tsx
 import { useState, useEffect } from 'react'; // Imports hinzugefügt
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -6,6 +7,9 @@ import { useAuthStore } from '../../stores/authStore';
 import { useNavigate } from 'react-router-dom';
 import { notificationService } from '../../services/notificationService'; // Import des neuen Service
 import type { Database } from '../../lib/database.types'; // Import für Typen
+// --- NEUER IMPORT ---
+import { payoutService, PayoutSummary } from '../../services/payoutService';
+// --- ENDE ---
 
 // Typ für Benachrichtigungen
 type NotificationRow = Database['public']['Tables']['notifications']['Row'];
@@ -28,6 +32,11 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Helper zum Formatieren
+  const formatCurrency = (value: number) => {
+    return `€${value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
   // Datenlade-Effekt
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -40,27 +49,31 @@ export default function Dashboard() {
       setError(null);
 
       try {
-        // Daten parallel abrufen
-        const [unreadCount, recentNotifications] = await Promise.all([
+        // --- DATENABRUF AKTUALISIERT ---
+        // PayoutSummary UND Benachrichtigungen parallel abrufen
+        const [summaryData, unreadCount, recentNotifications] = await Promise.all([
+          payoutService.getPayoutSummary(user.id), // Holt Einnahmen
           notificationService.getUnreadNotificationCount(user.id),
-          notificationService.getRecentNotifications(user.id, 3) // Lade 3 neueste
+          notificationService.getRecentNotifications(user.id, 3)
         ]);
+        // --- ENDE ---
 
         // Stats-Kacheln mit echten Daten füllen
         const loadedStats: StatData[] = [
           {
             label: 'Abonnenten',
-            // user.followersCount kommt aus dem (aktualisierten) authStore
+            // user.followersCount (wird jetzt vom DB-Trigger aktualisiert)
             value: user.followersCount.toLocaleString('de-DE'),
             icon: UsersIcon,
             color: 'text-secondary'
           },
           {
-            label: 'Gesamtumsatz', // Label von "Monatsumsatz" geändert
-            // user.totalEarnings kommt aus dem (aktualisierten) authStore
-            value: `€${user.totalEarnings.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            // --- KORREKTUR: Zeigt Monatsumsatz statt veraltetem Gesamtumsatz ---
+            label: 'Umsatz (Dieser Monat)',
+            value: formatCurrency(summaryData.currentMonthEarnings),
             icon: DollarSignIcon,
             color: 'text-success'
+            // --- ENDE KORREKTUR ---
           },
           {
             label: 'Neue Benachrichtigungen',

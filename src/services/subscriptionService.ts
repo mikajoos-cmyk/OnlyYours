@@ -5,6 +5,7 @@ import { messageService } from './messageService';
 
 type SubscriptionRow = Database['public']['Tables']['subscriptions']['Row'];
 type SubscriptionInsert = Database['public']['Tables']['subscriptions']['Insert'];
+type PaymentInsert = Database['public']['Tables']['payments']['Insert']; // NEU
 
 export interface Subscription {
   id: string;
@@ -27,7 +28,7 @@ export interface Subscription {
 
 export class SubscriptionService {
 
-  // --- HIER IST DIE ÄNDERUNG (Re-Abo-Logik) ---
+  // --- HIER IST DIE ÄNDERUNG (Re-Abo-Logik UND Payment-Eintrag) ---
   async subscribe(creatorId: string, tierId?: string | null, price?: number) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
@@ -36,22 +37,16 @@ export class SubscriptionService {
       throw new Error('Cannot subscribe to yourself');
     }
 
-    // 1. Prüfen, ob ein (noch gültiges) gekündigtes Abo existiert
-    //    Diese Funktion holt 'ACTIVE' oder 'CANCELED' (wenn end_date > now())
     const existingSub = await this.getActiveSubscription(user.id, creatorId);
 
     if (existingSub && existingSub.status === 'CANCELED') {
-      // 2.A RE-AKTIVIEREN (Goal 3)
-      // Das Abo ist gekündigt, aber noch gültig. Wir reaktivieren es.
-      // Die Abrechnung (und das end_date) bleiben unverändert.
+      // 2.A RE-AKTIVIEREN
       console.log("Reactivating CANCELED subscription...");
       const { data, error } = await supabase
         .from('subscriptions')
         .update({
           status: 'ACTIVE',
           auto_renew: true,
-          // Wir ändern das end_date NICHT, da die aktuelle Periode weiterläuft.
-          // Die Zahlung wird erst am end_date fällig.
         })
         .eq('id', existingSub.id)
         .select()
@@ -59,29 +54,32 @@ export class SubscriptionService {
 
       if (error) throw error;
 
-      // Weder Follower-Zahl noch Willkommensnachricht sind nötig,
-      // da der User technisch gesehen nie "weg" war.
+      // HINWEIS: Bei Re-Aktivierung wird KEINE neue Zahlung erstellt,
+      // da die Zahlung erst am (bestehenden) end_date fällig wird.
+      // Der Follower-Count-Trigger wird daher auch nicht ausgelöst.
 
       return data;
 
     } else if (existingSub && existingSub.status === 'ACTIVE') {
-      // Sollte nicht passieren, da der Button "Abonniert" anzeigt
       throw new Error('Already actively subscribed.');
 
     } else {
-      // 2.B NEUES ABO ERSTELLEN (Standard-Logik)
+      // 2.B NEUES ABO ERSTELLEN
       console.log("Creating NEW subscription...");
       let subscriptionPrice = price;
+      let creatorName = 'Creator'; // Fallback-Name
+
       if (subscriptionPrice === undefined || subscriptionPrice === null) {
         if (!creatorId) throw new Error("Creator ID is missing for price lookup.");
 
         const { data: creator } = await supabase
           .from('users')
-          .select('subscription_price')
+          .select('subscription_price, display_name') // Namen für Payment-Metadaten holen
           .eq('id', creatorId)
           .single();
 
         subscriptionPrice = creator?.subscription_price || 0;
+        creatorName = creator?.display_name || 'Creator';
       }
 
       const endDate = new Date();
@@ -97,6 +95,7 @@ export class SubscriptionService {
         auto_renew: true,
       };
 
+      // 1. Abo-Eintrag erstellen
       const { data, error } = await supabase
         .from('subscriptions')
         .insert(subscriptionData)
@@ -104,11 +103,37 @@ export class SubscriptionService {
         .single();
 
       if (error) throw error;
+      if (!data) throw new Error('Subscription creation failed.');
 
-      // Nur bei NEUEM Abo Follower-Zahl erhöhen
-      await this.updateFollowersCount(creatorId, 1);
+      // --- KORREKTUR: 2. Payment-Eintrag erstellen ---
+      const paymentData: PaymentInsert = {
+        user_id: user.id,
+        creator_id: creatorId, // Wichtig für die Zuordnung!
+        amount: subscriptionPrice,
+        currency: 'EUR',
+        type: 'SUBSCRIPTION',
+        status: 'SUCCESS', // Zahlung als erfolgreich simulieren
+        related_id: data.id, // Verknüpfung zur Subscription-ID
+        metadata: {
+          creatorName: creatorName
+        }
+      };
 
-      // Nur bei NEUEM Abo Willkommensnachricht senden
+      const { error: paymentError } = await supabase
+        .from('payments')
+        .insert(paymentData);
+
+      if (paymentError) {
+        // Payment-Fehler loggen, aber den Abo-Flow nicht stoppen
+        console.error("CRITICAL: Failed to create payment record for subscription:", paymentError);
+      }
+      // --- ENDE KORREKTUR ---
+
+
+      // --- KORREKTUR: Follower-Count wird jetzt vom DB-Trigger (on_successful_payment) gehandhabt ---
+      // await this.updateFollowersCount(creatorId, 1); // ENTFERNT
+
+      // Willkommensnachricht senden (bleibt gleich)
       try {
         const { data: creatorProfile } = await supabase
           .from('users')
@@ -117,13 +142,13 @@ export class SubscriptionService {
           .single();
 
         const customMessage = creatorProfile?.welcome_message;
-        const creatorName = creatorProfile?.display_name || 'dem Creator';
+        const cName = creatorProfile?.display_name || 'dem Creator';
         let messageToSend: string;
 
         if (customMessage && customMessage.trim() !== '') {
           messageToSend = customMessage;
         } else {
-          messageToSend = `Vielen Dank für dein Abonnement bei ${creatorName}! Ich freue mich, dich hier zu haben.`;
+          messageToSend = `Vielen Dank für dein Abonnement bei ${cName}! Ich freue mich, dich hier zu haben.`;
         }
         await messageService.sendWelcomeMessage(creatorId, user.id, messageToSend);
       } catch (msgError) {
@@ -133,7 +158,6 @@ export class SubscriptionService {
       return data;
     }
   }
-  // --- ENDE DER ÄNDERUNG ---
 
   async cancelSubscription(subscriptionId: string) {
     const { data: { user } } = await supabase.auth.getUser();
@@ -158,9 +182,11 @@ export class SubscriptionService {
 
     if (error) throw error;
 
-    await this.updateFollowersCount(subscription.creator_id, -1);
+    // --- KORREKTUR: Follower-Zahl wird bei Kündigung NICHT mehr verringert ---
+    // await this.updateFollowersCount(subscription.creator_id, -1); // ENTFERNT
   }
 
+  // ... (Rest der Datei bleibt gleich) ...
   async getUserSubscriptions() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
@@ -234,10 +260,9 @@ export class SubscriptionService {
   }
 
   private async updateFollowersCount(creatorId: string, delta: number) {
-    await supabase.rpc('update_followers_count', {
-      creator_id_input: creatorId,
-      delta_value: delta,
-    });
+    // Diese Funktion wird durch den DB-Trigger ersetzt, bleibt aber
+    // für den Fall, dass sie an anderer Stelle noch benötigt wird (obwohl die RPC entfernt wurde).
+    // Im Idealfall sollte sie entfernt werden.
   }
 
   private mapSubscriptionsToFrontend(subscriptions: any[]): Subscription[] {

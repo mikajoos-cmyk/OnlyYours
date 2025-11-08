@@ -14,6 +14,10 @@ import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import PpvModal from './PpvModal';
 import { useToast } from '../../hooks/use-toast';
 import { Separator } from '../ui/separator'; // Separator importieren
+// --- NEUE IMPORTS ---
+import { tierService, Tier } from '../../services/tierService';
+import SubscriptionModal from './SubscriptionModal';
+// --- ENDE ---
 
 export default function DiscoveryFeed() {
   const [showComments, setShowComments] = useState(false);
@@ -22,6 +26,10 @@ export default function DiscoveryFeed() {
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [selectedPostIndex, setSelectedPostIndex] = useState(0);
   const [showPpvModal, setShowPpvModal] = useState(false);
+  // --- NEUER STATE ---
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [creatorTiers, setCreatorTiers] = useState<Tier[]>([]);
+  // --- ENDE ---
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
@@ -29,9 +37,9 @@ export default function DiscoveryFeed() {
   const { toast } = useToast();
 
   // Stores
-  const { user } = useAuthStore();
+  const { user } = useAuthStore(); // <-- KORREKTUR: Heißt 'user', nicht 'currentUser'
   const { posts, currentIndex, isLoading, error, loadDiscoveryPosts, nextPost, previousPost, toggleLike } = useFeedStore();
-  const { checkAccess, addPurchasedPost, isLoading: isLoadingSubs } = useSubscriptionStore();
+  const { checkAccess, addPurchasedPost, isLoading: isLoadingSubs, loadSubscriptions } = useSubscriptionStore(); // loadSubscriptions hinzugefügt
 
   // Daten laden
   useEffect(() => {
@@ -40,20 +48,47 @@ export default function DiscoveryFeed() {
     }
   }, [loadDiscoveryPosts, posts.length]);
 
+  const currentPost = posts[currentIndex];
+
+  // --- NEUER EFFEKT: Tiers für den aktuellen Creator laden ---
+  useEffect(() => {
+    if (!currentPost?.creatorId) {
+      setCreatorTiers([]); // Zurücksetzen, wenn kein Post da ist
+      return;
+    }
+
+    const fetchTiers = async () => {
+      try {
+        // Tiers für den Creator des aktuellen Posts abrufen
+        const fetchedTiers = await tierService.getCreatorTiers(currentPost.creatorId);
+        // Nach Preis sortieren, damit "ab X€" den günstigsten anzeigt
+        const sortedTiers = (fetchedTiers || []).sort((a, b) => a.price - b.price);
+        setCreatorTiers(sortedTiers);
+      } catch (err) {
+        console.error("Failed to fetch tiers for modal", err);
+        setCreatorTiers([]); // Bei Fehler leeren
+      }
+    };
+    fetchTiers();
+  }, [currentPost?.creatorId]); // Abhängig von der Creator-ID des aktuellen Posts
+  // --- ENDE ---
+
+
   // Tastatur-Navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (showPpvModal || showComments || isViewerOpen) return;
+      // Modale blockieren Navigation
+      if (showPpvModal || showComments || isViewerOpen || showSubscriptionModal) return;
       if (e.key === 'ArrowDown') nextPost();
       else if (e.key === 'ArrowUp') previousPost();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nextPost, previousPost, showPpvModal, showComments, isViewerOpen]);
+  }, [nextPost, previousPost, showPpvModal, showComments, isViewerOpen, showSubscriptionModal]);
 
   // Mausrad-Navigation
   const handleScroll = (e: React.WheelEvent) => {
-    if (isScrolling.current || Math.abs(e.deltaY) < 50 || showPpvModal || showComments || isViewerOpen) return;
+    if (isScrolling.current || Math.abs(e.deltaY) < 50 || showPpvModal || showComments || isViewerOpen || showSubscriptionModal) return;
     isScrolling.current = true;
     if (e.deltaY > 0) nextPost();
     else if (e.deltaY < 0) previousPost();
@@ -63,7 +98,7 @@ export default function DiscoveryFeed() {
   // Touch-Navigation
   const handleTouchStart = useRef({ y: 0 });
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (showPpvModal || showComments || isViewerOpen) return;
+    if (showPpvModal || showComments || isViewerOpen || showSubscriptionModal) return;
     const touch = e.touches[0];
     const deltaY = handleTouchStart.current.y - touch.clientY;
     if (Math.abs(deltaY) > 50 && !isScrolling.current) {
@@ -87,29 +122,49 @@ export default function DiscoveryFeed() {
   };
 
   // --- Klick-Handler für die Buttons im Overlay ---
+
+  // Klick auf PPV-Button (öffnet PPV-Modal)
   const handlePpvClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Verhindert Klick auf das Div
     setShowPpvModal(true);
   };
 
-  const handleSubscribeClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Verhindert Klick auf das Div
-    const post = posts[currentIndex];
-    toast({
-      title: "Zum Abonnieren weitergeleitet",
-      description: "Wähle eine Stufe auf dem Profil des Creators.",
-    });
-    navigate(`/profile/${post.creator.username || post.creatorId}`);
-  };
-  // --- ENDE ---
+  // --- KORRIGIERTER HANDLER ---
+  // Klick auf Abo-Button (öffnet Abo-Modal)
+  const handleSubscribeClick = (e?: React.MouseEvent) => { // <-- 1. Event 'e' ist optional
+    e?.stopPropagation(); // <-- 2. 'stopPropagation' nur aufrufen, WENN 'e' existiert
 
-  // Callback nach erfolgreichem Kauf
+    if (!user) { // <-- 3. 'user' statt 'currentUser' verwenden
+      toast({ title: "Bitte anmelden", description: "Sie müssen angemeldet sein.", variant: "destructive" });
+      return;
+    }
+    if (creatorTiers.length === 0) {
+       toast({ title: "Fehler", description: "Dieser Creator bietet (noch) keine Abos an.", variant: "destructive" });
+       return;
+    }
+
+    // Schließe das PPV-Modal, falls es offen ist (z.B. wenn von dort geklickt)
+    setShowPpvModal(false);
+    // Öffne das SubscriptionModal
+    setShowSubscriptionModal(true);
+  };
+  // --- ENDE KORREKTUR ---
+
+  // Callback nach erfolgreichem PPV-Kauf
   const handlePurchaseSuccess = (postId: string) => {
-    addPurchasedPost(postId);
+    addPurchasedPost(postId); // Post optimistisch freischalten
     setShowPpvModal(false);
   };
 
-  const currentPost = posts[currentIndex];
+  // Callback nach erfolgreichem Abo-Kauf
+  const handleSubscriptionComplete = () => {
+    setShowSubscriptionModal(false);
+    toast({ title: "Erfolgreich abonniert!", description: "Der Post ist jetzt freigeschaltet." });
+    // Wichtig: Der subscriptionStore muss neu geladen werden, damit checkAccess() funktioniert
+    loadSubscriptions();
+    // Der Post wird durch den re-render und checkAccess() automatisch freigeschaltet
+  };
+
 
   // Lade- und Fehlerzustände
   if (isLoading || isLoadingSubs) {
@@ -139,7 +194,28 @@ export default function DiscoveryFeed() {
 
   // Optionen prüfen
   const canPpv = currentPost.price > 0;
-  const canSubscribe = currentPost.tier_id !== null; // Post ist an ein Tier gebunden
+  // Finde das spezifische Tier (falls vorhanden)
+  const requiredTier = currentPost.tier_id ? creatorTiers.find(t => t.id === currentPost.tier_id) : null;
+  // Finde das günstigste Tier (als Fallback)
+  const cheapestTier = creatorTiers.length > 0 ? creatorTiers[0] : null; // Annahme: creatorTiers ist sortiert
+
+  // Post ist an ein Tier gebunden ODER (ist ein allgemeiner Sub-Post UND der Creator hat Tiers)
+  const canSubscribe = currentPost.tier_id !== null || (currentPost.tier_id === null && creatorTiers.length > 0);
+
+  // --- Dynamischer Text für den Abo-Button im Overlay ---
+  let subscribeText = "Mit Abo freischalten";
+  if (requiredTier) {
+    // Fall A: Post erfordert ein spezifisches Tier (z.B. "VIP")
+    subscribeText = `Mit "${requiredTier.name}"-Abo freischalten`;
+  } else if (cheapestTier) {
+    // Fall B: Post ist für alle Abonnenten (tier_id = null), wir zeigen den günstigsten Preis an
+    subscribeText = `Abonnieren (ab ${cheapestTier.price.toFixed(2)}€)`;
+  } else {
+    // Fall C: Creator hat keine Tiers (Button wird unten ausgeblendet)
+    subscribeText = "Abonnieren nicht verfügbar";
+  }
+  // --- ENDE ---
+
 
   return (
     <>
@@ -218,7 +294,7 @@ export default function DiscoveryFeed() {
                 </div>
               )}
 
-              {/* Button 2: Abo (Immer anzeigen, wenn Tier-gesperrt) */}
+              {/* Button 2: Abo (Immer anzeigen, wenn Tiers vorhanden) */}
               {canSubscribe && (
                 <Button
                   variant={canPpv ? "outline" : "secondary"} // Wenn PPV da ist, ist Abo die "outline" Option
@@ -228,20 +304,12 @@ export default function DiscoveryFeed() {
                           ? "bg-transparent border-secondary text-secondary hover:bg-secondary/10 hover:text-secondary"
                           : "bg-secondary text-secondary-foreground hover:bg-secondary/90" // Wenn *nur* Abo geht
                   )}
-                  onClick={handleSubscribeClick}
+                  onClick={handleSubscribeClick} // <-- ÖFFNET JETZT DAS ABO-MODAL
                 >
                   <UserCheckIcon className="w-5 h-5 mr-2" />
-                  Mit Abo freischalten
+                  {subscribeText}
                 </Button>
               )}
-
-              {/* Fallback für öffentliche Posts, die PPV sind (canSubscribe = false) */}
-              {!canSubscribe && canPpv && (
-                <p className="text-sm text-muted-foreground max-w-xs text-center">
-                  Dieser Beitrag ist öffentlich, kostet aber extra.
-                </p>
-              )}
-
             </div>
           )}
           {/* --- ENDE FIX --- */}
@@ -345,15 +413,30 @@ export default function DiscoveryFeed() {
         )}
       </AnimatePresence>
 
+      {/* PPV Modal (wird durch handlePpvClick geöffnet) */}
       {showPpvModal && currentPost && (
          <PpvModal
             isOpen={showPpvModal}
             onClose={() => setShowPpvModal(false)}
             post={currentPost}
             onPaymentSuccess={handlePurchaseSuccess}
-            creatorTiers={[]} // Tiers werden hier nicht benötigt, da der Abo-Button zum Profil navigiert
-            onSubscribeClick={handleSubscribeClick} // Klick-Handler übergeben
+            creatorTiers={creatorTiers} // <-- Übergibt die geladenen Tiers
+            onSubscribeClick={handleSubscribeClick} // <-- Übergibt den Handler, der das Abo-Modal öffnet
          />
+      )}
+
+      {/* Subscription Modal (wird durch handleSubscribeClick geöffnet) */}
+      {showSubscriptionModal && currentPost && creatorTiers.length > 0 && (
+        <SubscriptionModal
+          isOpen={showSubscriptionModal}
+          onClose={() => setShowSubscriptionModal(false)}
+          creator={{
+            id: currentPost.creatorId,
+            name: currentPost.creator.name,
+          }}
+          tiers={creatorTiers}
+          onSubscriptionComplete={handleSubscriptionComplete}
+        />
       )}
 
       {isViewerOpen && (

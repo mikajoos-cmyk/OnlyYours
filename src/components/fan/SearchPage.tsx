@@ -1,8 +1,8 @@
 // src/components/fan/SearchPage.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react'; // useMemo hinzugefügt
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
-import { SearchIcon, SlidersHorizontalIcon, CheckIcon } from 'lucide-react';
+import { SearchIcon, SlidersHorizontalIcon, CheckIcon, VideoIcon, LockIcon, HeartIcon, MessageCircleIcon } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { useNavigate } from 'react-router-dom';
@@ -10,101 +10,153 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../u
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { userService, UserProfile } from '../../services/userService';
+// --- NEUE IMPORTS ---
+import { postService, Post as ServicePostData } from '../../services/postService';
+import { tierService, Tier } from '../../services/tierService'; // Tier-Service
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { useAuthStore } from '../../stores/authStore';
+import { useSubscriptionStore } from '../../stores/subscriptionStore';
+import ProfilePostViewer, { PostData as ViewerPostData } from './ProfilePostViewer'; // Viewer importieren
+// --- ENDE ---
 import { subscriptionService } from '../../services/subscriptionService';
 import { useToast } from '../../hooks/use-toast';
 import SubscriptionModal from './SubscriptionModal';
 import { cn } from '../../lib/utils';
 
+// Interne Typdefinition für das Post-Grid
+interface GridPost {
+  id: string;
+  thumbnailUrl: string;
+  type: 'image' | 'video';
+  hasAccess: boolean;
+  creatorUsername: string; // Wird für Fallback-Navigation benötigt
+  // Hinzugefügt für die Anzeige im Grid
+  likes: number;
+  comments: number;
+}
+
 export default function SearchPage() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('creators'); // 'creators' or 'posts'
+
+  // Filter (gelten jetzt für Posts)
   const [priceFilter, setPriceFilter] = useState('all');
   const [contentType, setContentType] = useState('all');
-  const [creators, setCreators] = useState<UserProfile[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  // Ergebnisse
+  const [creatorResults, setCreatorResults] = useState<UserProfile[]>([]);
+  const [postResults, setPostResults] = useState<ServicePostData[]>([]);
+
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const { user: currentUser } = useAuthStore();
+  const { checkAccess, isLoading: isLoadingSubs } = useSubscriptionStore();
   const [subscriptionMap, setSubscriptionMap] = useState<Map<string, 'ACTIVE' | 'CANCELED'>>(new Map());
-  const [isLoadingSubscriptions, setIsLoadingSubscriptions] = useState(true);
+
+  // States für Modals
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [selectedCreator, setSelectedCreator] = useState<UserProfile | null>(null);
+  const [creatorTiersForModal, setCreatorTiersForModal] = useState<Tier[]>([]); // Tiers für das Abo-Modal
 
-  const popularTags = ['#luxury', '#fitness', '#behindthescenes', '4K', 'Live jetzt'];
+  // --- NEU: States für den Post-Viewer ---
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
+  const [selectedPostIndex, setSelectedPostIndex] = useState(0);
+  // --- ENDE ---
 
-  // Effekt zum Laden der Abonnements (unverändert)
-  const fetchSubscriptions = async () => {
-    if (!currentUser?.id) {
-      setIsLoadingSubscriptions(false);
-      return;
-    }
-    setIsLoadingSubscriptions(true);
-    try {
-      const subs = await subscriptionService.getUserSubscriptions();
-      const subMap = new Map<string, 'ACTIVE' | 'CANCELED'>();
-      for (const sub of subs) {
-        subMap.set(sub.creatorId, sub.status);
-      }
-      setSubscriptionMap(subMap);
-    } catch (err) {
-      console.error("Fehler beim Laden der Abonnements:", err);
-      toast({ title: "Fehler", description: "Abonnements konnten nicht geladen werden.", variant: "destructive" });
-    } finally {
-      setIsLoadingSubscriptions(false);
-    }
-  };
+  const popularTags = ['#fitness', '#tutorial', '#live', '#art', '#gaming'];
 
+  // Effekt zum Laden der Abonnements (für Creator-Buttons)
   useEffect(() => {
+    const fetchSubscriptions = async () => {
+      if (!currentUser?.id) return;
+      try {
+        const subs = await subscriptionService.getUserSubscriptions();
+        const subMap = new Map<string, 'ACTIVE' | 'CANCELED'>();
+        for (const sub of subs) {
+          subMap.set(sub.creatorId, sub.status);
+        }
+        setSubscriptionMap(subMap);
+      } catch (err) {
+        console.error("Fehler beim Laden der Abonnements:", err);
+      }
+    };
     fetchSubscriptions();
   }, [currentUser?.id]);
 
-  // Effekt zum Suchen/Laden von Creators (Goal 1 Fix)
+  // Effekt zum Suchen (reagiert auf Query UND Tab-Wechsel)
   useEffect(() => {
-    const fetchCreators = async () => {
+    const fetchSearchData = async () => {
+      if (!searchQuery) {
+        setLoading(false);
+        setCreatorResults([]);
+        setPostResults([]);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
       try {
-        setLoading(true);
-        setError(null);
+        if (activeTab === 'creators') {
+          // --- CREATOR-SUCHE (jetzt ohne Filter) ---
+          const creatorData = await userService.searchCreators(searchQuery);
+          setCreatorResults(creatorData || []);
+          setPostResults([]); // Post-Ergebnisse leeren
 
-        if (!searchQuery && priceFilter === 'all' && contentType === 'all') {
-          // --- HIER IST DIE KORREKTUR (Goal 1) ---
-          // Zurück zur ursprünglichen Logik: Lade Top Creators (alle mit Rolle Creator)
-          const topCreators = await userService.getTopCreators();
-          setCreators(topCreators || []);
-          // --- ENDE DER KORREKTUR ---
-        } else {
-          const filters = { price: priceFilter, type: contentType };
-          const searchResults = await userService.searchCreators(searchQuery, filters);
-          setCreators(searchResults || []);
+        } else if (activeTab === 'posts') {
+          // --- POST-SUCHE (jetzt MIT Filtern) ---
+          const postData = await postService.searchPosts(searchQuery, 30, {
+            price: priceFilter,
+            type: contentType
+          });
+          setPostResults(postData || []);
+          setCreatorResults([]); // Creator-Ergebnisse leeren
         }
-
       } catch (err) {
-        setError('Fehler bei der Suche nach Creators.');
+        setError('Fehler bei der Suche.');
         console.error(err);
       } finally {
         setLoading(false);
       }
     };
 
+    // Debounce: Warte 300ms nach der Eingabe, bevor die Suche startet
     const handler = setTimeout(() => {
-      fetchCreators();
+      fetchSearchData();
     }, 300);
 
     return () => {
       clearTimeout(handler);
     };
-  }, [searchQuery, priceFilter, contentType]);
+  }, [searchQuery, activeTab, priceFilter, contentType]); // Abhängig von Query und Tab
 
-  // Handler für Abo-Modal
+  // --- KORRIGIERTER HANDLER: Lädt Tiers, bevor das Modal geöffnet wird ---
   const handleSubscribeClick = (creator: UserProfile) => {
     if (!currentUser) {
       toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um zu abonnieren.", variant: "destructive" });
       return;
     }
     setSelectedCreator(creator);
-    setShowSubscriptionModal(true);
+    setLoading(true); // Lade-Spinner anzeigen
+
+    tierService.getCreatorTiers(creator.id)
+      .then(tiers => {
+        setCreatorTiersForModal(tiers.sort((a, b) => a.price - b.price));
+        setShowSubscriptionModal(true);
+      })
+      .catch(err => {
+        console.error("Fehler beim Laden der Tiers für das Modal:", err);
+        toast({ title: "Fehler", description: "Abo-Optionen konnten nicht geladen werden.", variant: "destructive"});
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   };
+  // --- ENDE KORREKTUR ---
 
   const handleManageSubscriptionClick = () => {
     navigate('/profile');
@@ -114,81 +166,81 @@ export default function SearchPage() {
   const handleSubscriptionComplete = (subscribedCreatorId: string) => {
     setSubscriptionMap(prev => new Map(prev).set(subscribedCreatorId, 'ACTIVE'));
     setShowSubscriptionModal(false);
+    setCreatorTiersForModal([]);
   };
+
+  // Klick auf einen Tag-Button
+  const handleTagClick = (tag: string) => {
+    setSearchQuery(tag.replace('#', ''));
+    setActiveTab('posts');
+  };
+
+  // --- NEU: Handler für Post-Klick (öffnet Viewer) ---
+  const handlePostClick = (index: number) => {
+    setSelectedPostIndex(index);
+    setIsViewerOpen(true);
+  };
+
+  const handleCloseViewer = () => {
+    setIsViewerOpen(false);
+  };
+  // --- ENDE NEU ---
+
+  // --- Post Grid (für Post-Suchergebnisse) ---
+  const gridPosts: GridPost[] = postResults.map((post) => {
+    const hasAccess = checkAccess(post, currentUser?.id);
+    return {
+      id: post.id,
+      thumbnailUrl: post.thumbnail_url || post.mediaUrl,
+      type: post.mediaType.toLowerCase() as 'image' | 'video',
+      hasAccess: hasAccess,
+      creatorUsername: post.creator.username || post.creator.id,
+      likes: post.likes,
+      comments: post.comments,
+    };
+  });
+
+  // --- NEU: Daten für den Viewer vorbereiten ---
+  const viewerPosts: ViewerPostData[] = useMemo(() =>
+    postResults.map(post => ({
+      ...post, // Übergibt alle Daten (creatorId, price, tier_id etc.)
+      media: post.mediaUrl,
+      creator: { // Stellt das Creator-Objekt für den Viewer bereit
+        name: post.creator.name,
+        username: post.creator.username || post.creator.id,
+        avatar: post.creator.avatar,
+        isVerified: post.creator.isVerified,
+      },
+  })), [postResults]);
+  // --- ENDE ---
 
   return (
     <>
       <div className="min-h-screen py-8 px-4">
         <div className="max-w-6xl mx-auto space-y-6">
-          <h1 className="text-3xl font-serif text-foreground">Creators suchen</h1>
+          <h1 className="text-3xl font-serif text-foreground">Suchen</h1>
 
-          {/* Suchleiste und Filter */}
+          {/* Suchleiste (Filter-Button entfernt) */}
           <div className="flex gap-3">
             <div className="relative flex-1">
               <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" strokeWidth={1.5} />
               <Input
-                placeholder="Suche nach Creators, Kategorien oder Hashtags"
+                placeholder={activeTab === 'creators' ? 'Suche nach Creators...' : 'Suche nach Posts (Hashtags, Titel)...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 bg-card text-foreground border-border h-12"
               />
             </div>
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="bg-card text-foreground border-border hover:bg-neutral h-12 px-6 font-normal"
-                >
-                  <SlidersHorizontalIcon className="w-5 h-5 mr-2" strokeWidth={1.5} />
-                  Filter
-                </Button>
-              </SheetTrigger>
-              <SheetContent className="bg-card text-foreground border-border">
-                <SheetHeader>
-                  <SheetTitle className="text-foreground">Filter</SheetTitle>
-                </SheetHeader>
-                <div className="space-y-6 mt-6">
-                  {/* Filter-Optionen... */}
-                  <div className="space-y-2">
-                    <Label className="text-foreground">Preis</Label>
-                    <Select value={priceFilter} onValueChange={setPriceFilter}>
-                      <SelectTrigger className="bg-background text-foreground border-border">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-card text-foreground border-border">
-                        <SelectItem value="all">Alle</SelectItem>
-                        <SelectItem value="free">Kostenlos</SelectItem>
-                        <SelectItem value="low">Unter 10€</SelectItem>
-                        <SelectItem value="medium">10€ - 30€</SelectItem>
-                        <SelectItem value="high">Über 30€</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-foreground">Art</Label>
-                    <Select value={contentType} onValueChange={setContentType}>
-                      <SelectTrigger className="bg-background text-foreground border-border">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-card text-foreground border-border">
-                        <SelectItem value="all">Video, Foto</SelectItem>
-                        <SelectItem value="video">Nur Video</SelectItem>
-                        <SelectItem value="photo">Nur Foto</SelectItem>
-                        <SelectItem value="live">Live</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </SheetContent>
-            </Sheet>
+            {/* Filter-Button HIER ENTFERNT */}
           </div>
 
+          {/* Tag-Buttons (wechseln zu "Posts") */}
           <div className="flex flex-wrap gap-2">
             {popularTags.map((tag) => (
               <Button
                 key={tag}
                 variant="outline"
-                onClick={() => setSearchQuery(tag)}
+                onClick={() => handleTagClick(tag)}
                 className="bg-card text-foreground border-border hover:bg-secondary hover:text-secondary-foreground rounded-full font-normal"
               >
                 {tag}
@@ -196,96 +248,210 @@ export default function SearchPage() {
             ))}
           </div>
 
-          <div>
-            <h2 className="text-xl font-serif text-foreground mb-4">Ergebnisse</h2>
-            {loading && <p>Suche läuft...</p>}
-            {error && <p className="text-destructive">{error}</p>}
-            {!loading && !error && creators.length === 0 && <p>Keine Creators gefunden.</p>}
+          {/* --- TABS FÜR ERGEBNISSE --- */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <TabsList className="bg-card border border-border w-full md:w-auto">
+                <TabsTrigger value="creators" className="flex-1 data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
+                  Creators
+                </TabsTrigger>
+                <TabsTrigger value="posts" className="flex-1 data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
+                  Posts
+                </TabsTrigger>
+              </TabsList>
 
-            {!loading && !error && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {creators.map((creator) => {
-                  const subscriptionStatus = subscriptionMap.get(creator.id);
-                  const isOwnProfile = currentUser?.id === creator.id;
-
-                  return (
-                    <Card key={creator.id} className="bg-card border-border overflow-hidden">
-                      <div
-                        className="relative h-48 bg-neutral cursor-pointer"
-                        onClick={() => navigate(`/profile/${creator.username}`)}
-                      >
-                        {creator.bannerUrl ? (
-                          <img src={creator.bannerUrl} alt={creator.displayName} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full object-cover bg-neutral" />
-                        )}
+              {/* Filter-Button (jetzt HIER, nur im "Posts"-Tab sichtbar) */}
+              {activeTab === 'posts' && (
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="bg-card text-foreground border-border hover:bg-neutral h-10 px-6 font-normal w-full md:w-auto"
+                    >
+                      <SlidersHorizontalIcon className="w-5 h-5 mr-2" strokeWidth={1.5} />
+                      Filter
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent className="bg-card text-foreground border-border">
+                    <SheetHeader>
+                      <SheetTitle className="text-foreground">Post-Filter</SheetTitle>
+                    </SheetHeader>
+                    <div className="space-y-6 mt-6">
+                      <div className="space-y-2">
+                        <Label className="text-foreground">Preis</Label>
+                        <Select value={priceFilter} onValueChange={setPriceFilter}>
+                          <SelectTrigger className="bg-background text-foreground border-border">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-card text-foreground border-border">
+                            <SelectItem value="all">Alle Preise</SelectItem>
+                            <SelectItem value="free">Kostenlos (Öffentlich)</SelectItem>
+                            <SelectItem value="low">Unter 10€</SelectItem>
+                            <SelectItem value="medium">10€ - 30€</SelectItem>
+                            <SelectItem value="high">Über 30€</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
+                      <div className="space-y-2">
+                        <Label className="text-foreground">Art</Label>
+                        <Select value={contentType} onValueChange={setContentType}>
+                          <SelectTrigger className="bg-background text-foreground border-border">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-card text-foreground border-border">
+                            <SelectItem value="all">Alle (Video, Foto)</SelectItem>
+                            <SelectItem value="video">Nur Video</SelectItem>
+                            <SelectItem value="photo">Nur Foto</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              )}
+            </div>
 
-                      <div className="p-4 flex items-center justify-between">
+            {/* Lade-/Fehler-Zustand */}
+            {loading && <p className="text-center text-muted-foreground py-8">Suche läuft...</p>}
+            {error && <p className="text-destructive text-center py-8">{error}</p>}
+
+            {/* Creator-Ergebnisse */}
+            <TabsContent value="creators" className="mt-6">
+              {!loading && !error && creatorResults.length === 0 && (
+                <p className="text-muted-foreground text-center py-8">
+                  {searchQuery ? 'Keine Creators für diese Suche gefunden.' : 'Gib einen Suchbegriff ein.'}
+                </p>
+              )}
+
+              {!loading && !error && creatorResults.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {creatorResults.map((creator) => {
+                    const subscriptionStatus = subscriptionMap.get(creator.id);
+                    const isOwnProfile = currentUser?.id === creator.id;
+
+                    return (
+                      <Card key={creator.id} className="bg-card border-border overflow-hidden">
                         <div
-                          className="flex items-center gap-3 cursor-pointer"
+                          className="relative h-48 bg-neutral cursor-pointer"
                           onClick={() => navigate(`/profile/${creator.username}`)}
                         >
-                          <Avatar className="w-12 h-12 border-2 border-secondary">
-                            <AvatarImage src={creator.avatarUrl || undefined} alt={creator.displayName} />
-                            <AvatarFallback className="bg-secondary text-secondary-foreground">
-                              {creator.displayName.charAt(0)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <h3 className="font-medium text-foreground">{creator.displayName}</h3>
-                          </div>
+                          {creator.bannerUrl ? (
+                            <img src={creator.bannerUrl} alt={creator.displayName} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full object-cover bg-neutral" />
+                          )}
                         </div>
 
-                        {/* --- HIER IST DIE KORREKTUR (Goal 2) --- */}
-                        {!isOwnProfile && (
-                          <Button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Nur wenn Status 'ACTIVE' ist -> Verwalten
-                              // Wenn 'CANCELED' oder 'null' -> Abonnieren/Reaktivieren
-                              if (subscriptionStatus === 'ACTIVE') {
-                                handleManageSubscriptionClick();
-                              } else {
-                                handleSubscribeClick(creator);
-                              }
-                            }}
-                            disabled={isLoadingSubscriptions}
-                            className={cn(
-                              "font-normal transition-colors duration-200 flex-shrink-0",
-                              subscriptionStatus === 'ACTIVE' && "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10 px-3",
-                              subscriptionStatus === 'CANCELED' && "bg-transparent border-2 border-border text-muted-foreground hover:bg-neutral px-3", // Gekündigt-Style
-                              !subscriptionStatus && "bg-secondary text-secondary-foreground hover:bg-secondary/90" // Nicht abonniert-Style
-                            )}
+                        <CardContent className="p-4 flex items-center justify-between">
+                          <div
+                            className="flex items-center gap-3 cursor-pointer"
+                            onClick={() => navigate(`/profile/${creator.username}`)}
                           >
-                            {isLoadingSubscriptions ? '...' : (
-                              subscriptionStatus === 'ACTIVE' ? (
-                                <>
-                                  <CheckIcon className="w-4 h-4 mr-1" strokeWidth={2} />
-                                  Abonniert
-                                </>
-                              ) : subscriptionStatus === 'CANCELED' ? (
-                                <>
-                                  <CheckIcon className="w-4 h-4 mr-1" strokeWidth={2} />
-                                  Gekündigt
-                                </>
-                              ) : (
-                                'Abonnieren'
-                              )
-                            )}
-                          </Button>
+                            <Avatar className="w-12 h-12 border-2 border-secondary">
+                              <AvatarImage src={creator.avatarUrl || undefined} alt={creator.displayName} />
+                              <AvatarFallback className="bg-secondary text-secondary-foreground">
+                                {creator.displayName.charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <h3 className="font-medium text-foreground">{creator.displayName}</h3>
+                            </div>
+                          </div>
+
+                          {!isOwnProfile && (
+                            <Button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (subscriptionStatus === 'ACTIVE') {
+                                  handleManageSubscriptionClick();
+                                } else {
+                                  handleSubscribeClick(creator); // <-- Lädt jetzt Tiers
+                                }
+                              }}
+                              disabled={isLoadingSubs || loading} // Auch 'loading' (für Tiers)
+                              className={cn(
+                                "font-normal transition-colors duration-200 flex-shrink-0",
+                                subscriptionStatus === 'ACTIVE' && "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10 px-3",
+                                subscriptionStatus === 'CANCELED' && "bg-transparent border-2 border-border text-muted-foreground hover:bg-neutral px-3",
+                                !subscriptionStatus && "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                              )}
+                            >
+                              {isLoadingSubs ? '...' : (
+                                subscriptionStatus === 'ACTIVE' ? (
+                                  <><CheckIcon className="w-4 h-4 mr-1" strokeWidth={2} /> Abonniert</>
+                                ) : subscriptionStatus === 'CANCELED' ? (
+                                  <><CheckIcon className="w-4 h-4 mr-1" strokeWidth={2} /> Gekündigt</>
+                                ) : (
+                                  'Abonnieren'
+                                )
+                              )}
+                            </Button>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Post-Ergebnisse */}
+            <TabsContent value="posts" className="mt-6">
+              {!loading && !error && postResults.length === 0 && (
+                 <p className="text-muted-foreground text-center py-8">
+                  {searchQuery ? 'Keine Posts für diese Suche gefunden.' : 'Gib einen Suchbegriff ein.'}
+                </p>
+              )}
+
+              {!loading && !error && postResults.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
+                  {gridPosts.map((post, index) => (
+                    <div
+                      key={post.id}
+                      className="relative aspect-square rounded-lg overflow-hidden cursor-pointer group bg-card"
+                      onClick={() => handlePostClick(index)} // <-- ÖFFNET DEN VIEWER
+                    >
+                      <img
+                        src={post.thumbnailUrl}
+                        alt=""
+                        className={cn(
+                            "w-full h-full object-cover transition-transform duration-200 group-hover:scale-105",
+                            !post.hasAccess && "filter blur-2xl"
                         )}
-                        {/* --- ENDE DER KORREKTUR --- */}
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                      />
+                      {post.type === 'video' && (
+                        <VideoIcon className="absolute top-2 right-2 w-5 h-5 text-foreground drop-shadow-lg" strokeWidth={2} />
+                      )}
+
+                      {!post.hasAccess && (
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                          <LockIcon className="w-8 h-8 text-secondary" />
+                        </div>
+                      )}
+
+                      {/* Overlay mit Infos (falls freigeschaltet) */}
+                      {post.hasAccess && (
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-4">
+                          <div className="flex items-center gap-1 text-foreground">
+                            <HeartIcon className="w-5 h-5" />
+                            <span>{post.likes}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-foreground">
+                            <MessageCircleIcon className="w-5 h-5" />
+                            <span>{post.comments}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
 
+      {/* Subscription Modal (für Creator-Ergebnisse) */}
       {showSubscriptionModal && selectedCreator && (
         <SubscriptionModal
           isOpen={showSubscriptionModal}
@@ -293,11 +459,21 @@ export default function SearchPage() {
           creator={{
             id: selectedCreator.id,
             name: selectedCreator.displayName,
-            subscriptionPrice: selectedCreator.subscriptionPrice,
           }}
-          onPaymentSuccess={() => handleSubscriptionComplete(selectedCreator.id)}
+          tiers={creatorTiersForModal} // <-- Übergibt die geladenen Tiers
+          onSubscriptionComplete={() => handleSubscriptionComplete(selectedCreator.id)}
         />
       )}
+
+      {/* --- NEU: Post Feed Viewer Modal (für Post-Ergebnisse) --- */}
+      {isViewerOpen && (
+        <ProfilePostViewer
+          initialPosts={viewerPosts}
+          initialIndex={selectedPostIndex}
+          onClose={handleCloseViewer}
+        />
+      )}
+      {/* --- ENDE --- */}
     </>
   );
 }

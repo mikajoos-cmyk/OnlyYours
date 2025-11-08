@@ -6,7 +6,8 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { UploadIcon, CalendarIcon, Loader2Icon, Trash2Icon, XIcon, LockIcon, GlobeIcon } from 'lucide-react'; // UsersIcon entfernt
+// --- PlusIcon hinzugefügt ---
+import { UploadIcon, CalendarIcon, Loader2Icon, Trash2Icon, XIcon, LockIcon, GlobeIcon, PlusIcon } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
@@ -28,6 +29,7 @@ export default function PostEditor() {
   // Formular-States
   const [caption, setCaption] = useState('');
   const [price, setPrice] = useState(''); // PPV-Preis
+  const [hashtags, setHashtags] = useState<string[]>([""]); // <-- NEU: Hashtag-State
 
   // --- AKTUALISIERT: accessLevel State ---
   const [accessLevel, setAccessLevel] = useState('public'); // Standard ist 'public'
@@ -128,6 +130,31 @@ export default function PostEditor() {
     }
   };
 
+  // --- NEUE HASHTAG-HANDLER ---
+  const handleAddHashtag = () => {
+    setHashtags(prev => [...prev, ""]); // Fügt ein neues leeres Feld hinzu
+  };
+
+  const handleHashtagChange = (index: number, value: string) => {
+    // Ersetze Leerzeichen, Sonderzeichen (außer _) und #
+    const newValue = value.replace(/[^a-zA-Z0-9_]/g, '');
+
+    const updatedHashtags = [...hashtags];
+    updatedHashtags[index] = newValue;
+    setHashtags(updatedHashtags);
+  };
+
+  const handleRemoveHashtag = (index: number) => {
+    // Verhindere das Löschen des letzten Feldes, setze es stattdessen zurück
+    if (hashtags.length === 1 && index === 0) {
+      setHashtags([""]);
+      return;
+    }
+    setHashtags(prev => prev.filter((_, i) => i !== index));
+  };
+  // --- ENDE NEUE HANDLER ---
+
+
   // Helper: Datum/Zeit
   const getCombinedIsoString = (): string | null => {
     if (!selectedDate) return null;
@@ -183,19 +210,22 @@ export default function PostEditor() {
 
       const scheduledForISO = getCombinedIsoString();
 
-      // --- HIER IST DER FIX ---
-      // Stellt sicher, dass die `tierId` korrekt gesetzt wird.
       const postPrice = parseFloat(price) || 0;
-      // Wenn 'public' gewählt, ist tierId null.
-      // Sonst ist es der Wert aus dem Dropdown (die UUID der Tier).
       const postTierId: string | null = accessLevel === 'public' ? null : accessLevel;
-      // --- ENDE FIX ---
+
+      // --- KORREKTUR: Hashtags bereinigen ---
+      // 1. Entferne leere Strings oder Strings, die nur aus ungültigen Zeichen bestanden
+      const cleanedHashtags = hashtags
+        .map(tag => tag.trim()) // Führende/nachgestellte Leerzeichen entfernen
+        .filter(tag => tag.length > 0); // Leere Strings filtern
+      // --- ENDE ---
 
       const postData = {
         mediaUrl: mediaUrl,
         thumbnail_url: thumbnailUrl,
         mediaType: mediaType,
         caption: caption,
+        hashtags: cleanedHashtags, // <-- HIER AKTUALISIERT
         price: postPrice, // PPV-Preis
         tierId: postTierId, // Korrekte Tier-ID
         scheduledFor: scheduledForISO,
@@ -300,6 +330,58 @@ export default function PostEditor() {
                   disabled={isLoading}
                 />
               </div>
+
+              {/* --- NEU: Hashtags --- */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="hashtags" className="text-foreground">
+                    Hashtags (optional)
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleAddHashtag}
+                    disabled={isLoading}
+                    className="text-secondary hover:text-secondary/80"
+                  >
+                    <PlusIcon className="w-5 h-5" />
+                  </Button>
+                </div>
+
+                <div className="space-y-2 max-h-32 overflow-y-auto chat-messages-scrollbar pr-2">
+                  {hashtags.map((tag, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <div className="relative flex-grow">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">#</span>
+                        <Input
+                          id={`hashtag-${index}`}
+                          type="text"
+                          placeholder="zB fitness"
+                          value={tag}
+                          onChange={(e) => handleHashtagChange(index, e.target.value)}
+                          className="bg-background text-foreground border-border pl-7"
+                          disabled={isLoading}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveHashtag(index)}
+                        disabled={isLoading}
+                        className="text-destructive hover:text-destructive/80"
+                      >
+                        <XIcon className="w-5 h-5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Keine Leerzeichen oder Sonderzeichen (außer "_") verwenden.
+                </p>
+              </div>
+              {/* --- ENDE HASHTAGS --- */}
 
               {/* --- Zugriffsstufe --- */}
               <div className="space-y-2">

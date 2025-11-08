@@ -30,10 +30,8 @@ export interface Post {
   is_published: boolean;
   scheduled_for: string | null;
   created_at: string;
-  // --- HINZUGEFÜGT ---
   price: number;
   tier_id: string | null;
-  // --- ENDE ---
 }
 
 export class PostService {
@@ -123,28 +121,19 @@ export class PostService {
     return this.mapPostsToFrontend(posts || [], userLikes);
   }
 
-  /**
-   * (AKTUALISIERT) Ruft Posts von Creatorn ab, die der User abonniert hat.
-   * Berücksichtigt jetzt auch gekündigte Abos, die noch gültig (end_date > now()) sind.
-   */
   async getSubscriberFeed(limit: number = 20, offset: number = 0) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // --- HIER IST DIE ÄNDERUNG ---
-    // Wir holen alle Abos, die 'ACTIVE' SIND
-    // ODER 'CANCELED' SIND, ABER DEREN 'end_date' NOCH IN DER ZUKUNFT LIEGT.
     const { data: subscriptions } = await supabase
       .from('subscriptions')
       .select('creator_id')
       .eq('fan_id', user.id)
       .or(`status.eq.ACTIVE,and(status.eq.CANCELED,end_date.gt.now())`);
-    // --- ENDE DER ÄNDERUNG ---
 
     const creatorIds = subscriptions?.map(s => s.creator_id) || [];
     if (creatorIds.length === 0) return [];
 
-    // Der Rest der Funktion bleibt gleich
     const { data: posts, error } = await supabase
       .from('posts')
       .select(`
@@ -162,7 +151,6 @@ export class PostService {
       `)
       .in('creator_id', creatorIds)
       .eq('is_published', true)
-      // Posts anzeigen, die entweder nicht geplant sind oder deren Plandatum in der Vergangenheit liegt
       .or('scheduled_for.is.null,scheduled_for.lte.now()')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
@@ -179,6 +167,7 @@ export class PostService {
 
     return this.mapPostsToFrontend(posts || [], userLikes);
   }
+
 
   async getCreatorPosts(creatorId: string, limit: number = 20, offset: number = 0) {
     const { data: posts, error } = await supabase
@@ -198,7 +187,6 @@ export class PostService {
       `)
       .eq('creator_id', creatorId)
       .eq('is_published', true)
-      // Nur veröffentlichte Posts anzeigen, die nicht in der Zukunft liegen
       .or('scheduled_for.is.null,scheduled_for.lte.now()')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
@@ -314,7 +302,91 @@ export class PostService {
     if (error) throw error;
   }
 
-  // --- AKTUALISIERTE MAPPING-FUNKTION ---
+
+  // --- AKTUALISIERTE FUNKTION: searchPosts ---
+  /**
+   * Sucht Posts anhand von Hashtags oder Bildbeschriftung.
+   * Akzeptiert jetzt Filter für Preis und Typ.
+   */
+  async searchPosts(
+    query: string,
+    limit: number = 30,
+    filters?: { price?: string; type?: string }
+  ): Promise<Post[]> {
+    const cleanedQuery = query.toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
+    if (!cleanedQuery) return [];
+
+    let queryBuilder = supabase
+      .from('posts')
+      .select(`
+        *,
+        creator:users!creator_id (
+          id,
+          username,
+          display_name,
+          avatar_url,
+          is_verified,
+          bio,
+          followers_count,
+          subscription_price
+        )
+      `)
+      .eq('is_published', true)
+      .or(
+        `caption.ilike.%${cleanedQuery}%,` +     // Suche in der Beschreibung
+        `hashtags.cs.{${cleanedQuery}}`        // Suche in Hashtags (array contains string)
+      );
+
+    // --- FILTER-LOGIK HINZUGEFÜGT ---
+    if (filters?.price) {
+      if (filters.price === 'free') {
+        queryBuilder = queryBuilder.eq('price', 0).is('tier_id', null);
+      } else if (filters.price === 'low') {
+        queryBuilder = queryBuilder.gt('price', 0).lte('price', 10);
+      } else if (filters.price === 'medium') {
+        queryBuilder = queryBuilder.gt('price', 10).lte('price', 30);
+      } else if (filters.price === 'high') {
+        queryBuilder = queryBuilder.gt('price', 30);
+      }
+    }
+
+    if (filters?.type) {
+      if (filters.type === 'video') {
+        queryBuilder = queryBuilder.eq('media_type', 'VIDEO');
+      } else if (filters.type === 'photo') {
+        queryBuilder = queryBuilder.eq('media_type', 'IMAGE');
+      }
+    }
+    // --- ENDE FILTER-LOGIK ---
+
+    const { data: posts, error } = await queryBuilder
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error("Fehler bei der Post-Suche:", error);
+      throw error;
+    }
+
+    // Likes für die gefundenen Posts abrufen
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id;
+    let userLikes: Set<string> = new Set();
+    if (userId && posts.length > 0) {
+      const { data: likes } = await supabase
+        .from('likes')
+        .select('post_id')
+        .eq('user_id', userId)
+        .in('post_id', posts.map(p => p.id));
+
+      userLikes = new Set(likes?.map(l => l.post_id) || []);
+    }
+
+    return this.mapPostsToFrontend(posts || [], userLikes);
+  }
+  // --- ENDE ---
+
+
   private mapPostsToFrontend(posts: any[], userLikes: Set<string>): Post[] {
     return posts.map(post => ({
       id: post.id,
@@ -340,10 +412,8 @@ export class PostService {
       is_published: post.is_published,
       scheduled_for: post.scheduled_for,
       created_at: post.created_at,
-      // --- HINZUGEFÜGT ---
       price: post.price,
       tier_id: post.tier_id,
-      // --- ENDE ---
     }));
   }
 }

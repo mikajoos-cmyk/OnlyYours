@@ -14,6 +14,7 @@ export interface UserProfile {
   followersCount: number;
   totalEarnings: number;
   createdAt: string;
+  profileHashtags: string[] | null;
 }
 
 export class UserService {
@@ -23,16 +24,13 @@ export class UserService {
    * Wird von der Creator-Profilseite (CreatorProfile.tsx) verwendet.
    */
   async getUserByUsername(username: string): Promise<UserProfile | null> {
-    // Stellt sicher, dass die Abfrage immer kleingeschrieben erfolgt,
-    // da Ihr DB-Schema dies für 'username' vorsieht.
     const normalizedUsername = username.toLowerCase();
-
     console.log("userService searching for username (lowercase):", normalizedUsername);
 
     const { data, error } = await supabase
       .from('users')
-      .select('*')
-      .eq('username', normalizedUsername) // Sucht in der 'username'-Spalte
+      .select('*') // Holt alle Spalten, inkl. profile_hashtags
+      .eq('username', normalizedUsername)
       .maybeSingle();
 
     if (error) {
@@ -54,8 +52,8 @@ export class UserService {
   async getUserById(userId: string): Promise<UserProfile | null> {
     const { data, error } = await supabase
       .from('users')
-      .select('*')
-      .eq('id', userId) // Sucht korrekt in der 'id'-Spalte
+      .select('*') // Holt alle Spalten, inkl. profile_hashtags
+      .eq('id', userId)
       .maybeSingle();
 
     if (error) throw error;
@@ -64,35 +62,32 @@ export class UserService {
     return this.mapToUserProfile(data);
   }
 
-  async searchCreators(query: string, filters?: {
-    minPrice?: number;
-    maxPrice?: number;
-    verified?: boolean;
-    // --- HINWEIS: Filter (price/type) aus SearchPage sind hier nicht implementiert ---
-  }) {
+  /**
+   * (AKTUALISIERT) Sucht Creators nur noch nach Text (Name, Username, Hashtags).
+   * Filter wurden entfernt.
+   */
+  async searchCreators(query: string) {
+    const cleanedQuery = query.toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
+    if (!cleanedQuery) return [];
+
     let queryBuilder = supabase
       .from('users')
       .select('*')
       .eq('role', 'CREATOR')
-      .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`);
-
-    if (filters?.minPrice !== undefined) {
-      queryBuilder = queryBuilder.gte('subscription_price', filters.minPrice);
-    }
-
-    if (filters?.maxPrice !== undefined) {
-      queryBuilder = queryBuilder.lte('subscription_price', filters.maxPrice);
-    }
-
-    if (filters?.verified === true) {
-      queryBuilder = queryBuilder.eq('is_verified', true);
-    }
+      .or(
+        `username.ilike.%${cleanedQuery}%,` +
+        `display_name.ilike.%${cleanedQuery}%,` +
+        `profile_hashtags.cs.{${cleanedQuery}}` // cs = contains (für text[])
+      );
 
     const { data, error } = await queryBuilder
       .order('followers_count', { ascending: false })
       .limit(50);
 
-    if (error) throw error;
+    if (error) {
+      console.error("Fehler bei der Creator-Suche:", error);
+      throw error;
+    }
 
     return (data || []).map(user => this.mapToUserProfile(user));
   }
@@ -101,8 +96,8 @@ export class UserService {
   async getTopCreators(limit: number = 20) {
     const { data, error } = await supabase
       .from('users')
-      .select('*')
-      .eq('role', 'CREATOR') // <-- Stellt sicher, dass nur Creators geladen werden
+      .select('*') // Holt alle Spalten, inkl. profile_hashtags
+      .eq('role', 'CREATOR')
       .order('followers_count', { ascending: false })
       .limit(limit);
 
@@ -142,6 +137,7 @@ export class UserService {
       followersCount: data.followers_count,
       totalEarnings: parseFloat(data.total_earnings),
       createdAt: data.created_at,
+      profileHashtags: data.profile_hashtags || [],
     };
   }
 }

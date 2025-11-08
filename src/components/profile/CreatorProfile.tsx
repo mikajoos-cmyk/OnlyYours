@@ -9,10 +9,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Switch } from '../ui/switch';
 import { useAuthStore } from '../../stores/authStore';
-import { CameraIcon, ImageIcon, DollarSignIcon, MessageSquareIcon, Loader2Icon, PlusIcon, Trash2Icon, EditIcon } from 'lucide-react';
+import { CameraIcon, ImageIcon, DollarSignIcon, MessageSquareIcon, Loader2Icon, PlusIcon, Trash2Icon, EditIcon, XIcon } from 'lucide-react'; // XIcon hinzugefügt
 import { storageService } from '../../services/storageService';
 import { useToast } from '../../hooks/use-toast';
-// --- NEUE IMPORTS ---
 import { tierService, Tier } from '../../services/tierService';
 import {
   Dialog,
@@ -24,7 +23,7 @@ import {
   DialogClose,
   DialogTrigger,
 } from '../ui/dialog';
-// --- ENDE NEUE IMPORTS ---
+import { Separator } from '../ui/separator'; // NEU
 
 export default function CreatorProfile() {
   const { user, updateProfile } = useAuthStore();
@@ -38,7 +37,6 @@ export default function CreatorProfile() {
   const [isAvatarLoading, setIsAvatarLoading] = useState(false);
   const [isBannerLoading, setIsBannerLoading] = useState(false);
   const [isInfoLoading, setIsInfoLoading] = useState(false);
-  // const [isMonetizationLoading, setIsMonetizationLoading] = useState(false); // Entfernt
   const [isCommunicationLoading, setIsCommunicationLoading] = useState(false);
 
   // States für Formular "Branding"
@@ -48,14 +46,12 @@ export default function CreatorProfile() {
 
   // States für Formular "Informationen"
   const [bio, setBio] = useState(user?.bio || '');
+  // --- NEU: Profil-Hashtags ---
+  const [profileHashtags, setProfileHashtags] = useState<string[]>(user?.profileHashtags || []);
+  const [newHashtag, setNewHashtag] = useState("");
+  // --- ENDE NEU ---
 
   // States für Formular "Monetarisierung"
-  // --- ENTFERNT: Basis-Abo-Preis ---
-  // const [subscriptionPrice, setSubscriptionPrice] = useState(
-  //   user?.subscriptionPrice ? user.subscriptionPrice.toFixed(2) : '0.00'
-  // );
-  // --- ENDE ---
-
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [isTierLoading, setIsTierLoading] = useState(false);
   const [showTierDialog, setShowTierDialog] = useState(false);
@@ -73,8 +69,8 @@ export default function CreatorProfile() {
       setDisplayName(user.name || '');
       setUsername(user.username || '');
       setBio(user.bio || '');
-      // setSubscriptionPrice(user.subscriptionPrice ? user.subscriptionPrice.toFixed(2) : '0.00'); // Entfernt
       setWelcomeMessage(user.welcomeMessage || '');
+      setProfileHashtags(user.profileHashtags || []); // <-- NEU
     }
   }, [user]);
 
@@ -143,12 +139,21 @@ export default function CreatorProfile() {
     }
   };
 
+  // --- AKTUALISIERT: Speichert jetzt Bio UND Profil-Hashtags ---
   const handleInfoSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsInfoLoading(true);
     try {
+        // Bereinige leere Tags, bevor gespeichert wird
+        const cleanedHashtags = profileHashtags
+          .map(t => t.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())
+          .filter(t => t.length > 0);
+
+        setProfileHashtags(cleanedHashtags); // UI mit bereinigten Daten synchronisieren
+
         await updateProfile({
             bio: bio,
+            profile_hashtags: cleanedHashtags // <-- NEU
         });
         toast({ title: "Informationen gespeichert!" });
     } catch (error: any) {
@@ -157,10 +162,31 @@ export default function CreatorProfile() {
         setIsInfoLoading(false);
     }
   };
-
-  // --- ENTFERNT: handleMonetizationSave (Basis-Preis) ---
-  // const handleMonetizationSave = ...
   // --- ENDE ---
+
+  // --- NEU: Handler für Profil-Hashtags ---
+  const handleAddProfileHashtag = () => {
+    if (newHashtag.trim() === "") return;
+    if (profileHashtags.length >= 5) {
+      toast({
+        title: "Limit erreicht",
+        description: "Du kannst maximal 5 Profil-Hashtags hinzufügen.",
+        variant: "destructive"
+      });
+      return;
+    }
+    const cleanTag = newHashtag.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+    if (cleanTag.length > 0 && !profileHashtags.includes(cleanTag)) {
+      setProfileHashtags(prev => [...prev, cleanTag]);
+      setNewHashtag(""); // Input-Feld zurücksetzen
+    }
+  };
+
+  const handleRemoveProfileHashtag = (tagToRemove: string) => {
+    setProfileHashtags(prev => prev.filter(tag => tag !== tagToRemove));
+  };
+  // --- ENDE NEU ---
+
 
   // --- Kommunikation ---
   const handleCommunicationSave = async (e: React.FormEvent) => {
@@ -391,10 +417,11 @@ export default function CreatorProfile() {
               </Card>
             </TabsContent>
 
+            {/* --- AKTUALISIERTER "INFORMATIONEN"-TAB --- */}
             <TabsContent value="info" className="mt-6">
               <Card className="bg-card border-border">
                 <CardHeader>
-                  <CardTitle className="text-foreground">Informationen & Kommunikation</CardTitle>
+                  <CardTitle className="text-foreground">Informationen & Auffindbarkeit</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleInfoSave} className="space-y-6">
@@ -409,24 +436,76 @@ export default function CreatorProfile() {
                         disabled={isInfoLoading}
                       />
                     </div>
-                    <div className="space-y-2 opacity-50">
-                      <Label htmlFor="location" className="text-foreground">Standort (optional)</Label>
-                      <Input
-                        id="location"
-                        placeholder="z.B. Deutschland (Nicht implementiert)"
-                        className="bg-background text-foreground border-border"
-                        disabled
-                      />
+
+                    {/* --- NEUER ABSCHNITT: PROFIL-HASHTAGS --- */}
+                    <Separator className="bg-border" />
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-foreground">Profil-Hashtags</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Füge bis zu 5 Tags hinzu, unter denen dein Profil gefunden werden kann.
+                        </p>
+                      </div>
+
+                      {/* Angezeigte Tags */}
+                      <div className="flex flex-wrap gap-2">
+                        {profileHashtags.map((tag) => (
+                          <div key={tag} className="flex items-center gap-1 bg-neutral rounded-full pl-3 pr-1 py-1">
+                            <span className="text-sm text-foreground">#{tag}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveProfileHashtag(tag)}
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full"
+                            >
+                              <XIcon className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Input-Feld für neue Tags */}
+                      {profileHashtags.length < 5 && (
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-grow">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">#</span>
+                            <Input
+                              id="new-hashtag"
+                              type="text"
+                              placeholder="zB fitness"
+                              value={newHashtag}
+                              onChange={(e) => setNewHashtag(e.target.value)}
+                              className="bg-background text-foreground border-border pl-7"
+                              disabled={isInfoLoading}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddProfileHashtag();
+                                }
+                              }}
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="bg-background text-foreground border-border hover:bg-neutral font-normal"
+                            onClick={handleAddProfileHashtag}
+                            disabled={isInfoLoading}
+                          >
+                            <PlusIcon className="w-5 h-5 mr-2" />
+                            Hinzufügen
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Keine Leerzeichen oder Sonderzeichen (außer "_") verwenden.
+                      </p>
                     </div>
-                    <div className="space-y-2 opacity-50">
-                      <Label htmlFor="twitter" className="text-foreground">Twitter/X (Nicht implementiert)</Label>
-                      <Input
-                        id="twitter"
-                        placeholder="https://twitter.com/username"
-                        className="bg-background text-foreground border-border"
-                        disabled
-                      />
-                    </div>
+                    {/* --- ENDE HASHTAGS --- */}
+
+                    <Separator className="bg-border" />
+
                     <Button
                       type="submit"
                       className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
@@ -439,8 +518,10 @@ export default function CreatorProfile() {
                 </CardContent>
               </Card>
             </TabsContent>
+            {/* --- ENDE "INFORMATIONEN"-TAB --- */}
 
-            {/* --- AKTUALISIERTE MONETARISIERUNGS-TAB --- */}
+
+            {/* --- MONETARISIERUNGS-TAB (unverändert) --- */}
             <TabsContent value="monetization" className="mt-6">
               <Card className="bg-card border-border">
                 <CardHeader>
@@ -450,10 +531,7 @@ export default function CreatorProfile() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {/* --- Formular für Basis-Abo ENTFERNT --- */}
-
-                  {/* Abschnitt für Abonnement-Stufen (Tiers) */}
-                  <div className="pt-6 mt-6">
+                  <div className="pt-6">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-foreground font-medium">
                         Abonnement-Stufen (Tiers)

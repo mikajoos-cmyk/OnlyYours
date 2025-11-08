@@ -31,9 +31,40 @@ export default function PpvModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
 
-  // Finden der spezifischen Tier, die für diesen Post benötigt wird
-  // (Nur relevant, wenn post.tier_id gesetzt ist)
+  const formatCurrency = (value: number) => {
+    return `€${value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  // --- START ÜBERARBEITETE LOGIK ---
+
+  // 1. Prüfen, ob der Post einen PPV-Preis hat
+  const canPpv = post.price > 0;
+
+  // 2. Prüfen, ob der Creator überhaupt Abos anbietet
+  const creatorHasTiers = creatorTiers.length > 0;
+
+  // 3. Finden der spezifischen Tier, die für diesen Post benötigt wird
   const requiredTier = post.tier_id ? creatorTiers.find(t => t.id === post.tier_id) : null;
+
+  // 4. Finden der günstigsten Tier (als Fallback für allgemeine Abo-Posts)
+  //    (Annahme: creatorTiers ist bereits nach Preis sortiert angekommen)
+  const cheapestTier = creatorHasTiers ? creatorTiers[0] : null;
+
+  // 5. Entscheiden, ob der "Abonnieren"-Button angezeigt werden soll
+  //    (Ja, wenn der Creator Tiers anbietet, da der Post entweder Tier-gebunden oder ein allgemeiner Sub-Post ist)
+  const canSubscribe = creatorHasTiers;
+
+  // 6. Text für den Abo-Button bestimmen
+  let subscribeButtonText = "Mit Abo freischalten";
+  if (requiredTier) {
+    // Fall A: Post erfordert ein spezifisches Tier (z.B. "VIP")
+    subscribeButtonText = `Mit "${requiredTier.name}"-Abo freischalten (${formatCurrency(requiredTier.price)}/Monat)`;
+  } else if (cheapestTier) {
+    // Fall B: Post ist für alle Abonnenten (tier_id = null), wir zeigen den günstigsten Preis an
+    subscribeButtonText = `Mit Abo freischalten (ab ${formatCurrency(cheapestTier.price)}/Monat)`;
+  }
+  // --- ENDE ÜBERARBEITETE LOGIK ---
+
 
   const handlePurchase = async () => {
     setIsProcessing(true);
@@ -64,16 +95,6 @@ export default function PpvModal({
           onSubscribeClick();
       }, 150);
   };
-
-  const formatCurrency = (value: number) => {
-    return `€${value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  // --- AKTUALISIERTE LOGIK ---
-  const canPpv = post.price > 0;
-  // 'canSubscribe' ist wahr, wenn der Post an ein Tier gebunden ist UND dieses Tier existiert
-  const canSubscribe = requiredTier !== null;
-  // --- ENDE ---
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -140,8 +161,8 @@ export default function PpvModal({
             </div>
           )}
 
-          {/* --- OPTION 2: ABONNIEREN (falls Tier vorhanden) --- */}
-          {canSubscribe && requiredTier && (
+          {/* --- OPTION 2: ABONNIEREN (falls Tiers vorhanden) --- */}
+          {canSubscribe && (
               <Button
                 onClick={handleSubscribe}
                 variant="outline"
@@ -154,16 +175,17 @@ export default function PpvModal({
                 disabled={isProcessing}
               >
                 <UserCheckIcon className="w-4 h-4 mr-2" />
-                {`Mit "${requiredTier.name}"-Abo freischalten (${formatCurrency(requiredTier.price)}/Monat)`}
+                {subscribeButtonText}
               </Button>
           )}
 
-          {/* Fallback für öffentliche Posts, die PPV sind (canSubscribe = false) */}
+          {/* Fallback für PPV-only Posts (Creator hat keine Tiers) */}
           {!canSubscribe && canPpv && (
              <p className="text-sm text-muted-foreground text-center">
-               Dieser Beitrag ist öffentlich, kostet aber extra.
+               Dieser Beitrag ist nur als Einzelkauf verfügbar.
              </p>
           )}
+
         </div>
       </DialogContent>
     </Dialog>

@@ -2,6 +2,8 @@
 import { create } from 'zustand';
 import { subscriptionService, Subscription } from '../services/subscriptionService';
 import type { Post } from '../services/postService'; // Import Post-Typ
+import { useAuthStore } from './authStore'; // <-- 1. Import authStore
+import { paymentService } from '../services/paymentService'; // <-- 2. Import paymentService
 
 // Definiert, was im Store gespeichert wird
 interface SubscriptionState {
@@ -22,35 +24,39 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   isLoading: true,
 
   /**
-   * Lädt die Abonnements des aktuellen Benutzers.
+   * Lädt die Abonnements UND gekaufte Posts des aktuellen Benutzers.
    */
   loadSubscriptions: async () => {
     set({ isLoading: true });
+
+    // --- KORREKTUR START: User-ID holen ---
+    const userId = useAuthStore.getState().user?.id;
+    if (!userId) {
+      console.warn("[subscriptionStore] loadSubscriptions called without user. Aborting.");
+      set({ isLoading: false, subscriptions: [], subscriptionMap: new Map(), purchasedPostIds: new Set() });
+      return;
+    }
+    // --- KORREKTUR ENDE ---
+
     try {
-      const subs = await subscriptionService.getUserSubscriptions();
+      // --- KORREKTUR START: Lade Abos UND PPV-Käufe parallel ---
+      const [subs, ppvIds] = await Promise.all([
+        subscriptionService.getUserSubscriptions(),
+        paymentService.getPaidPostIds(userId)
+      ]);
+      // --- KORREKTUR ENDE ---
+
       const subMap = new Map(subs.map(sub => [sub.creatorId, sub]));
-
-      // PPV-Käufe laden (nur IDs)
-      // HINWEIS: Für Performance sollte dies eine dedizierte RPC-Funktion sein,
-      // die nur IDs zurückgibt. Hier verwenden wir den paymentService.
-      // const payments = await paymentService.getUserPaymentHistory(userId);
-      // const ppvIds = new Set(payments
-      //     .filter(p => p.type === 'PAY_PER_VIEW' && p.related_id)
-      //     .map(p => p.related_id!)
-      // );
-
-      // Vorerst leeres PPV-Set, da RLS dies jetzt serverseitig prüft
-      // und wir den Status (hasAccess) client-seitig nur *optimistisch* (nach Kauf) aktualisieren.
 
       set({
         subscriptions: subs,
         subscriptionMap: subMap,
+        purchasedPostIds: ppvIds, // <-- KORREKTUR: Gekaufte Posts hier laden
         isLoading: false,
-        // purchasedPostIds: ppvIds
       });
     } catch (error) {
-      console.error('Failed to load subscriptions:', error);
-      set({ isLoading: false, subscriptions: [], subscriptionMap: new Map() });
+      console.error('Failed to load subscriptions or paid posts:', error);
+      set({ isLoading: false, subscriptions: [], subscriptionMap: new Map(), purchasedPostIds: new Set() });
     }
   },
 
@@ -61,16 +67,16 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     const state = get();
 
     // 1. Eigene Posts sind immer sichtbar
-    if (post.creatorId === currentUserId) {
+    if (post.creatorId === currentUserId && currentUserId !== undefined) {
       return true;
     }
 
-    // 2. Öffentliche Posts (kostenlos) sind immer sichtbar
-    if (post.price === 0) {
+    // 2. Echte öffentliche Posts (kostenlos UND kein Tier) sind immer sichtbar
+    if (post.price === 0 && post.tier_id === null) {
       return true;
     }
 
-    // 3. (Optimistisch) Prüfen, ob der Post gerade per PPV gekauft wurde
+    // 3. (JETZT PERSISTENT) Prüfen, ob der Post per PPV gekauft wurde
     if (state.purchasedPostIds.has(post.id)) {
       return true;
     }
@@ -100,6 +106,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
 
   /**
    * Fügt eine Post-ID hinzu, nachdem sie per PPV gekauft wurde.
+   * (Wird für die optimistische Anzeige bis zum nächsten Reload genutzt)
    */
   addPurchasedPost: (postId: string) => {
     set(state => ({

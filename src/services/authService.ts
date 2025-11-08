@@ -18,7 +18,8 @@ export interface AuthUser {
   bio?: string;
   bannerUrl?: string | null;
   subscriptionPrice?: number;
-  welcomeMessage?: string; // <-- NEU
+  welcomeMessage?: string;
+  profileHashtags?: string[] | null; // <-- NEU
 }
 
 export class AuthService {
@@ -148,13 +149,11 @@ export class AuthService {
     }
 
     console.log("[authService] User email IS confirmed. Fetching public.users profile.");
-    // --- AKTUALISIERT: 'welcome_message' hinzugefügt ---
     const { data: userData, error } = await supabase
       .from('users')
-      .select('*')
+      .select('*') // Holt alle Spalten, inkl. profile_hashtags
       .eq('id', freshUser.id)
       .single();
-    // --- ENDE ---
 
     if (error || !userData) {
         console.error("[authService] Error fetching public.users profile:", error);
@@ -165,7 +164,7 @@ export class AuthService {
     return this.mapUserRowToAuthUser(userData, freshUser.email);
   }
 
-  // --- AKTUALISIERT: 'role' und 'welcome_message' hinzugefügt ---
+  // --- AKTUALISIERT: 'role', 'welcome_message' und 'profile_hashtags' hinzugefügt ---
   async updateProfile(userId: string, updates: {
     display_name?: string;
     bio?: string;
@@ -173,7 +172,8 @@ export class AuthService {
     banner_url?: string;
     subscription_price?: number;
     role?: 'FAN' | 'CREATOR';
-    welcome_message?: string; // <-- NEU
+    welcome_message?: string;
+    profile_hashtags?: string[]; // <-- NEU
   }) {
 
     const dbUpdates: UserUpdate = { ...updates };
@@ -213,7 +213,7 @@ export class AuthService {
     });
   }
 
-  // --- AKTUALISIERT: 'welcomeMessage' gemappt ---
+  // --- AKTUALISIERT: 'profileHashtags' gemappt ---
   private mapUserRowToAuthUser(userData: any, email?: string): AuthUser {
     return {
       id: userData.id,
@@ -228,7 +228,8 @@ export class AuthService {
       bio: userData.bio,
       bannerUrl: userData.banner_url,
       subscriptionPrice: userData.subscription_price,
-      welcomeMessage: userData.welcome_message || '', // <-- NEU
+      welcomeMessage: userData.welcome_message || '',
+      profileHashtags: userData.profile_hashtags || [], // <-- NEU
     };
   }
 }
