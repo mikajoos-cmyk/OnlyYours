@@ -4,19 +4,36 @@ import { Card } from '../ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
-// MessageCircleIcon importieren, falls noch nicht geschehen
-import { SendIcon, CheckCheckIcon, ArrowLeftIcon, UserIcon, MessageCircleIcon } from 'lucide-react';
+// SendIcon (für 1-zu-1) und Send (für Massen-Nachricht) importieren
+import { SendIcon, CheckCheckIcon, ArrowLeftIcon, UserIcon, MessageCircleIcon, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { messageService, Message, Chat as ServiceChat } from '../../services/messageService';
 import { useAuthStore } from '../../stores/authStore';
-// import { RealtimeChannel } from '@supabase/supabase-js'; // Entfernt
+// --- NEUE IMPORTS ---
+import MassMessageModal from './MassMessageModal';
+import { useAppStore } from '../../stores/appStore'; // <-- Import für die Rollen-Prüfung
+// --- ENDE ---
 
-// ... (Interface Chat bleibt gleich)
+// Typ für die Chat-Liste (aus altem Code)
+interface Chat {
+  id: string;
+  user: {
+    id: string;
+    name: string;
+    avatar: string;
+    username?: string;
+  };
+  lastMessage: string;
+  timestamp: string;
+  unread: number;
+}
 
-const POLLING_INTERVAL = 5000; // Abfrage alle 5 Sekunden
+
+const POLLING_INTERVAL = 5000;
 
 export default function Messages() {
   const { user: currentUser } = useAuthStore();
+  const { currentRole } = useAppStore(); // <-- Holt die aktuelle Rolle (fan/creator)
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
@@ -26,12 +43,13 @@ export default function Messages() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
-  // Ref für den letzten Zeitstempel
   const lastMessageTimestampRef = useRef<string | null>(null);
-  // Ref für das Interval-Handle
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Lade die Chat-Liste (bleibt gleich)
+  const [showMassMessageModal, setShowMassMessageModal] = useState(false);
+
+
+  // Lade die Chat-Liste
   useEffect(() => {
     const fetchChatList = async () => {
       try {
@@ -42,7 +60,6 @@ export default function Messages() {
           id: c.userId,
           user: { id: c.userId, name: c.userName, avatar: c.userAvatar, username: c.userName /* Annahme */ },
           lastMessage: c.lastMessage,
-          // Formatierung des Zeitstempels hier oder direkt bei der Anzeige
           timestamp: new Date(c.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           unread: c.unreadCount
         }));
@@ -55,7 +72,7 @@ export default function Messages() {
       }
     };
     fetchChatList();
-  }, []); // Nur beim initialen Mount laden
+  }, []);
 
   // Lade Nachrichten, wenn ein Chat ausgewählt wird
   useEffect(() => {
@@ -67,14 +84,12 @@ export default function Messages() {
         setError(null);
         const conversation = await messageService.getConversation(selectedChat.user.id);
         setMessages(conversation || []);
-        // Setze den letzten Zeitstempel für das Polling
         if (conversation && conversation.length > 0) {
           lastMessageTimestampRef.current = conversation[conversation.length - 1].createdAt;
         } else {
-          lastMessageTimestampRef.current = new Date(0).toISOString(); // Falls keine Nachrichten da sind, starte von Anfang an
+          lastMessageTimestampRef.current = new Date(0).toISOString();
         }
         setTimeout(scrollToBottom, 100);
-        // Markiere Konversation als gelesen
         await messageService.markConversationAsRead(selectedChat.user.id);
         setChats(prevChats => prevChats.map(chat =>
           chat.id === selectedChat.user.id ? { ...chat, unread: 0 } : chat
@@ -90,32 +105,20 @@ export default function Messages() {
     fetchConversation();
   }, [selectedChat?.user.id]);
 
-  // Effekt für Realtime-Subscription entfernt
-  /*
+  // Effekt für Polling
   useEffect(() => {
-    // ... alter Realtime Code ...
-  }, [currentUser?.id, selectedChat]);
-  */
-
-  // NEU: Effekt für Polling
-  useEffect(() => {
-      // Funktion zum Abrufen neuer Nachrichten
       const pollNewMessages = async () => {
           if (!selectedChat?.user.id || !lastMessageTimestampRef.current) {
-              return; // Nicht pollen, wenn kein Chat offen ist oder kein Zeitstempel existiert
+              return;
           }
           try {
-              console.log(`Polling für neue Nachrichten seit ${lastMessageTimestampRef.current}...`);
               const newMessages = await messageService.getNewMessages(selectedChat.user.id, lastMessageTimestampRef.current);
 
               if (newMessages.length > 0) {
-                  console.log(`${newMessages.length} neue Nachrichten empfangen.`);
                   setMessages(prevMessages => [...prevMessages, ...newMessages]);
-                  // Aktualisiere den letzten Zeitstempel
                   lastMessageTimestampRef.current = newMessages[newMessages.length - 1].createdAt;
-                  setTimeout(scrollToBottom, 100); // Scrollen bei neuen Nachrichten
+                  setTimeout(scrollToBottom, 100);
 
-                    // Optional: Aktualisiere Chatliste (redundant, da getNewMessages es schon macht?)
                     const latestMsg = newMessages[newMessages.length - 1];
                     setChats(prevChats => {
                         const chatIndex = prevChats.findIndex(c => c.id === selectedChat.user.id);
@@ -124,42 +127,31 @@ export default function Messages() {
                                 ...prevChats[chatIndex],
                                 lastMessage: latestMsg.content,
                                 timestamp: new Date(latestMsg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                                unread: 0 // Da der Chat offen ist
+                                unread: 0
                             };
                             return [updatedChat, ...prevChats.slice(0, chatIndex), ...prevChats.slice(chatIndex + 1)];
                         }
                         return prevChats;
                     });
-              } else {
-                  console.log("Keine neuen Nachrichten.");
               }
           } catch (error) {
               console.error('Fehler beim Pollen neuer Nachrichten:', error);
-              // Hier könntest du einen Fehler im UI anzeigen oder das Polling pausieren
           }
       };
 
-      // Starte das Polling nur, wenn ein Chat ausgewählt ist
       if (selectedChat?.user.id) {
-          // Lösche vorheriges Interval, falls vorhanden
           if (pollingIntervalRef.current) {
               clearInterval(pollingIntervalRef.current);
           }
-          // Starte neues Interval
           pollingIntervalRef.current = setInterval(pollNewMessages, POLLING_INTERVAL);
-          console.log(`Polling gestartet für Chat mit ${selectedChat.user.id}. Intervall: ${POLLING_INTERVAL}ms`);
       }
-
-      // Cleanup-Funktion: Interval stoppen
       return () => {
           if (pollingIntervalRef.current) {
-              console.log("Polling wird gestoppt.");
               clearInterval(pollingIntervalRef.current);
               pollingIntervalRef.current = null;
           }
       };
-  // Abhängigkeiten: selectedChat (um das Polling zu starten/stoppen)
-  }, [selectedChat?.user.id]); // Nur neu starten/stoppen, wenn sich der Chat ändert
+  }, [selectedChat?.user.id]);
 
 
   const scrollToBottom = () => {
@@ -188,7 +180,6 @@ export default function Messages() {
       setMessage('');
       setTimeout(scrollToBottom, 100);
 
-      // Aktualisiere Chat-Liste optimistisch (bleibt gleich)
       setChats(prevChats => {
         const chatIndex = prevChats.findIndex(c => c.id === selectedChat.user.id);
         if (chatIndex > -1) {
@@ -205,18 +196,13 @@ export default function Messages() {
 
       try {
         const sentMessage = await messageService.sendMessage(selectedChat.user.id, messageToSend);
-        // Aktualisiere den Zeitstempel-Ref nach erfolgreichem Senden
-        // Das ist wichtig, damit das nächste Polling diese Nachricht nicht erneut holt
         lastMessageTimestampRef.current = sentMessage.created_at;
-
-        // Optional: Ersetze die optimistische Nachricht durch die echte, falls IDs wichtig sind
         setMessages(prev => prev.map(msg => msg.id === optimisticMessage.id ? { ...optimisticMessage, id: sentMessage.id, createdAt: sentMessage.created_at } : msg));
 
       } catch (err) {
         console.error('Fehler beim Senden der Nachricht:', err);
         setMessages(prev => prev.filter(m => m.id !== optimisticMessage.id));
         setError('Nachricht konnte nicht gesendet werden.');
-        // Chat-Listen-Rollback ist hier komplexer, erstmal weglassen
       }
     }
   };
@@ -224,32 +210,52 @@ export default function Messages() {
   const handleChatSelect = (chat: Chat) => {
     if (selectedChat?.id === chat.id) return;
     setMessages([]);
-    lastMessageTimestampRef.current = null; // Zeitstempel zurücksetzen
+    lastMessageTimestampRef.current = null;
     setSelectedChat(chat);
-    // Das Polling wird durch den useEffect-Hook automatisch neu gestartet
   };
 
   const handleBack = () => {
     setSelectedChat(null);
     setMessages([]);
-    lastMessageTimestampRef.current = null; // Zeitstempel zurücksetzen
-    // Das Polling wird durch den useEffect-Hook automatisch gestoppt
+    lastMessageTimestampRef.current = null;
   };
 
   const handleProfileClick = (username: string | undefined) => {
-    if (selectedChat?.user.id) {
-        navigate(`/profile/${selectedChat.user.id}`);
+    const targetUsername = username || selectedChat?.user.id;
+    if (targetUsername) {
+        navigate(`/profile/${targetUsername}`);
     } else {
-        console.warn("Keine User-ID zum Navigieren verfügbar.");
+        console.warn("Keine User-ID oder Username zum Navigieren verfügbar.");
     }
   };
 
 
   return (
-    // ... (Der JSX-Code bleibt genau gleich wie in der vorherigen Antwort) ...
      <div className="flex flex-col h-full">
          <div className="max-w-5xl mx-auto w-full flex flex-col flex-1 p-4 min-h-0">
-           <h1 className="text-3xl font-serif text-foreground mb-8 hidden lg:block flex-shrink-0">Nachrichten</h1>
+
+           {/* --- AKTUALISIERTER HEADER --- */}
+           <div className="flex items-center justify-between mb-8 flex-shrink-0">
+             <h1 className="text-3xl font-serif text-foreground hidden lg:block">
+               Nachrichten
+             </h1>
+
+             {/* --- BEDINGTE ANZEIGE FÜR DEN BUTTON --- */}
+             {currentRole === 'creator' && (
+               <Button
+                  variant="outline"
+                  className="bg-card text-foreground border-border hover:bg-neutral font-normal"
+                  onClick={() => setShowMassMessageModal(true)}
+               >
+                  <Send className="w-5 h-5 mr-2" strokeWidth={1.5} />
+                  Massen-Nachricht senden
+               </Button>
+             )}
+             {/* --- ENDE BEDINGUNG --- */}
+
+           </div>
+           {/* --- ENDE --- */}
+
 
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
 
@@ -352,6 +358,16 @@ export default function Messages() {
               )}
            </div>
          </div>
+
+         {/* --- BEDINGTE ANZEIGE FÜR DAS MODAL --- */}
+         {currentRole === 'creator' && (
+           <MassMessageModal
+             isOpen={showMassMessageModal}
+             onClose={() => setShowMassMessageModal(false)}
+           />
+         )}
+         {/* --- ENDE --- */}
+
        </div>
   );
 }

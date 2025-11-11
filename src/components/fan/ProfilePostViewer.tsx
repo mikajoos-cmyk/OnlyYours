@@ -1,3 +1,4 @@
+// src/components/fan/ProfilePostViewer.tsx
 import { useState, useRef, useEffect } from 'react';
 import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, LockIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -53,6 +54,13 @@ export default function ProfilePostViewer({
   const [showComments, setShowComments] = useState(false);
   const [selectedPostIdForComments, setSelectedPostIdForComments] = useState<string | null>(null);
   const [showPpvModal, setShowPpvModal] = useState(false);
+
+  // --- NEU: Tiers für PPV-Modal (wird in CreatorProfile.tsx noch nicht geladen, daher leer) ---
+  // In SearchPage.tsx (wo es herkommt) wird es ebenfalls nicht geladen.
+  // Wir übergeben ein leeres Array an das PpvModal, falls es benötigt wird.
+  // HINWEIS: Das PpvModal in *diesem* Viewer kann aktuell kein Abo anbieten, nur PPV.
+  const creatorTiersForPpvModal: Tier[] = [];
+  // --- ENDE ---
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
@@ -138,6 +146,7 @@ export default function ProfilePostViewer({
     // Da wir in einem Modal sind, müssen wir den Parent (CreatorProfile) nicht
     // unbedingt neu laden. Der `checkAccess` wird beim nächsten Rendern (durch addPurchasedPost)
     // den Zugriff korrekt (optimistisch) bewerten.
+    setShowPpvModal(false); // Modal nach Erfolg schließen
   };
 
   const currentPost = posts[currentIndex];
@@ -235,9 +244,15 @@ export default function ProfilePostViewer({
             {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
 
 
-           {/* Creator Info */}
+           {/* --- KORREKTUR HIER: Creator Info klickbar gemacht --- */}
            <div className="absolute top-4 left-4 right-20 z-10">
-             <div className="flex items-center gap-3">
+             <div
+                className="flex items-center gap-3 cursor-pointer group"
+                onClick={() => {
+                  onClose(); // Viewer schließen
+                  navigate(`/profile/${currentPost.creator.username}`);
+                }}
+             >
                <Avatar className="w-12 h-12 border-2 border-foreground">
                  <AvatarImage src={currentPost.creator.avatar} alt={currentPost.creator.name} />
                  <AvatarFallback className="bg-secondary text-secondary-foreground">
@@ -245,12 +260,18 @@ export default function ProfilePostViewer({
                  </AvatarFallback>
                </Avatar>
                <div>
-                 <p className="font-medium text-foreground drop-shadow-lg">
+                 <p className="font-medium text-foreground drop-shadow-lg group-hover:underline">
                    {currentPost.creator.name}
                  </p>
+                 {/* --- @username hinzugefügt --- */}
+                 <p className="text-sm text-foreground/80 drop-shadow-lg">
+                    @{currentPost.creator.username}
+                 </p>
+                 {/* --- Ende --- */}
                </div>
              </div>
            </div>
+           {/* --- ENDE KORREKTUR --- */}
 
            {/* Icons rechts */}
            <div className="absolute right-4 bottom-32 z-10 flex flex-col gap-6">
@@ -326,6 +347,13 @@ export default function ProfilePostViewer({
             onClose={() => setShowPpvModal(false)}
             post={postForCheck} // Übergibt das ServicePostData-Objekt
             onPaymentSuccess={handlePurchaseSuccess}
+            creatorTiers={creatorTiersForPpvModal} // Übergibt leeres Array (oder geladene Tiers)
+            onSubscribeClick={() => {
+              // Diese Funktion navigiert zum Profil, da wir im Viewer keine Tiers laden
+              setShowPpvModal(false);
+              onClose(); // Viewer schließen
+              navigate(`/profile/${currentPost.creator.username}`);
+            }}
          />
       )}
     </>

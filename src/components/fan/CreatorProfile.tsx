@@ -439,14 +439,34 @@ export default function CreatorProfile() {
                   className="relative aspect-square rounded-lg overflow-hidden cursor-pointer group bg-card"
                   onClick={() => handlePostClick(index, post.hasAccess)}
                 >
-                  <img
-                    src={post.thumbnailUrl}
-                    alt={post.caption || ""}
-                    className={cn(
-                        "w-full h-full object-cover transition-transform duration-200 group-hover:scale-105",
-                        !post.hasAccess && "filter blur-2xl" // Starke Verpixelung
-                    )}
-                  />
+
+                  {/* --- KORREKTUR HIER: Video/Img-Tag --- */}
+                  {post.type === 'video' ? (
+                    <video
+                      src={post.thumbnailUrl} // thumbnailUrl enthält mediaUrl bei Videos
+                      muted
+                      loop
+                      playsInline
+                      autoPlay
+                      className={cn(
+                          "w-full h-full object-cover transition-transform duration-200 group-hover:scale-105",
+                          !post.hasAccess && "filter blur-2xl"
+                      )}
+                    />
+                  ) : (
+                    <img
+                      src={post.thumbnailUrl}
+                      alt={post.caption || ""}
+                      className={cn(
+                          "w-full h-full object-cover transition-transform duration-200 group-hover:scale-105",
+                          !post.hasAccess && "filter blur-2xl"
+                      )}
+                      loading="lazy"
+                    />
+                  )}
+                  {/* --- ENDE KORREKTUR --- */}
+
+
                   {post.type === 'video' && (
                     <VideoIcon className="absolute top-2 right-2 w-5 h-5 text-foreground drop-shadow-lg" strokeWidth={2} />
                   )}
