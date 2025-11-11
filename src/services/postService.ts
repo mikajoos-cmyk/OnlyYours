@@ -210,6 +210,60 @@ export class PostService {
     return this.mapPostsToFrontend(posts || [], userLikes);
   }
 
+  // --- NEUE FUNKTION ---
+  /**
+   * Ruft einen einzelnen Post anhand seiner ID ab.
+   */
+  async getPostById(postId: string): Promise<Post | null> {
+    const { data: post, error } = await supabase
+      .from('posts')
+      .select(`
+        *,
+        creator:users!creator_id (
+          id,
+          username,
+          display_name,
+          avatar_url,
+          is_verified,
+          bio,
+          followers_count,
+          subscription_price
+        )
+      `)
+      .eq('id', postId)
+      .eq('is_published', true) // Nur veröffentlichte Posts
+      .or('scheduled_for.is.null,scheduled_for.lte.now()') // Nur, wenn nicht in Zukunft geplant
+      .single();
+
+    if (error || !post) {
+      if (error && error.code !== 'PGRST116') { // PGRST116 = not found
+        console.error("Error fetching post by ID:", error);
+      }
+      return null;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id;
+    let userLikes: Set<string> = new Set();
+
+    if (userId) {
+      const { data: like } = await supabase
+        .from('likes')
+        .select('post_id')
+        .eq('user_id', userId)
+        .eq('post_id', postId)
+        .maybeSingle();
+
+      if (like) {
+        userLikes.add(like.post_id);
+      }
+    }
+
+    return this.mapPostsToFrontend([post], userLikes)[0];
+  }
+  // --- ENDE NEUE FUNKTION ---
+
+
   async getCreatorVaultPosts(creatorId: string, limit: number = 50, offset: number = 0): Promise<Post[]> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || user.id !== creatorId) throw new Error('Not authorized to view vault');

@@ -13,6 +13,11 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import PpvModal from './PpvModal';
 import { useToast } from '../../hooks/use-toast';
+// --- NEUE IMPORTS ---
+import TipModal from './TipModal';
+import type { Post as PostData } from '../../services/postService'; // <-- PostData importiert
+// --- ENDE ---
+
 
 interface PostData extends Omit<ServicePostData, 'creator'> {
   creator: {
@@ -61,6 +66,11 @@ export default function SubscriberFeed({
   const [selectedPostIdForComments, setSelectedPostIdForComments] = useState<string | null>(null);
   const [showPpvModal, setShowPpvModal] = useState(false);
 
+  // --- NEU: States für TipModal ---
+  const [showTipModal, setShowTipModal] = useState(false);
+  const [selectedCreatorForTip, setSelectedCreatorForTip] = useState<PostData['creator'] | null>(null);
+  // --- ENDE ---
+
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
 
@@ -90,7 +100,7 @@ export default function SubscriberFeed({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (showPpvModal || showComments) return;
+      if (showPpvModal || showComments || showTipModal) return; // showTipModal hinzugefügt
       if (!isProfileView) {
         if (e.key === 'ArrowDown') nextPostAction();
         else if (e.key === 'ArrowUp') previousPostAction();
@@ -98,12 +108,12 @@ export default function SubscriberFeed({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isProfileView, nextPostAction, previousPostAction, showPpvModal, showComments]);
+  }, [isProfileView, nextPostAction, previousPostAction, showPpvModal, showComments, showTipModal]); // showTipModal hinzugefügt
 
   const scrollThreshold = 50;
 
   const handleScroll = (e: React.WheelEvent) => {
-    if (isScrolling.current || Math.abs(e.deltaY) < scrollThreshold || posts.length <= 1 || showPpvModal || showComments) return;
+    if (isScrolling.current || Math.abs(e.deltaY) < scrollThreshold || posts.length <= 1 || showPpvModal || showComments || showTipModal) return; // showTipModal hinzugefügt
     isScrolling.current = true;
     if (e.deltaY > 0 && currentIndex < posts.length - 1) {
       if (isProfileView) setCurrentIndex(i => i + 1); else nextPostAction();
@@ -115,7 +125,7 @@ export default function SubscriberFeed({
 
   const handleTouchStart = useRef({ y: 0 });
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (posts.length <= 1 || showPpvModal || showComments) return;
+    if (posts.length <= 1 || showPpvModal || showComments || showTipModal) return; // showTipModal hinzugefügt
     const touch = e.touches[0];
     const deltaY = handleTouchStart.current.y - touch.clientY;
     if (Math.abs(deltaY) > 50 && !isScrolling.current) {
@@ -144,6 +154,56 @@ export default function SubscriberFeed({
     setSelectedPostIdForComments(postId);
     setShowComments(true);
   };
+
+  // --- AKTUALISIERT: Handler für Teilen (Share) ---
+  const copyToClipboard = (url: string) => {
+    navigator.clipboard.writeText(url).then(() => {
+      toast({ title: 'Link kopiert!', description: 'Der Link zum Post wurde in die Zwischenablage kopiert.' });
+    }, (err) => {
+      console.error('Error copying to clipboard:', err);
+      toast({ title: 'Fehler', description: 'Link konnte nicht kopiert werden.', variant: 'destructive' });
+    });
+  };
+
+  const handleShare = async (postId: string, creatorUsername: string, creatorName: string) => {
+    const shareUrl = `${window.location.origin}/post/${postId}`; // <-- URL ZUM POST
+    const shareText = `Schau dir diesen Post von ${creatorName} auf OnlyYours an!`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `OnlyYours - ${creatorName}`,
+          text: shareText,
+          url: shareUrl,
+        });
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Error sharing:', error);
+          copyToClipboard(shareUrl);
+        }
+      }
+    } else {
+      copyToClipboard(shareUrl);
+    }
+  };
+  // --- ENDE Handler für Teilen ---
+
+  // --- Handler für Trinkgeld (Tip) ---
+  const handleTipClick = (e: React.MouseEvent, creator: PostData['creator']) => {
+    e.stopPropagation();
+    if (!user) {
+      toast({ title: "Bitte anmelden", description: "Sie müssen angemeldet sein, um ein Trinkgeld zu geben.", variant: "destructive" });
+      return;
+    }
+    setSelectedCreatorForTip(creator);
+    setShowTipModal(true);
+  };
+
+  const handleTipSuccess = () => {
+    console.log("Tip success!");
+  };
+  // --- ENDE Handler für Trinkgeld ---
+
 
   const handlePpvClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -199,7 +259,6 @@ export default function SubscriberFeed({
   const hasAccess = checkAccess(currentPost, user?.id);
 
   const canPpv = currentPost.price > 0;
-  // Im SubscriberFeed bedeutet tier_id-Sperrung *immer*, dass eine HÖHERE Stufe benötigt wird
   const canSubscribe = currentPost.tier_id !== null && !hasAccess;
 
   return (
@@ -260,7 +319,7 @@ export default function SubscriberFeed({
               )}
             </div>
 
-            {/* --- FIX: Overlay mit Schloss und Button-Auswahl --- */}
+            {/* --- Overlay mit Schloss und Button-Auswahl --- */}
             {!hasAccess && (
               <div
                 className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8"
@@ -307,7 +366,6 @@ export default function SubscriberFeed({
 
               </div>
             )}
-            {/* --- ENDE FIX --- */}
 
 
             {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
@@ -366,12 +424,27 @@ export default function SubscriberFeed({
                         {currentPost.comments}
                     </span>
                 </button>
-                <button className="flex flex-col items-center gap-1">
+
+                {/* --- AKTUALISIERT: Share-Button --- */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const creator = currentPost.creator;
+                    // --- NEU: Post-ID wird übergeben ---
+                    handleShare(currentPost.id, creator.username || creator.id, creator.name);
+                  }}
+                  className="flex flex-col items-center gap-1"
+                >
                     <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
                         <Share2Icon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
                     </div>
                 </button>
-                <button className="flex flex-col items-center gap-1">
+
+                {/* --- AKTUALISIERT: Tip-Button --- */}
+                <button
+                  onClick={(e) => handleTipClick(e, currentPost.creator)}
+                  className="flex flex-col items-center gap-1"
+                >
                     <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
                         <DollarSignIcon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
                     </div>
@@ -415,6 +488,16 @@ export default function SubscriberFeed({
             creatorTiers={[]} // Tiers werden hier nicht benötigt
             onSubscribeClick={handleSubscribeClick} // Handler übergeben
          />
+      )}
+
+      {/* --- NEU: TipModal hinzugefügt --- */}
+      {showTipModal && selectedCreatorForTip && (
+        <TipModal
+          isOpen={showTipModal}
+          onClose={() => setShowTipModal(false)}
+          creator={{ id: selectedCreatorForTip.id, name: selectedCreatorForTip.name }}
+          onTipSuccess={handleTipSuccess}
+        />
       )}
     </>
   );

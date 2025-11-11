@@ -21,6 +21,7 @@ import Statistics from './components/creator/Statistics';
 import Payouts from './components/creator/Payouts';
 import ProfilePage from './components/profile/ProfilePage';
 import { Toaster } from './components/ui/toaster';
+import PostPage from './components/fan/PostPage'; // <-- NEUER IMPORT FÜR POST-SEITE
 
 function App() {
   const { isAuthenticated, isLoading, initialize, user } = useAuthStore(); // <-- user holen
@@ -96,6 +97,8 @@ function App() {
           <Route path="/messages" element={<Messages />} />
           <Route path="/statistics" element={<Statistics />} />
           <Route path="/payouts" element={<Payouts />} />
+          {/* --- NEUE ROUTE HINZUGEFÜGT --- */}
+          <Route path="/post/:postId" element={<PostPage />} />
         </Routes>
       </AppShell>
       <Toaster />

@@ -29,7 +29,8 @@ export class PaymentService {
         status,
         type,
         related_id,
-        metadata
+        metadata,
+        creator_id
       `)
       .eq('user_id', userId)
       .eq('status', 'SUCCESS') // Nur erfolgreiche Transaktionen anzeigen
@@ -103,7 +104,54 @@ export class PaymentService {
     return newPayment;
   }
 
-  // --- NEUE FUNKTION ---
+  // --- NEUE FUNKTION: sendTip ---
+  /**
+   * Simuliert das Senden eines Trinkgelds an einen Creator.
+   */
+  async sendTip(creatorId: string, amount: number): Promise<PaymentRow> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    if (user.id === creatorId) {
+      throw new Error('Cannot send tip to yourself');
+    }
+
+    // Metadaten für die Transaktionshistorie
+    const { data: creator } = await supabase
+      .from('users')
+      .select('display_name')
+      .eq('id', creatorId)
+      .single();
+
+    const paymentData: PaymentInsert = {
+      user_id: user.id,
+      creator_id: creatorId, // Wichtig für Einnahmen-Trigger
+      amount: amount,
+      currency: 'EUR',
+      type: 'TIP', // Setzt den Typ auf TIP
+      status: 'SUCCESS', // Simuliert eine erfolgreiche Zahlung
+      related_id: null, // Kein spezifischer Post
+      metadata: {
+        creatorName: creator?.display_name || 'Unbekannt'
+      }
+    };
+
+    const { data: newPayment, error } = await supabase
+      .from('payments')
+      .insert(paymentData)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error sending tip:', error);
+      throw error;
+    }
+
+    return newPayment;
+  }
+  // --- ENDE NEUE FUNKTION ---
+
+
   /**
    * Ruft NUR die IDs aller erfolgreich gekauften PPV-Posts ab.
    * Hocheffizient für den App-Start.
@@ -115,25 +163,19 @@ export class PaymentService {
       .eq('user_id', userId)
       .eq('type', 'PAY_PER_VIEW')
       .eq('status', 'SUCCESS')
-      // --- KORREKTUR HIER ---
-      // .is('related_id', 'not.null'); // FALSCH
-      .not('related_id', 'is', null); // KORREKT
-      // --- ENDE KORREKTUR ---
+      .not('related_id', 'is', null);
 
     if (error) {
       console.error('Error fetching paid post IDs:', error);
       return new Set<string>();
     }
 
-    // Filtere null-Werte (sollte 'is not null' abdecken, aber sicher ist sicher)
-    // und erstelle ein Set
     const ids = (data || [])
       .map(p => p.related_id)
       .filter((id): id is string => id !== null);
 
     return new Set<string>(ids);
   }
-  // --- ENDE NEUE FUNKTION ---
 
 
   /**

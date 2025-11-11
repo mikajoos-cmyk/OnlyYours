@@ -17,6 +17,8 @@ import { Separator } from '../ui/separator'; // Separator importieren
 // --- NEUE IMPORTS ---
 import { tierService, Tier } from '../../services/tierService';
 import SubscriptionModal from './SubscriptionModal';
+import TipModal from './TipModal'; // <-- Trinkgeld-Modal importiert
+import type { Post as PostData } from '../../services/postService'; // <-- PostData importiert
 // --- ENDE ---
 
 export default function DiscoveryFeed() {
@@ -31,15 +33,20 @@ export default function DiscoveryFeed() {
   const [creatorTiers, setCreatorTiers] = useState<Tier[]>([]);
   // --- ENDE ---
 
+  // --- NEU: States für TipModal ---
+  const [showTipModal, setShowTipModal] = useState(false);
+  const [selectedCreatorForTip, setSelectedCreatorForTip] = useState<PostData['creator'] | null>(null);
+  // --- ENDE ---
+
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   // Stores
-  const { user } = useAuthStore(); // <-- KORREKTUR: Heißt 'user', nicht 'currentUser'
+  const { user } = useAuthStore();
   const { posts, currentIndex, isLoading, error, loadDiscoveryPosts, nextPost, previousPost, toggleLike } = useFeedStore();
-  const { checkAccess, addPurchasedPost, isLoading: isLoadingSubs, loadSubscriptions } = useSubscriptionStore(); // loadSubscriptions hinzugefügt
+  const { checkAccess, addPurchasedPost, isLoading: isLoadingSubs, loadSubscriptions } = useSubscriptionStore();
 
   // Daten laden
   useEffect(() => {
@@ -78,17 +85,17 @@ export default function DiscoveryFeed() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Modale blockieren Navigation
-      if (showPpvModal || showComments || isViewerOpen || showSubscriptionModal) return;
+      if (showPpvModal || showComments || isViewerOpen || showSubscriptionModal || showTipModal) return; // showTipModal hinzugefügt
       if (e.key === 'ArrowDown') nextPost();
       else if (e.key === 'ArrowUp') previousPost();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nextPost, previousPost, showPpvModal, showComments, isViewerOpen, showSubscriptionModal]);
+  }, [nextPost, previousPost, showPpvModal, showComments, isViewerOpen, showSubscriptionModal, showTipModal]); // showTipModal hinzugefügt
 
   // Mausrad-Navigation
   const handleScroll = (e: React.WheelEvent) => {
-    if (isScrolling.current || Math.abs(e.deltaY) < 50 || showPpvModal || showComments || isViewerOpen || showSubscriptionModal) return;
+    if (isScrolling.current || Math.abs(e.deltaY) < 50 || showPpvModal || showComments || isViewerOpen || showSubscriptionModal || showTipModal) return; // showTipModal hinzugefügt
     isScrolling.current = true;
     if (e.deltaY > 0) nextPost();
     else if (e.deltaY < 0) previousPost();
@@ -98,7 +105,7 @@ export default function DiscoveryFeed() {
   // Touch-Navigation
   const handleTouchStart = useRef({ y: 0 });
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (showPpvModal || showComments || isViewerOpen || showSubscriptionModal) return;
+    if (showPpvModal || showComments || isViewerOpen || showSubscriptionModal || showTipModal) return; // showTipModal hinzugefügt
     const touch = e.touches[0];
     const deltaY = handleTouchStart.current.y - touch.clientY;
     if (Math.abs(deltaY) > 50 && !isScrolling.current) {
@@ -121,20 +128,68 @@ export default function DiscoveryFeed() {
     setShowComments(true);
   };
 
-  // --- Klick-Handler für die Buttons im Overlay ---
+  // --- AKTUALISIERT: Handler für Teilen (Share) ---
+  const copyToClipboard = (url: string) => {
+    navigator.clipboard.writeText(url).then(() => {
+      toast({ title: 'Link kopiert!', description: 'Der Link zum Post wurde in die Zwischenablage kopiert.' });
+    }, (err) => {
+      console.error('Error copying to clipboard:', err);
+      toast({ title: 'Fehler', description: 'Link konnte nicht kopiert werden.', variant: 'destructive' });
+    });
+  };
+
+  const handleShare = async (postId: string, creatorUsername: string, creatorName: string) => {
+    const shareUrl = `${window.location.origin}/post/${postId}`; // <-- URL ZUM POST
+    const shareText = `Schau dir diesen Post von ${creatorName} auf OnlyYours an!`;
+
+    if (navigator.share) {
+      // Web Share API nutzen
+      try {
+        await navigator.share({
+          title: `OnlyYours - ${creatorName}`,
+          text: shareText,
+          url: shareUrl,
+        });
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Error sharing:', error);
+          copyToClipboard(shareUrl);
+        }
+      }
+    } else {
+      // Fallback auf Clipboard API
+      copyToClipboard(shareUrl);
+    }
+  };
+  // --- ENDE Handler für Teilen ---
+
+  // --- Handler für Trinkgeld (Tip) ---
+  const handleTipClick = (e: React.MouseEvent, creator: PostData['creator']) => {
+    e.stopPropagation();
+    if (!user) {
+      toast({ title: "Bitte anmelden", description: "Sie müssen angemeldet sein, um ein Trinkgeld zu geben.", variant: "destructive" });
+      return;
+    }
+    setSelectedCreatorForTip(creator);
+    setShowTipModal(true);
+  };
+
+  const handleTipSuccess = () => {
+    console.log("Tip success!");
+  };
+  // --- ENDE Handler für Trinkgeld ---
 
   // Klick auf PPV-Button (öffnet PPV-Modal)
   const handlePpvClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Verhindert Klick auf das Div
+    e.stopPropagation();
     setShowPpvModal(true);
   };
 
-  // --- KORRIGIERTER HANDLER ---
   // Klick auf Abo-Button (öffnet Abo-Modal)
-  const handleSubscribeClick = (e?: React.MouseEvent) => { // <-- 1. Event 'e' ist optional
-    e?.stopPropagation(); // <-- 2. 'stopPropagation' nur aufrufen, WENN 'e' existiert
+  const handleSubscribeClick = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
 
-    if (!user) { // <-- 3. 'user' statt 'currentUser' verwenden
+    if (!user) {
       toast({ title: "Bitte anmelden", description: "Sie müssen angemeldet sein.", variant: "destructive" });
       return;
     }
@@ -143,16 +198,13 @@ export default function DiscoveryFeed() {
        return;
     }
 
-    // Schließe das PPV-Modal, falls es offen ist (z.B. wenn von dort geklickt)
     setShowPpvModal(false);
-    // Öffne das SubscriptionModal
     setShowSubscriptionModal(true);
   };
-  // --- ENDE KORREKTUR ---
 
   // Callback nach erfolgreichem PPV-Kauf
   const handlePurchaseSuccess = (postId: string) => {
-    addPurchasedPost(postId); // Post optimistisch freischalten
+    addPurchasedPost(postId);
     setShowPpvModal(false);
   };
 
@@ -160,9 +212,7 @@ export default function DiscoveryFeed() {
   const handleSubscriptionComplete = () => {
     setShowSubscriptionModal(false);
     toast({ title: "Erfolgreich abonniert!", description: "Der Post ist jetzt freigeschaltet." });
-    // Wichtig: Der subscriptionStore muss neu geladen werden, damit checkAccess() funktioniert
     loadSubscriptions();
-    // Der Post wird durch den re-render und checkAccess() automatisch freigeschaltet
   };
 
 
@@ -194,27 +244,18 @@ export default function DiscoveryFeed() {
 
   // Optionen prüfen
   const canPpv = currentPost.price > 0;
-  // Finde das spezifische Tier (falls vorhanden)
   const requiredTier = currentPost.tier_id ? creatorTiers.find(t => t.id === currentPost.tier_id) : null;
-  // Finde das günstigste Tier (als Fallback)
-  const cheapestTier = creatorTiers.length > 0 ? creatorTiers[0] : null; // Annahme: creatorTiers ist sortiert
-
-  // Post ist an ein Tier gebunden ODER (ist ein allgemeiner Sub-Post UND der Creator hat Tiers)
+  const cheapestTier = creatorTiers.length > 0 ? creatorTiers[0] : null;
   const canSubscribe = currentPost.tier_id !== null || (currentPost.tier_id === null && creatorTiers.length > 0);
 
-  // --- Dynamischer Text für den Abo-Button im Overlay ---
   let subscribeText = "Mit Abo freischalten";
   if (requiredTier) {
-    // Fall A: Post erfordert ein spezifisches Tier (z.B. "VIP")
     subscribeText = `Mit "${requiredTier.name}"-Abo freischalten`;
   } else if (cheapestTier) {
-    // Fall B: Post ist für alle Abonnenten (tier_id = null), wir zeigen den günstigsten Preis an
     subscribeText = `Abonnieren (ab ${cheapestTier.price.toFixed(2)}€)`;
   } else {
-    // Fall C: Creator hat keine Tiers (Button wird unten ausgeblendet)
     subscribeText = "Abonnieren nicht verfügbar";
   }
-  // --- ENDE ---
 
 
   return (
@@ -237,7 +278,7 @@ export default function DiscoveryFeed() {
           {/* --- LOGIK FÜR VERPIXELTEN INHALT --- */}
           <div
             className="w-full h-full"
-            onClick={() => { if(hasAccess) return; /* Nur klicken, wenn gesperrt */ }}
+            onClick={() => { if(hasAccess) return; }}
           >
             {currentPost.mediaType === 'video' ? (
               <video
@@ -263,14 +304,13 @@ export default function DiscoveryFeed() {
             )}
           </div>
 
-          {/* --- FIX: Overlay mit Schloss und Button-Auswahl --- */}
+          {/* --- Overlay mit Schloss und Button-Auswahl --- */}
           {!hasAccess && (
             <div
               className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8"
             >
               <LockIcon className="w-16 h-16 text-foreground" />
 
-              {/* Button 1: PPV (Immer anzeigen, wenn Preis > 0) */}
               {canPpv && (
                 <Button
                   className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6 w-full max-w-sm"
@@ -280,7 +320,6 @@ export default function DiscoveryFeed() {
                 </Button>
               )}
 
-              {/* TRENNER */}
               {canPpv && canSubscribe && (
                  <div className="relative w-full max-w-sm">
                   <div className="absolute inset-0 flex items-center">
@@ -294,17 +333,16 @@ export default function DiscoveryFeed() {
                 </div>
               )}
 
-              {/* Button 2: Abo (Immer anzeigen, wenn Tiers vorhanden) */}
               {canSubscribe && (
                 <Button
-                  variant={canPpv ? "outline" : "secondary"} // Wenn PPV da ist, ist Abo die "outline" Option
+                  variant={canPpv ? "outline" : "secondary"}
                   className={cn(
                       "text-lg px-8 py-6 w-full max-w-sm",
                       canPpv
                           ? "bg-transparent border-secondary text-secondary hover:bg-secondary/10 hover:text-secondary"
-                          : "bg-secondary text-secondary-foreground hover:bg-secondary/90" // Wenn *nur* Abo geht
+                          : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
                   )}
-                  onClick={handleSubscribeClick} // <-- ÖFFNET JETZT DAS ABO-MODAL
+                  onClick={handleSubscribeClick}
                 >
                   <UserCheckIcon className="w-5 h-5 mr-2" />
                   {subscribeText}
@@ -312,7 +350,6 @@ export default function DiscoveryFeed() {
               )}
             </div>
           )}
-          {/* --- ENDE FIX --- */}
 
 
           {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
@@ -370,12 +407,26 @@ export default function DiscoveryFeed() {
               </span>
             </button>
 
-            <button className="flex flex-col items-center gap-1">
+            {/* --- AKTUALISIERT: Share-Button --- */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const creator = currentPost.creator;
+                // --- NEU: Post-ID wird übergeben ---
+                handleShare(currentPost.id, creator.username || creator.id, creator.name);
+              }}
+              className="flex flex-col items-center gap-1"
+            >
               <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
                 <Share2Icon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
               </div>
             </button>
-            <button className="flex flex-col items-center gap-1">
+
+            {/* --- AKTUALISIERT: Tip-Button --- */}
+            <button
+              onClick={(e) => handleTipClick(e, currentPost.creator)}
+              className="flex flex-col items-center gap-1"
+            >
               <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
                 <DollarSignIcon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
               </div>
@@ -413,19 +464,17 @@ export default function DiscoveryFeed() {
         )}
       </AnimatePresence>
 
-      {/* PPV Modal (wird durch handlePpvClick geöffnet) */}
       {showPpvModal && currentPost && (
          <PpvModal
             isOpen={showPpvModal}
             onClose={() => setShowPpvModal(false)}
             post={currentPost}
             onPaymentSuccess={handlePurchaseSuccess}
-            creatorTiers={creatorTiers} // <-- Übergibt die geladenen Tiers
-            onSubscribeClick={handleSubscribeClick} // <-- Übergibt den Handler, der das Abo-Modal öffnet
+            creatorTiers={creatorTiers}
+            onSubscribeClick={handleSubscribeClick}
          />
       )}
 
-      {/* Subscription Modal (wird durch handleSubscribeClick geöffnet) */}
       {showSubscriptionModal && currentPost && creatorTiers.length > 0 && (
         <SubscriptionModal
           isOpen={showSubscriptionModal}
@@ -436,6 +485,16 @@ export default function DiscoveryFeed() {
           }}
           tiers={creatorTiers}
           onSubscriptionComplete={handleSubscriptionComplete}
+        />
+      )}
+
+      {/* --- NEU: TipModal hinzugefügt --- */}
+      {showTipModal && selectedCreatorForTip && (
+        <TipModal
+          isOpen={showTipModal}
+          onClose={() => setShowTipModal(false)}
+          creator={{ id: selectedCreatorForTip.id, name: selectedCreatorForTip.name }}
+          onTipSuccess={handleTipSuccess}
         />
       )}
 
