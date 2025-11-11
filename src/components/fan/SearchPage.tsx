@@ -1,23 +1,22 @@
 // src/components/fan/SearchPage.tsx
-import { useState, useEffect, useMemo } from 'react'; // useMemo hinzugefügt
+import { useState, useEffect, useMemo } from 'react';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { SearchIcon, SlidersHorizontalIcon, CheckIcon, VideoIcon, LockIcon, HeartIcon, MessageCircleIcon } from 'lucide-react';
-import { Card } from '../ui/card';
+import { Card, CardContent } from '../ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { useNavigate } from 'react-router-dom';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { userService, UserProfile } from '../../services/userService';
-// --- NEUE IMPORTS ---
 import { postService, Post as ServicePostData } from '../../services/postService';
-import { tierService, Tier } from '../../services/tierService'; // Tier-Service
+import { tierService, Tier } from '../../services/tierService';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { useAuthStore } from '../../stores/authStore';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
-import ProfilePostViewer, { PostData as ViewerPostData } from './ProfilePostViewer'; // Viewer importieren
-// --- ENDE ---
+import ProfilePostViewer, { PostData as ViewerPostData } from './ProfilePostViewer';
+import { Switch } from '../ui/switch';
 import { subscriptionService } from '../../services/subscriptionService';
 import { useToast } from '../../hooks/use-toast';
 import SubscriptionModal from './SubscriptionModal';
@@ -29,8 +28,9 @@ interface GridPost {
   thumbnailUrl: string;
   type: 'image' | 'video';
   hasAccess: boolean;
-  creatorUsername: string; // Wird für Fallback-Navigation benötigt
-  // Hinzugefügt für die Anzeige im Grid
+  creatorUsername: string;
+  creatorName: string;
+  creatorAvatar: string;
   likes: number;
   comments: number;
 }
@@ -42,6 +42,7 @@ export default function SearchPage() {
   // Filter (gelten jetzt für Posts)
   const [priceFilter, setPriceFilter] = useState('all');
   const [contentType, setContentType] = useState('all');
+  const [subscribedOnly, setSubscribedOnly] = useState(false);
 
   // Ergebnisse
   const [creatorResults, setCreatorResults] = useState<UserProfile[]>([]);
@@ -54,26 +55,27 @@ export default function SearchPage() {
   const { toast } = useToast();
 
   const { user: currentUser } = useAuthStore();
-  const { checkAccess, isLoading: isLoadingSubs } = useSubscriptionStore();
+  const { checkAccess, isLoading: isLoadingSubs, loadSubscriptions } = useSubscriptionStore();
   const [subscriptionMap, setSubscriptionMap] = useState<Map<string, 'ACTIVE' | 'CANCELED'>>(new Map());
 
   // States für Modals
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [selectedCreator, setSelectedCreator] = useState<UserProfile | null>(null);
-  const [creatorTiersForModal, setCreatorTiersForModal] = useState<Tier[]>([]); // Tiers für das Abo-Modal
+  const [creatorTiersForModal, setCreatorTiersForModal] = useState<Tier[]>([]);
 
-  // --- NEU: States für den Post-Viewer ---
+  // States für den Post-Viewer
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [selectedPostIndex, setSelectedPostIndex] = useState(0);
-  // --- ENDE ---
 
   const popularTags = ['#fitness', '#tutorial', '#live', '#art', '#gaming'];
 
-  // Effekt zum Laden der Abonnements (für Creator-Buttons)
+  // Effekt zum Laden der Abonnements (für Creator-Buttons UND Post-Filter)
   useEffect(() => {
     const fetchSubscriptions = async () => {
       if (!currentUser?.id) return;
       try {
+        await loadSubscriptions();
+
         const subs = await subscriptionService.getUserSubscriptions();
         const subMap = new Map<string, 'ACTIVE' | 'CANCELED'>();
         for (const sub of subs) {
@@ -85,9 +87,9 @@ export default function SearchPage() {
       }
     };
     fetchSubscriptions();
-  }, [currentUser?.id]);
+  }, [currentUser?.id, loadSubscriptions]);
 
-  // Effekt zum Suchen (reagiert auf Query UND Tab-Wechsel)
+  // Effekt zum Suchen (reagiert auf Query UND Tab-Wechsel UND Filter)
   useEffect(() => {
     const fetchSearchData = async () => {
       if (!searchQuery) {
@@ -111,7 +113,8 @@ export default function SearchPage() {
           // --- POST-SUCHE (jetzt MIT Filtern) ---
           const postData = await postService.searchPosts(searchQuery, 30, {
             price: priceFilter,
-            type: contentType
+            type: contentType,
+            subscribedOnly: subscribedOnly // NEU
           });
           setPostResults(postData || []);
           setCreatorResults([]); // Creator-Ergebnisse leeren
@@ -132,9 +135,9 @@ export default function SearchPage() {
     return () => {
       clearTimeout(handler);
     };
-  }, [searchQuery, activeTab, priceFilter, contentType]); // Abhängig von Query und Tab
+  }, [searchQuery, activeTab, priceFilter, contentType, subscribedOnly]); // 'subscribedOnly' hinzugefügt
 
-  // --- KORRIGIERTER HANDLER: Lädt Tiers, bevor das Modal geöffnet wird ---
+  // Handler für Abo-Modal (für Creator-Suche)
   const handleSubscribeClick = (creator: UserProfile) => {
     if (!currentUser) {
       toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um zu abonnieren.", variant: "destructive" });
@@ -156,7 +159,6 @@ export default function SearchPage() {
         setLoading(false);
       });
   };
-  // --- ENDE KORREKTUR ---
 
   const handleManageSubscriptionClick = () => {
     navigate('/profile');
@@ -175,7 +177,7 @@ export default function SearchPage() {
     setActiveTab('posts');
   };
 
-  // --- NEU: Handler für Post-Klick (öffnet Viewer) ---
+  // Handler für Post-Klick (öffnet Viewer)
   const handlePostClick = (index: number) => {
     setSelectedPostIndex(index);
     setIsViewerOpen(true);
@@ -184,9 +186,8 @@ export default function SearchPage() {
   const handleCloseViewer = () => {
     setIsViewerOpen(false);
   };
-  // --- ENDE NEU ---
 
-  // --- Post Grid (für Post-Suchergebnisse) ---
+  // Post Grid (für Post-Suchergebnisse)
   const gridPosts: GridPost[] = postResults.map((post) => {
     const hasAccess = checkAccess(post, currentUser?.id);
     return {
@@ -195,12 +196,14 @@ export default function SearchPage() {
       type: post.mediaType.toLowerCase() as 'image' | 'video',
       hasAccess: hasAccess,
       creatorUsername: post.creator.username || post.creator.id,
+      creatorName: post.creator.name,
+      creatorAvatar: post.creator.avatar,
       likes: post.likes,
       comments: post.comments,
     };
   });
 
-  // --- NEU: Daten für den Viewer vorbereiten ---
+  // Daten für den Viewer vorbereiten
   const viewerPosts: ViewerPostData[] = useMemo(() =>
     postResults.map(post => ({
       ...post, // Übergibt alle Daten (creatorId, price, tier_id etc.)
@@ -212,7 +215,6 @@ export default function SearchPage() {
         isVerified: post.creator.isVerified,
       },
   })), [postResults]);
-  // --- ENDE ---
 
   return (
     <>
@@ -220,7 +222,7 @@ export default function SearchPage() {
         <div className="max-w-6xl mx-auto space-y-6">
           <h1 className="text-3xl font-serif text-foreground">Suchen</h1>
 
-          {/* Suchleiste (Filter-Button entfernt) */}
+          {/* Suchleiste */}
           <div className="flex gap-3">
             <div className="relative flex-1">
               <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" strokeWidth={1.5} />
@@ -231,7 +233,6 @@ export default function SearchPage() {
                 className="pl-10 bg-card text-foreground border-border h-12"
               />
             </div>
-            {/* Filter-Button HIER ENTFERNT */}
           </div>
 
           {/* Tag-Buttons (wechseln zu "Posts") */}
@@ -301,10 +302,30 @@ export default function SearchPage() {
                           <SelectContent className="bg-card text-foreground border-border">
                             <SelectItem value="all">Alle (Video, Foto)</SelectItem>
                             <SelectItem value="video">Nur Video</SelectItem>
+                            {/* --- KORREKTUR HIER --- */}
                             <SelectItem value="photo">Nur Foto</SelectItem>
+                            {/* --- ENDE KORREKTUR --- */}
                           </SelectContent>
                         </Select>
                       </div>
+
+                      {/* --- NEUER FILTER: Nur Abos --- */}
+                      <div className="space-y-2 border-t border-border pt-6">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="subscribed-only" className="text-foreground">
+                            Nur von abonnierten Creators
+                          </Label>
+                          <Switch
+                            id="subscribed-only"
+                            checked={subscribedOnly}
+                            onCheckedChange={setSubscribedOnly}
+                            disabled={!currentUser}
+                          />
+                        </div>
+                        {!currentUser && <p className="text-xs text-muted-foreground">Melde dich an, um diesen Filter zu nutzen.</p>}
+                      </div>
+                      {/* --- ENDE NEUER FILTER --- */}
+
                     </div>
                   </SheetContent>
                 </Sheet>
@@ -376,7 +397,7 @@ export default function SearchPage() {
                                 !subscriptionStatus && "bg-secondary text-secondary-foreground hover:bg-secondary/90"
                               )}
                             >
-                              {isLoadingSubs ? '...' : (
+                              {isLoadingSubs || loading ? '...' : (
                                 subscriptionStatus === 'ACTIVE' ? (
                                   <><CheckIcon className="w-4 h-4 mr-1" strokeWidth={2} /> Abonniert</>
                                 ) : subscriptionStatus === 'CANCELED' ? (
@@ -408,8 +429,8 @@ export default function SearchPage() {
                   {gridPosts.map((post, index) => (
                     <div
                       key={post.id}
-                      className="relative aspect-square rounded-lg overflow-hidden cursor-pointer group bg-card"
-                      onClick={() => handlePostClick(index)} // <-- ÖFFNET DEN VIEWER
+                      className="relative aspect-square rounded-lg overflow-hidden cursor-pointer group bg-card shadow-md"
+                      onClick={() => handlePostClick(index)} // <-- Klick auf Post öffnet Viewer
                     >
                       <img
                         src={post.thumbnailUrl}
@@ -429,7 +450,6 @@ export default function SearchPage() {
                         </div>
                       )}
 
-                      {/* Overlay mit Infos (falls freigeschaltet) */}
                       {post.hasAccess && (
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-4">
                           <div className="flex items-center gap-1 text-foreground">
@@ -442,6 +462,26 @@ export default function SearchPage() {
                           </div>
                         </div>
                       )}
+
+                      {/* --- NEU: Creator-Info-Overlay --- */}
+                      <div
+                        className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation(); // Verhindert, dass der Post-Viewer öffnet
+                          navigate(`/profile/${post.creatorUsername}`);
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Avatar className="w-6 h-6 border-2 border-secondary">
+                            <AvatarImage src={post.creatorAvatar} alt={post.creatorName} />
+                            <AvatarFallback className="text-xs">{post.creatorName.charAt(0)}</AvatarFallback>
+                          </Avatar>
+                          <span className="text-xs text-foreground font-medium truncate group-hover:underline">
+                            {post.creatorName}
+                          </span>
+                        </div>
+                      </div>
+                      {/* --- ENDE NEU --- */}
                     </div>
                   ))}
                 </div>

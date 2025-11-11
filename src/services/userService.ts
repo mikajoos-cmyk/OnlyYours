@@ -19,17 +19,13 @@ export interface UserProfile {
 
 export class UserService {
 
-  /**
-   * (WIEDERHERGESTELLT) Ruft ein Benutzerprofil anhand seines eindeutigen @username ab.
-   * Wird von der Creator-Profilseite (CreatorProfile.tsx) verwendet.
-   */
   async getUserByUsername(username: string): Promise<UserProfile | null> {
     const normalizedUsername = username.toLowerCase();
     console.log("userService searching for username (lowercase):", normalizedUsername);
 
     const { data, error } = await supabase
       .from('users')
-      .select('*') // Holt alle Spalten, inkl. profile_hashtags
+      .select('*')
       .eq('username', normalizedUsername)
       .maybeSingle();
 
@@ -46,13 +42,10 @@ export class UserService {
     return this.mapToUserProfile(data);
   }
 
-  /**
-   * Ruft ein Benutzerprofil anhand seiner UUID (id) ab.
-   */
   async getUserById(userId: string): Promise<UserProfile | null> {
     const { data, error } = await supabase
       .from('users')
-      .select('*') // Holt alle Spalten, inkl. profile_hashtags
+      .select('*')
       .eq('id', userId)
       .maybeSingle();
 
@@ -80,6 +73,8 @@ export class UserService {
         `profile_hashtags.cs.{${cleanedQuery}}` // cs = contains (für text[])
       );
 
+    // --- FILTER (Preis, Verifiziert etc.) WURDEN HIER ENTFERNT ---
+
     const { data, error } = await queryBuilder
       .order('followers_count', { ascending: false })
       .limit(50);
@@ -96,7 +91,7 @@ export class UserService {
   async getTopCreators(limit: number = 20) {
     const { data, error } = await supabase
       .from('users')
-      .select('*') // Holt alle Spalten, inkl. profile_hashtags
+      .select('*')
       .eq('role', 'CREATOR')
       .order('followers_count', { ascending: false })
       .limit(limit);

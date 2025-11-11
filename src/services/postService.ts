@@ -306,15 +306,18 @@ export class PostService {
   // --- AKTUALISIERTE FUNKTION: searchPosts ---
   /**
    * Sucht Posts anhand von Hashtags oder Bildbeschriftung.
-   * Akzeptiert jetzt Filter für Preis und Typ.
+   * Akzeptiert jetzt Filter für Preis, Typ und Abos.
    */
   async searchPosts(
     query: string,
     limit: number = 30,
-    filters?: { price?: string; type?: string }
+    filters?: { price?: string; type?: string; subscribedOnly?: boolean }
   ): Promise<Post[]> {
     const cleanedQuery = query.toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
     if (!cleanedQuery) return [];
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id;
 
     let queryBuilder = supabase
       .from('posts')
@@ -338,6 +341,26 @@ export class PostService {
       );
 
     // --- FILTER-LOGIK HINZUGEFÜGT ---
+
+    // 1. Abo-Filter
+    if (filters?.subscribedOnly && userId) {
+      // 1. Hole abonnierte Creator-IDs
+      const { data: subscriptions } = await supabase
+        .from('subscriptions')
+        .select('creator_id')
+        .eq('fan_id', userId)
+        .or(`status.eq.ACTIVE,and(status.eq.CANCELED,end_date.gt.now())`);
+
+      const creatorIds = subscriptions?.map(s => s.creator_id) || [];
+
+      if (creatorIds.length === 0) {
+        return []; // Wenn keine Abos, dann keine Ergebnisse
+      }
+      // 2. Füge der Abfrage hinzu
+      queryBuilder = queryBuilder.in('creator_id', creatorIds);
+    }
+
+    // 2. Preis-Filter
     if (filters?.price) {
       if (filters.price === 'free') {
         queryBuilder = queryBuilder.eq('price', 0).is('tier_id', null);
@@ -350,6 +373,7 @@ export class PostService {
       }
     }
 
+    // 3. Medientyp-Filter
     if (filters?.type) {
       if (filters.type === 'video') {
         queryBuilder = queryBuilder.eq('media_type', 'VIDEO');
@@ -369,8 +393,6 @@ export class PostService {
     }
 
     // Likes für die gefundenen Posts abrufen
-    const { data: { user } } = await supabase.auth.getUser();
-    const userId = user?.id;
     let userLikes: Set<string> = new Set();
     if (userId && posts.length > 0) {
       const { data: likes } = await supabase
