@@ -1,11 +1,10 @@
 // src/components/profile/ProfilePage.tsx
-import { useState } from 'react'; // <-- Importiert
+import { useState } from 'react';
 import FanProfile from './FanProfile';
 import CreatorProfile from './CreatorProfile';
 import { useAppStore } from '../../stores/appStore';
 import { Button } from '../ui/button';
 import { useNavigate } from 'react-router-dom';
-// --- NEUE IMPORTS ---
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../hooks/use-toast';
 import {
@@ -20,60 +19,62 @@ import {
 } from '../ui/alert-dialog';
 import { LogOutIcon, Loader2Icon } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
-// --- ENDE NEUE IMPORTS ---
+// --- NEUER IMPORT ---
+import { supabase } from '../../lib/supabase';
+// --- ENDE ---
 
 export default function ProfilePage() {
   const { currentRole, switchRole } = useAppStore();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // --- NEU: AuthStore und Modal-Status ---
-  const { user, logout, updateProfile } = useAuthStore();
+  // --- HINWEIS: updateProfile UND initialize (zum Neuladen) werden benötigt ---
+  const { user, logout, updateProfile, initialize } = useAuthStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
-  // --- ENDE NEU ---
 
-  // --- AKTUALISIERT: Logik für den Wechsel-Button ---
   const handleRoleSwitchClick = () => {
-    // 1. Ziel ist der FAN-MODUS (Umschalten von Creator -> Fan)
     if (currentRole === 'creator') {
       switchRole('fan');
       navigate('/discover');
       return;
     }
-
-    // 2. Ziel ist der CREATOR-MODUS (Umschalten von Fan -> Creator)
     if (currentRole === 'fan') {
-      // 2a. Prüfen, ob der Benutzer bereits Creator in der DB ist
       if (user?.role?.toUpperCase() === 'CREATOR') {
-        // Ja, ist bereits Creator -> nur Ansicht wechseln
         switchRole('creator');
         navigate('/dashboard');
       } else {
-        // 2b. Nein, ist noch FAN -> Bestätigungsmodal anzeigen
         setIsModalOpen(true);
       }
     }
   };
-  // --- ENDE AKTUALISIERUNG ---
 
-  // --- NEU: Handler für die Modal-Bestätigung ---
   const handleBecomeCreator = async () => {
     setIsUpdatingRole(true);
     try {
-      // 1. Rolle in der Datenbank aktualisieren
+      // 1. Rolle in der DB auf 'CREATOR' setzen
       await updateProfile({ role: 'CREATOR' });
 
-      // 2. Feedback geben
+      // 2. SUPABASE EDGE FUNCTION AUFRUFEN, UM MUX STREAM ZU ERSTELLEN
+      // (Wir rufen die Funktion auf, die wir in Schritt 4 erstellt haben)
+      const { data, error } = await supabase.functions.invoke('create-mux-stream');
+
+      if (error) {
+        throw new Error('Fehler beim Erstellen des Live-Stream-Kanals: ' + error.message);
+      }
+
+      // 3. Feedback
       toast({
         title: "Willkommen, Creator!",
-        description: "Dein Konto wurde erfolgreich auf 'Creator' umgestellt.",
+        description: "Dein Konto wurde umgestellt und dein Live-Stream ist bereit.",
       });
 
-      // 3. App-Status (Ansicht) wechseln
-      switchRole('creator');
+      // 4. authStore neu laden, damit der user (useAuthStore) die neuen Mux-Keys enthält
+      // (initialize() löst onAuthStateChange aus)
+      initialize();
 
-      // 4. Navigieren und Modal schließen
+      // 5. App-Status (Ansicht) wechseln
+      switchRole('creator');
       navigate('/dashboard');
       setIsModalOpen(false);
 
@@ -88,9 +89,9 @@ export default function ProfilePage() {
       setIsUpdatingRole(false);
     }
   };
-  // --- ENDE NEU ---
 
   const handleLogout = async () => {
+    // ... (unverändert) ...
     try {
       await logout();
       window.location.reload();
@@ -108,14 +109,12 @@ export default function ProfilePage() {
               {currentRole === 'creator' ? 'Creator-Einstellungen' : 'Mein Profil'}
             </h1>
             <Button
-              // --- AKTUALISIERT: onClick-Handler ---
               onClick={handleRoleSwitchClick}
               variant="outline"
               className="bg-background text-foreground border-border hover:bg-neutral font-normal"
             >
               {currentRole === 'creator' ? 'Zu Fan-Modus wechseln' : 'Zu Creator-Modus wechseln'}
             </Button>
-            {/* --- ENDE AKTUALISIERUNG --- */}
           </div>
 
           {currentRole === 'creator' ? <CreatorProfile /> : <FanProfile />}
@@ -140,7 +139,6 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* --- NEU: AlertDialog für die Bestätigung --- */}
       <AlertDialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <AlertDialogContent className="bg-card border-border">
           <AlertDialogHeader>
@@ -172,7 +170,6 @@ export default function ProfilePage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {/* --- ENDE NEU --- */}
     </>
   );
 }

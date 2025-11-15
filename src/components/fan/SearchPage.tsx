@@ -2,7 +2,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
-import { SearchIcon, SlidersHorizontalIcon, CheckIcon, VideoIcon, LockIcon, HeartIcon, MessageCircleIcon } from 'lucide-react';
+// --- RadioIcon hinzugefügt ---
+import { SearchIcon, SlidersHorizontalIcon, CheckIcon, VideoIcon, LockIcon, HeartIcon, MessageCircleIcon, RadioIcon } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { useNavigate } from 'react-router-dom';
@@ -69,7 +70,7 @@ export default function SearchPage() {
 
   const popularTags = ['#fitness', '#tutorial', '#live', '#art', '#gaming'];
 
-  // Effekt zum Laden der Abonnements (für Creator-Buttons UND Post-Filter)
+  // Effekt zum Laden der Abonnements
   useEffect(() => {
     const fetchSubscriptions = async () => {
       if (!currentUser?.id) return;
@@ -89,7 +90,7 @@ export default function SearchPage() {
     fetchSubscriptions();
   }, [currentUser?.id, loadSubscriptions]);
 
-  // Effekt zum Suchen (reagiert auf Query UND Tab-Wechsel UND Filter)
+  // Effekt zum Suchen
   useEffect(() => {
     const fetchSearchData = async () => {
       if (!searchQuery) {
@@ -104,20 +105,27 @@ export default function SearchPage() {
 
       try {
         if (activeTab === 'creators') {
-          // --- CREATOR-SUCHE (jetzt ohne Filter) ---
-          const creatorData = await userService.searchCreators(searchQuery);
-          setCreatorResults(creatorData || []);
+          // --- KORREKTUR: Spezielle Logik für "live" ---
+          if (searchQuery.toLowerCase().trim() === 'live') {
+            const liveCreators = await userService.getLiveCreators();
+            setCreatorResults(liveCreators || []);
+          } else {
+            // Normale Textsuche
+            const creatorData = await userService.searchCreators(searchQuery);
+            setCreatorResults(creatorData || []);
+          }
           setPostResults([]); // Post-Ergebnisse leeren
+          // --- ENDE KORREKTUR ---
 
         } else if (activeTab === 'posts') {
-          // --- POST-SUCHE (jetzt MIT Filtern) ---
+          // --- POST-SUCHE (unverändert) ---
           const postData = await postService.searchPosts(searchQuery, 30, {
             price: priceFilter,
             type: contentType,
-            subscribedOnly: subscribedOnly // NEU
+            subscribedOnly: subscribedOnly
           });
           setPostResults(postData || []);
-          setCreatorResults([]); // Creator-Ergebnisse leeren
+          setCreatorResults([]);
         }
       } catch (err) {
         setError('Fehler bei der Suche.');
@@ -127,7 +135,6 @@ export default function SearchPage() {
       }
     };
 
-    // Debounce: Warte 300ms nach der Eingabe, bevor die Suche startet
     const handler = setTimeout(() => {
       fetchSearchData();
     }, 300);
@@ -135,16 +142,16 @@ export default function SearchPage() {
     return () => {
       clearTimeout(handler);
     };
-  }, [searchQuery, activeTab, priceFilter, contentType, subscribedOnly]); // 'subscribedOnly' hinzugefügt
+  }, [searchQuery, activeTab, priceFilter, contentType, subscribedOnly]);
 
-  // Handler für Abo-Modal (für Creator-Suche)
+  // Handler für Abo-Modal
   const handleSubscribeClick = (creator: UserProfile) => {
     if (!currentUser) {
       toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um zu abonnieren.", variant: "destructive" });
       return;
     }
     setSelectedCreator(creator);
-    setLoading(true); // Lade-Spinner anzeigen
+    setLoading(true);
 
     tierService.getCreatorTiers(creator.id)
       .then(tiers => {
@@ -173,8 +180,15 @@ export default function SearchPage() {
 
   // Klick auf einen Tag-Button
   const handleTagClick = (tag: string) => {
-    setSearchQuery(tag.replace('#', ''));
-    setActiveTab('posts');
+    const cleanTag = tag.replace('#', '');
+    setSearchQuery(cleanTag);
+    // --- KORREKTUR: Bei Klick auf #live zu Creators wechseln ---
+    if (cleanTag === 'live') {
+      setActiveTab('creators');
+    } else {
+      setActiveTab('posts');
+    }
+    // --- ENDE KORREKTUR ---
   };
 
   // Handler für Post-Klick (öffnet Viewer)
@@ -206,9 +220,9 @@ export default function SearchPage() {
   // Daten für den Viewer vorbereiten
   const viewerPosts: ViewerPostData[] = useMemo(() =>
     postResults.map(post => ({
-      ...post, // Übergibt alle Daten (creatorId, price, tier_id etc.)
+      ...post,
       media: post.mediaUrl,
-      creator: { // Stellt das Creator-Objekt für den Viewer bereit
+      creator: {
         name: post.creator.name,
         username: post.creator.username || post.creator.id,
         avatar: post.creator.avatar,
@@ -227,7 +241,7 @@ export default function SearchPage() {
             <div className="relative flex-1">
               <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" strokeWidth={1.5} />
               <Input
-                placeholder={activeTab === 'creators' ? 'Suche nach Creators...' : 'Suche nach Posts (Hashtags, Titel)...'}
+                placeholder={activeTab === 'creators' ? 'Suche nach Creators (tippe "live")...' : 'Suche nach Posts (Hashtags, Titel)...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 bg-card text-foreground border-border h-12"
@@ -235,7 +249,7 @@ export default function SearchPage() {
             </div>
           </div>
 
-          {/* Tag-Buttons (wechseln zu "Posts") */}
+          {/* Tag-Buttons */}
           <div className="flex flex-wrap gap-2">
             {popularTags.map((tag) => (
               <Button
@@ -261,7 +275,7 @@ export default function SearchPage() {
                 </TabsTrigger>
               </TabsList>
 
-              {/* Filter-Button (jetzt HIER, nur im "Posts"-Tab sichtbar) */}
+              {/* Filter-Button (nur im "Posts"-Tab sichtbar) */}
               {activeTab === 'posts' && (
                 <Sheet>
                   <SheetTrigger asChild>
@@ -302,14 +316,11 @@ export default function SearchPage() {
                           <SelectContent className="bg-card text-foreground border-border">
                             <SelectItem value="all">Alle (Video, Foto)</SelectItem>
                             <SelectItem value="video">Nur Video</SelectItem>
-                            {/* --- KORREKTUR HIER --- */}
                             <SelectItem value="photo">Nur Foto</SelectItem>
-                            {/* --- ENDE KORREKTUR --- */}
                           </SelectContent>
                         </Select>
                       </div>
 
-                      {/* --- NEUER FILTER: Nur Abos --- */}
                       <div className="space-y-2 border-t border-border pt-6">
                         <div className="flex items-center justify-between">
                           <Label htmlFor="subscribed-only" className="text-foreground">
@@ -324,8 +335,6 @@ export default function SearchPage() {
                         </div>
                         {!currentUser && <p className="text-xs text-muted-foreground">Melde dich an, um diesen Filter zu nutzen.</p>}
                       </div>
-                      {/* --- ENDE NEUER FILTER --- */}
-
                     </div>
                   </SheetContent>
                 </Sheet>
@@ -361,6 +370,23 @@ export default function SearchPage() {
                           ) : (
                             <div className="w-full h-full object-cover bg-neutral" />
                           )}
+
+                          {/* --- KORREKTUR: "LIVE" BADGE HINZUGEFÜGT --- */}
+                          {creator.is_live && (
+                            <div
+                              className="absolute top-2 left-2 flex items-center gap-1 bg-destructive text-destructive-foreground px-3 py-1 rounded-full text-xs font-bold animate-pulse"
+                              // Stoppt Klick-Propagierung, damit Klick auf LIVE zum Stream führt
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/live/${creator.username}`);
+                              }}
+                            >
+                              <RadioIcon className="w-3 h-3" />
+                              LIVE
+                            </div>
+                          )}
+                          {/* --- ENDE KORREKTUR --- */}
+
                         </div>
 
                         <CardContent className="p-4 flex items-center justify-between">
@@ -386,10 +412,10 @@ export default function SearchPage() {
                                 if (subscriptionStatus === 'ACTIVE') {
                                   handleManageSubscriptionClick();
                                 } else {
-                                  handleSubscribeClick(creator); // <-- Lädt jetzt Tiers
+                                  handleSubscribeClick(creator);
                                 }
                               }}
-                              disabled={isLoadingSubs || loading} // Auch 'loading' (für Tiers)
+                              disabled={isLoadingSubs || loading}
                               className={cn(
                                 "font-normal transition-colors duration-200 flex-shrink-0",
                                 subscriptionStatus === 'ACTIVE' && "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10 px-3",
@@ -416,7 +442,7 @@ export default function SearchPage() {
               )}
             </TabsContent>
 
-            {/* Post-Ergebnisse */}
+            {/* Post-Ergebnisse (unverändert) */}
             <TabsContent value="posts" className="mt-6">
               {!loading && !error && postResults.length === 0 && (
                  <p className="text-muted-foreground text-center py-8">
@@ -430,7 +456,7 @@ export default function SearchPage() {
                     <div
                       key={post.id}
                       className="relative aspect-square rounded-lg overflow-hidden cursor-pointer group bg-card shadow-md"
-                      onClick={() => handlePostClick(index)} // <-- Klick auf Post öffnet Viewer
+                      onClick={() => handlePostClick(index)}
                     >
                       <img
                         src={post.thumbnailUrl}
@@ -463,11 +489,10 @@ export default function SearchPage() {
                         </div>
                       )}
 
-                      {/* --- NEU: Creator-Info-Overlay --- */}
                       <div
                         className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent cursor-pointer"
                         onClick={(e) => {
-                          e.stopPropagation(); // Verhindert, dass der Post-Viewer öffnet
+                          e.stopPropagation();
                           navigate(`/profile/${post.creatorUsername}`);
                         }}
                       >
@@ -481,7 +506,6 @@ export default function SearchPage() {
                           </span>
                         </div>
                       </div>
-                      {/* --- ENDE NEU --- */}
                     </div>
                   ))}
                 </div>
@@ -491,7 +515,7 @@ export default function SearchPage() {
         </div>
       </div>
 
-      {/* Subscription Modal (für Creator-Ergebnisse) */}
+      {/* Subscription Modal (unverändert) */}
       {showSubscriptionModal && selectedCreator && (
         <SubscriptionModal
           isOpen={showSubscriptionModal}
@@ -500,12 +524,12 @@ export default function SearchPage() {
             id: selectedCreator.id,
             name: selectedCreator.displayName,
           }}
-          tiers={creatorTiersForModal} // <-- Übergibt die geladenen Tiers
+          tiers={creatorTiersForModal}
           onSubscriptionComplete={() => handleSubscriptionComplete(selectedCreator.id)}
         />
       )}
 
-      {/* --- NEU: Post Feed Viewer Modal (für Post-Ergebnisse) --- */}
+      {/* Post Feed Viewer Modal (unverändert) */}
       {isViewerOpen && (
         <ProfilePostViewer
           initialPosts={viewerPosts}
@@ -513,7 +537,6 @@ export default function SearchPage() {
           onClose={handleCloseViewer}
         />
       )}
-      {/* --- ENDE --- */}
     </>
   );
 }

@@ -14,9 +14,9 @@ interface TipModalProps {
   onClose: () => void;
   creator: {
     id: string;
-    name: string;
+    name: string; // <-- HINWEIS: Dies ist 'displayName' aus UserProfile
   };
-  onTipSuccess: () => void;
+  onTipSuccess: (amount: number) => void;
 }
 
 export default function TipModal({ isOpen, onClose, creator, onTipSuccess }: TipModalProps) {
@@ -27,7 +27,7 @@ export default function TipModal({ isOpen, onClose, creator, onTipSuccess }: Tip
 
   const handleSendTip = async () => {
     const tipAmount = parseFloat(amount);
-    if (isNaN(tipAmount) || tipAmount <= 0.50) { // Mindest-Trinkgeld
+    if (isNaN(tipAmount) || tipAmount <= 0.50) {
       toast({
         title: 'Ungültiger Betrag',
         description: 'Bitte geben Sie einen Betrag von mindestens 0.50€ ein.',
@@ -39,11 +39,10 @@ export default function TipModal({ isOpen, onClose, creator, onTipSuccess }: Tip
     setIsProcessing(true);
     try {
       await paymentService.sendTip(creator.id, tipAmount);
-      toast({
-        title: 'Trinkgeld gesendet!',
-        description: `Sie haben ${creator.name} ${tipAmount.toFixed(2)}€ gesendet. Vielen Dank!`,
-      });
-      onTipSuccess();
+
+      // Callback mit Betrag aufrufen
+      onTipSuccess(tipAmount);
+
       onClose();
     } catch (error: any) {
       toast({
@@ -64,6 +63,7 @@ export default function TipModal({ isOpen, onClose, creator, onTipSuccess }: Tip
           <DialogTitle className="text-2xl font-serif text-foreground">
             Trinkgeld senden
           </DialogTitle>
+          {/* KORREKTUR: 'creator.name' wird jetzt korrekt verwendet */}
           <DialogDescription className="text-muted-foreground">
             Unterstützen Sie {creator.name} mit einem Trinkgeld.
           </DialogDescription>

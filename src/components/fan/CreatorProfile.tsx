@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { UsersIcon, GridIcon, VideoIcon, CheckIcon, LockIcon, MessageCircleIcon, HeartIcon, LayoutGrid, Image as ImageIcon, Film as FilmIcon } from 'lucide-react';
+import { UsersIcon, GridIcon, VideoIcon, CheckIcon, LockIcon, MessageCircleIcon, HeartIcon, LayoutGrid, Image as ImageIcon, Film as FilmIcon, RadioIcon } from 'lucide-react';
 import SubscriptionModal from './SubscriptionModal';
 import ProfilePostViewer from './ProfilePostViewer';
 import type { PostData as ViewerPostData } from './ProfilePostViewer';
@@ -52,10 +52,8 @@ export default function CreatorProfile() {
   const [showPpvModal, setShowPpvModal] = useState(false);
   const [selectedPostForPpv, setSelectedPostForPpv] = useState<ServicePostData | null>(null);
 
-  // --- NEU: Geteilte Filter-States ---
   const [mediaTypeFilter, setMediaTypeFilter] = useState<'all' | 'images' | 'videos'>('all');
-  const [tierFilter, setTierFilter] = useState<string>('all'); // 'all' oder tier-uuid
-  // --- ENDE ---
+  const [tierFilter, setTierFilter] = useState<string>('all');
 
   // 1. Creator-Profil UND Tiers laden
   useEffect(() => {
@@ -71,7 +69,6 @@ export default function CreatorProfile() {
       setPosts([]);
       setCreatorTiers([]);
       setSubscriptionStatus(null);
-      // Filter zurücksetzen
       setMediaTypeFilter('all');
       setTierFilter('all');
 
@@ -84,7 +81,6 @@ export default function CreatorProfile() {
         }
         setCreator(profile);
 
-        // Tiers sortiert nach Preis laden
         const tiers = await tierService.getCreatorTiers(profile.id);
         setCreatorTiers(tiers.sort((a, b) => a.price - b.price) || []);
 
@@ -141,7 +137,6 @@ export default function CreatorProfile() {
   }
 
   // --- HANDLER ---
-
   const handleSubscribeClick = () => {
     if (!currentUser) {
       toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um zu abonnieren.", variant: "destructive" });
@@ -201,22 +196,16 @@ export default function CreatorProfile() {
 
   const isOwnProfile = currentUser?.id === creator.id;
 
-  // --- AKTUALISIERTE FILTER-LOGIK (ZWEISTUFIG) ---
   const filteredPosts = posts.filter(post => {
-    // 1. Nach Medientyp filtern
     const mediaMatch =
       mediaTypeFilter === 'all' ||
       (mediaTypeFilter === 'images' && post.mediaType === 'image') ||
       (mediaTypeFilter === 'videos' && post.mediaType === 'video');
-
-    // 2. Nach Tier filtern
     const tierMatch =
-      tierFilter === 'all' || // "Alle Stufen"
-      post.tier_id === tierFilter; // Spezifische Tier-ID
-
+      tierFilter === 'all' ||
+      post.tier_id === tierFilter;
     return mediaMatch && tierMatch;
   });
-  // --- ENDE ---
 
   const gridPosts: GridPost[] = filteredPosts.map((post) => {
     const hasAccess = checkAccess(post, currentUser?.id);
@@ -244,7 +233,9 @@ export default function CreatorProfile() {
     },
   }));
 
+  // --- renderSubscribeButton WURDE ÜBERARBEITET ---
   const renderSubscribeButton = () => {
+    // 1. Eigene Profil-Logik (hat Vorrang)
     if (isOwnProfile) {
       return (
         <Button
@@ -256,57 +247,82 @@ export default function CreatorProfile() {
       );
     }
 
+    // 2. Abo-Status-Button (Haupt-Button)
+    let subscribeButton: React.ReactNode = null;
+
     if (creatorTiers.length === 0 && subscriptionStatus === null && !isLoadingSubs) {
-        return (
+      // Creator bietet keine Abos an
+      subscribeButton = (
+        <Button
+          disabled={true}
+          className="font-normal text-lg py-6 px-12 bg-neutral text-muted-foreground rounded-full"
+        >
+          Keine Abos verfügbar
+        </Button>
+      );
+    } else {
+      // Creator bietet Abos an oder Status wird geladen
+      const baseButtonClasses = "font-normal transition-colors duration-200 min-w-[200px] text-lg py-6 px-12 rounded-full shadow-lg";
+
+      switch (subscriptionStatus) {
+        case 'ACTIVE':
+          subscribeButton = (
             <Button
-                disabled={true}
-                className="mt-4 md:mt-0 font-normal text-lg py-6 px-12 bg-neutral text-muted-foreground rounded-full"
+              onClick={handleManageSubscriptionClick}
+              disabled={isLoadingSubs}
+              className={cn(baseButtonClasses, "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10")}
             >
-                Keine Abos verfügbar
+              <CheckIcon className="w-5 h-5 mr-2" strokeWidth={2} />
+              Abonniert
             </Button>
-        );
-    }
-
-    const baseButtonClasses = "mt-4 md:mt-0 font-normal transition-colors duration-200 min-w-[200px] text-lg py-6 px-12 rounded-full shadow-lg";
-
-    switch (subscriptionStatus) {
-      case 'ACTIVE':
-        return (
-          <Button
-            onClick={handleManageSubscriptionClick}
-            disabled={isLoadingSubs}
-            className={cn(baseButtonClasses, "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10")}
-          >
-            <CheckIcon className="w-5 h-5 mr-2" strokeWidth={2} />
-            Abonniert
-          </Button>
-        );
-      case 'CANCELED':
-        return (
-          <Button
-            onClick={handleSubscribeClick}
-            disabled={isLoadingSubs}
-            className={cn(baseButtonClasses, "bg-secondary text-secondary-foreground hover:bg-secondary/90")}
-          >
-            Gekündigt (Reaktivieren)
-          </Button>
-        );
-      case null:
-      default:
-        if (creatorTiers.length > 0 || isLoadingSubs) {
-           return (
+          );
+          break;
+        case 'CANCELED':
+          subscribeButton = (
             <Button
               onClick={handleSubscribeClick}
               disabled={isLoadingSubs}
               className={cn(baseButtonClasses, "bg-secondary text-secondary-foreground hover:bg-secondary/90")}
             >
-              {creatorTiers.length > 0 ? `Abonnieren ab ${creatorTiers[0]?.price.toFixed(2)}€/Monat` : "Abonnieren"}
+              Gekündigt (Reaktivieren)
             </Button>
           );
-        }
-        return null;
+          break;
+        case null:
+        default:
+          subscribeButton = (
+            <Button
+              onClick={handleSubscribeClick}
+              disabled={isLoadingSubs}
+              className={cn(baseButtonClasses, "bg-secondary text-secondary-foreground hover:bg-secondary/90")}
+            >
+              {isLoadingSubs ? '...' : (creatorTiers.length > 0 ? `Abonnieren ab ${creatorTiers[0]?.price.toFixed(2)}€/Monat` : "Abonnieren")}
+            </Button>
+          );
+      }
     }
+
+    // 3. Render-Logik
+    // Wenn der Creator live ist, zeige beide Buttons
+    if (creator.is_live) {
+      return (
+        <div className="flex flex-col md:flex-row items-center gap-4 mt-8">
+          <Button
+            onClick={() => navigate(`/live/${creator.username}`)}
+            className="font-normal text-lg py-6 px-12 bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-full shadow-lg animate-pulse"
+          >
+            <RadioIcon className="w-5 h-5 mr-2" />
+            JETZT LIVE
+          </Button>
+          {subscribeButton}
+        </div>
+      );
+    }
+
+    // Wenn nicht live, zeige nur den Abo-Button
+    return <div className="mt-8">{subscribeButton}</div>;
   };
+  // --- ENDE AKTUALISIERUNG ---
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -340,14 +356,11 @@ export default function CreatorProfile() {
             <span className="text-muted-foreground">Follower</span>
           </div>
 
-          <div className="mt-8">
-            {renderSubscribeButton()}
-          </div>
+          {/* HIER WIRD DER NEUE BUTTON-BLOCK GERENDERT */}
+          {renderSubscribeButton()}
         </div>
 
-        {/* --- NEUES ZWEIZEILIGES FILTER-LAYOUT --- */}
-
-        {/* Zeile 1: Medientyp-Filter */}
+        {/* Filter-Layout (unverändert) */}
         <div className="flex justify-center items-center gap-2 p-2 bg-card rounded-full shadow-lg mt-12 mb-2 border border-border flex-wrap">
           <Button
             onClick={() => setMediaTypeFilter('all')}
@@ -381,7 +394,6 @@ export default function CreatorProfile() {
           </Button>
         </div>
 
-        {/* Zeile 2: Tier-Filter (nur wenn Tiers existieren) */}
         {creatorTiers.length > 0 && (
           <div className="flex justify-center items-center gap-2 p-2 bg-card rounded-full shadow-lg mb-8 border border-border flex-wrap">
             <Button
@@ -394,8 +406,6 @@ export default function CreatorProfile() {
             >
               <GridIcon className="w-4 h-4 mr-2" /> Alle Stufen
             </Button>
-
-            {/* Dynamische Tier-Filter */}
             {creatorTiers.map((tier) => (
               <Button
                   key={tier.id}
@@ -411,14 +421,10 @@ export default function CreatorProfile() {
             ))}
           </div>
         )}
-        {/* --- ENDE FILTER-LAYOUT --- */}
 
-
-        {/* Post Grid Section */}
+        {/* Post Grid Section (unverändert) */}
         <div className="mt-6">
           {isLoadingPosts && <p className="text-muted-foreground text-center py-12">Lade Beiträge...</p>}
-
-          {/* Angepasste "Keine Posts" Nachrichten */}
           {!isLoadingPosts && posts.length === 0 && (
             <p className="text-muted-foreground text-center py-12">
               Dieser Creator hat noch nichts gepostet.
@@ -429,8 +435,6 @@ export default function CreatorProfile() {
               Keine Beiträge für die ausgewählten Filter gefunden.
             </p>
           )}
-          {/* Ende angepasste Nachrichten */}
-
           {!isLoadingPosts && filteredPosts.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
               {gridPosts.map((post, index) => (
@@ -439,11 +443,9 @@ export default function CreatorProfile() {
                   className="relative aspect-square rounded-lg overflow-hidden cursor-pointer group bg-card"
                   onClick={() => handlePostClick(index, post.hasAccess)}
                 >
-
-                  {/* --- KORREKTUR HIER: Video/Img-Tag --- */}
                   {post.type === 'video' ? (
                     <video
-                      src={post.thumbnailUrl} // thumbnailUrl enthält mediaUrl bei Videos
+                      src={post.thumbnailUrl}
                       muted
                       loop
                       playsInline
@@ -464,19 +466,14 @@ export default function CreatorProfile() {
                       loading="lazy"
                     />
                   )}
-                  {/* --- ENDE KORREKTUR --- */}
-
-
                   {post.type === 'video' && (
                     <VideoIcon className="absolute top-2 right-2 w-5 h-5 text-foreground drop-shadow-lg" strokeWidth={2} />
                   )}
-
                   {!post.hasAccess && (
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                       <LockIcon className="w-8 h-8 text-secondary" />
                     </div>
                   )}
-
                   {post.hasAccess && (
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-4">
                       <div className="flex items-center gap-1 text-foreground">
@@ -496,7 +493,7 @@ export default function CreatorProfile() {
         </div>
       </div>
 
-      {/* Subscription Modal */}
+      {/* Modals (unverändert) */}
       {showSubscriptionModal && (
         <SubscriptionModal
           isOpen={showSubscriptionModal}
@@ -509,8 +506,6 @@ export default function CreatorProfile() {
           onSubscriptionComplete={() => handleSubscriptionComplete(creator.id)}
         />
       )}
-
-      {/* Post Feed Viewer Modal */}
       {showPostFeed && (
         <ProfilePostViewer
           initialPosts={viewerPosts}
@@ -518,16 +513,14 @@ export default function CreatorProfile() {
           onClose={handleClosePostFeed}
         />
       )}
-
-      {/* PPV Modal */}
       {showPpvModal && selectedPostForPpv && (
          <PpvModal
             isOpen={showPpvModal}
             onClose={() => setShowPpvModal(false)}
             post={selectedPostForPpv}
             onPaymentSuccess={handlePurchaseSuccess}
-            creatorTiers={creatorTiers} // Übergibt die Tiers an das Modal
-            onSubscribeClick={handleSubscribeClick} // Übergibt die Abo-Funktion
+            creatorTiers={creatorTiers}
+            onSubscribeClick={handleSubscribeClick}
          />
       )}
     </div>

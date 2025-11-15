@@ -19,10 +19,17 @@ export interface AuthUser {
   bannerUrl?: string | null;
   subscriptionPrice?: number;
   welcomeMessage?: string;
-  profileHashtags?: string[] | null; // <-- NEU
+  profileHashtags?: string[] | null;
+  // --- NEUE FELDER ---
+  mux_stream_key?: string | null;
+  mux_playback_id?: string | null;
+  is_live?: boolean;
+  // --- ENDE ---
 }
 
 export class AuthService {
+
+  // ... (register, verifyOtp, resendOtp, checkUsernameAvailability, checkEmailAvailability, login, logout, getCurrentUser unverändert) ...
 
   async register(username: string, email: string, password: string, role: 'fan' | 'creator' = 'creator') {
     console.log("[authService] register CALLED");
@@ -91,7 +98,6 @@ export class AuthService {
       console.error('Error checking email availability:', error);
       return false;
     }
-    // data=true (existiert) -> return false (nicht verfügbar)
     console.log(`[authService] Email available: ${!data}`);
     return !data;
   }
@@ -149,9 +155,10 @@ export class AuthService {
     }
 
     console.log("[authService] User email IS confirmed. Fetching public.users profile.");
+    // Holt ALLE Spalten (inkl. mux_stream_key), da RLS (Policy 3) dies erlaubt
     const { data: userData, error } = await supabase
       .from('users')
-      .select('*') // Holt alle Spalten, inkl. profile_hashtags
+      .select('*')
       .eq('id', freshUser.id)
       .single();
 
@@ -164,7 +171,6 @@ export class AuthService {
     return this.mapUserRowToAuthUser(userData, freshUser.email);
   }
 
-  // --- AKTUALISIERT: 'role', 'welcome_message' und 'profile_hashtags' hinzugefügt ---
   async updateProfile(userId: string, updates: {
     display_name?: string;
     bio?: string;
@@ -173,9 +179,9 @@ export class AuthService {
     subscription_price?: number;
     role?: 'FAN' | 'CREATOR';
     welcome_message?: string;
-    profile_hashtags?: string[]; // <-- NEU
+    profile_hashtags?: string[];
   }) {
-
+  // ... (Funktion bleibt unverändert, da RLS (Schritt 1) Updates auf Mux-Felder verhindert) ...
     const dbUpdates: UserUpdate = { ...updates };
 
     const { data, error } = await supabase
@@ -188,9 +194,9 @@ export class AuthService {
     if (error) throw error;
     return data;
   }
-  // --- ENDE ---
 
   async changePassword(newPassword: string) {
+    // ... (unverändert) ...
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
     });
@@ -198,6 +204,7 @@ export class AuthService {
   }
 
   onAuthStateChange(callback: (user: AuthUser | null) => void) {
+    // ... (unverändert) ...
     return supabase.auth.onAuthStateChange((_event, session) => {
       console.log(`[authService] onAuthStateChange FIRED. Event: ${_event}, Session: ${!!session}`);
       (async () => {
@@ -213,7 +220,6 @@ export class AuthService {
     });
   }
 
-  // --- AKTUALISIERT: 'profileHashtags' gemappt ---
   private mapUserRowToAuthUser(userData: any, email?: string): AuthUser {
     return {
       id: userData.id,
@@ -229,7 +235,12 @@ export class AuthService {
       bannerUrl: userData.banner_url,
       subscriptionPrice: userData.subscription_price,
       welcomeMessage: userData.welcome_message || '',
-      profileHashtags: userData.profile_hashtags || [], // <-- NEU
+      profileHashtags: userData.profile_hashtags || [],
+      // --- NEUE FELDER ---
+      mux_stream_key: userData.mux_stream_key,
+      mux_playback_id: userData.mux_playback_id,
+      is_live: userData.is_live,
+      // --- ENDE ---
     };
   }
 }
