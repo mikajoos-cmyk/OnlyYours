@@ -21,8 +21,12 @@ interface AuthState {
     avatar_url?: string;
     banner_url?: string;
     subscription_price?: number;
-    role?: 'FAN' | 'CREATOR'; // <-- Hinzugefügt aus vorherigem Schritt
-    welcome_message?: string; // <-- NEU
+    role?: 'FAN' | 'CREATOR';
+    welcome_message?: string;
+    profile_hashtags?: string[]; // <-- Von CreatorProfile
+    live_stream_tier_id?: string | null; // <-- Von StreamConfigModal
+    live_stream_requires_subscription?: boolean; // <-- Von StreamConfigModal
+    is_live?: boolean; // <-- Von StreamConfigModal
   }) => Promise<void>;
   changePassword: (newPassword: string) => Promise<void>;
   checkUsernameAvailability: (username: string) => Promise<boolean>;
@@ -116,15 +120,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user });
   },
 
-  // --- AKTUALISIERT: Typ von 'updates' erweitert ---
   updateProfile: async (updates) => {
     const currentUser = get().user;
     if (!currentUser) throw new Error('Not authenticated');
     try {
-      // 'updates' enthält jetzt { welcome_message: "..." }
       await authService.updateProfile(currentUser.id, updates);
 
-      // WICHTIG: Profil neu laden, damit der Store (user.welcomeMessage) aktuell ist
+      // Profil neu laden, um alle Änderungen (inkl. der neuen Stream-Settings) zu übernehmen
       const updatedUser = await authService.getCurrentUserFullProfile();
       if (updatedUser) {
         set({ user: updatedUser });
@@ -134,7 +136,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error;
     }
   },
-  // --- ENDE ---
 
   changePassword: async (newPassword: string) => {
     try {

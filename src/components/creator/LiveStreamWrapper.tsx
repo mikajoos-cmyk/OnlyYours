@@ -5,36 +5,45 @@ import { useAuthStore } from '../../stores/authStore';
 import { userService, UserProfile } from '../../services/userService';
 import LiveStreamView from './LiveStreamView';
 import { Loader2Icon } from 'lucide-react';
+import { tierService, Tier } from '../../services/tierService';
 
 export default function LiveStreamWrapper() {
   const { username } = useParams<{ username?: string }>();
   const { user: currentUser, isLoading: isLoadingAuth } = useAuthStore();
   const [creator, setCreator] = useState<UserProfile | null>(null);
+  const [creatorTiers, setCreatorTiers] = useState<Tier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const loadStreamData = async () => {
       setIsLoading(true);
+      setCreatorTiers([]);
 
       try {
         let targetUser: UserProfile | null = null;
+        let targetUsername: string | undefined = username;
 
-        if (username) {
-          // Szenario: Zuschauer (oder Creator, der sein eigenes Live-Profil besucht)
-          console.log(`Lade Stream für: ${username}`);
-          targetUser = await userService.getUserByUsername(username);
-        } else if (currentUser) {
-          // Szenario: Creator klickt auf "Live Gehen" (kein :username in URL)
-          console.log(`Lade Stream für aktuellen User: ${currentUser.username}`);
-          // Wir laden das Profil des aktuellen Users (um den Stream-Key zu erhalten)
-          targetUser = await userService.getUserByUsername(currentUser.username!);
+        if (!targetUsername && currentUser?.username) {
+          targetUsername = currentUser.username;
         }
 
-        if (!targetUser) {
+        if (!targetUsername) {
           throw new Error('Creator nicht gefunden.');
         }
 
+        const profileData = await userService.getUserByUsername(targetUsername);
+        if (!profileData) {
+          throw new Error('Creator nicht gefunden.');
+        }
+
+        const [tiersData] = await Promise.all([
+           tierService.getCreatorTiers(profileData.id)
+        ]);
+
+        targetUser = profileData;
         setCreator(targetUser);
+        setCreatorTiers(tiersData.sort((a, b) => a.price - b.price));
+
       } catch (error) {
         console.error("Fehler beim Laden der Stream-Daten:", error);
       } finally {
@@ -56,17 +65,16 @@ export default function LiveStreamWrapper() {
   }
 
   if (!creator) {
-    // Wenn User nicht gefunden, zurück zur Entdecken-Seite
     return <Navigate to="/discover" replace />;
   }
 
-  // Bestimmen, ob der eingeloggte Benutzer der Streamer ist
   const isStreamer = currentUser?.id === creator.id;
 
   return (
     <LiveStreamView
       isStreamer={isStreamer}
       creator={creator}
+      creatorTiers={creatorTiers}
     />
   );
 }

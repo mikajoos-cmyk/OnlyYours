@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Switch } from '../ui/switch';
 import { useAuthStore } from '../../stores/authStore';
-import { CameraIcon, ImageIcon, DollarSignIcon, MessageSquareIcon, Loader2Icon, PlusIcon, Trash2Icon, EditIcon, XIcon } from 'lucide-react'; // XIcon hinzugefügt
+import { CameraIcon, ImageIcon, DollarSignIcon, MessageSquareIcon, Loader2Icon, PlusIcon, Trash2Icon, EditIcon, XIcon } from 'lucide-react';
 import { storageService } from '../../services/storageService';
 import { useToast } from '../../hooks/use-toast';
 import { tierService, Tier } from '../../services/tierService';
@@ -21,9 +21,8 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-  DialogTrigger,
 } from '../ui/dialog';
-import { Separator } from '../ui/separator'; // NEU
+import { Separator } from '../ui/separator';
 
 export default function CreatorProfile() {
   const { user, updateProfile } = useAuthStore();
@@ -46,10 +45,8 @@ export default function CreatorProfile() {
 
   // States für Formular "Informationen"
   const [bio, setBio] = useState(user?.bio || '');
-  // --- NEU: Profil-Hashtags ---
   const [profileHashtags, setProfileHashtags] = useState<string[]>(user?.profileHashtags || []);
   const [newHashtag, setNewHashtag] = useState("");
-  // --- ENDE NEU ---
 
   // States für Formular "Monetarisierung"
   const [tiers, setTiers] = useState<Tier[]>([]);
@@ -70,7 +67,7 @@ export default function CreatorProfile() {
       setUsername(user.username || '');
       setBio(user.bio || '');
       setWelcomeMessage(user.welcomeMessage || '');
-      setProfileHashtags(user.profileHashtags || []); // <-- NEU
+      setProfileHashtags(user.profileHashtags || []);
     }
   }, [user]);
 
@@ -139,21 +136,19 @@ export default function CreatorProfile() {
     }
   };
 
-  // --- AKTUALISIERT: Speichert jetzt Bio UND Profil-Hashtags ---
   const handleInfoSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsInfoLoading(true);
     try {
-        // Bereinige leere Tags, bevor gespeichert wird
         const cleanedHashtags = profileHashtags
           .map(t => t.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())
           .filter(t => t.length > 0);
 
-        setProfileHashtags(cleanedHashtags); // UI mit bereinigten Daten synchronisieren
+        setProfileHashtags(cleanedHashtags);
 
         await updateProfile({
             bio: bio,
-            profile_hashtags: cleanedHashtags // <-- NEU
+            profile_hashtags: cleanedHashtags
         });
         toast({ title: "Informationen gespeichert!" });
     } catch (error: any) {
@@ -162,9 +157,7 @@ export default function CreatorProfile() {
         setIsInfoLoading(false);
     }
   };
-  // --- ENDE ---
 
-  // --- NEU: Handler für Profil-Hashtags ---
   const handleAddProfileHashtag = () => {
     if (newHashtag.trim() === "") return;
     if (profileHashtags.length >= 5) {
@@ -178,17 +171,15 @@ export default function CreatorProfile() {
     const cleanTag = newHashtag.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
     if (cleanTag.length > 0 && !profileHashtags.includes(cleanTag)) {
       setProfileHashtags(prev => [...prev, cleanTag]);
-      setNewHashtag(""); // Input-Feld zurücksetzen
+      setNewHashtag("");
     }
   };
 
   const handleRemoveProfileHashtag = (tagToRemove: string) => {
     setProfileHashtags(prev => prev.filter(tag => tag !== tagToRemove));
   };
-  // --- ENDE NEU ---
 
 
-  // --- Kommunikation ---
   const handleCommunicationSave = async (e: React.FormEvent) => {
       e.preventDefault();
       setIsCommunicationLoading(true);
@@ -204,7 +195,7 @@ export default function CreatorProfile() {
       }
   };
 
-  // --- TIER DIALOG HANDLER (Unverändert) ---
+  // --- TIER DIALOG HANDLER ---
   const openNewTierDialog = () => {
     setCurrentTier(null);
     setTierName('');
@@ -231,7 +222,6 @@ export default function CreatorProfile() {
     setIsTierLoading(true);
     try {
       if (currentTier) {
-        // Update
         await tierService.updateTier(currentTier.id, {
           name: tierName,
           price: price,
@@ -239,7 +229,6 @@ export default function CreatorProfile() {
         });
         toast({ title: "Stufe aktualisiert!" });
       } else {
-        // Create
         await tierService.createTier({
           name: tierName,
           price: price,
@@ -265,14 +254,13 @@ export default function CreatorProfile() {
     try {
       await tierService.deleteTier(tierId);
       toast({ title: "Stufe gelöscht" });
-      await fetchTiers(); // Liste neu laden
+      await fetchTiers();
     } catch (error: any) {
       toast({ title: "Löschen fehlgeschlagen", description: error.message, variant: "destructive" });
     } finally {
       setIsTierLoading(false);
     }
   };
-  // --- ENDE TIER HANDLER ---
 
 
   return (
@@ -294,6 +282,7 @@ export default function CreatorProfile() {
               </TabsTrigger>
             </TabsList>
 
+            {/* --- BRANDING TAB (Unverändert) --- */}
             <TabsContent value="branding" className="mt-6">
               <Card className="bg-card border-border">
                 <CardHeader>
@@ -301,7 +290,7 @@ export default function CreatorProfile() {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleBrandingSave} className="space-y-6">
-                    {/* ... (Avatar, Banner, DisplayName, Username, Wasserzeichen) ... */}
+                    {/* ... (Avatar) ... */}
                     <div className="space-y-4">
                       <Label className="text-foreground">Profilbild</Label>
                       <div className="flex items-center gap-6">
@@ -336,7 +325,7 @@ export default function CreatorProfile() {
                         Wichtig: Keine Nacktheit im Profilbild erlaubt
                       </p>
                     </div>
-
+                    {/* ... (Banner) ... */}
                     <div className="space-y-4">
                       <Label className="text-foreground">Bannerbild</Label>
                       <input
@@ -353,20 +342,18 @@ export default function CreatorProfile() {
                         {user?.bannerUrl && (
                           <img src={user.bannerUrl} alt="Banner-Vorschau" className="absolute inset-0 w-full h-full object-cover rounded-lg opacity-50" />
                         )}
-
                         {isBannerLoading ? (
                           <Loader2Icon className="w-12 h-12 text-muted-foreground mx-auto mb-4 animate-spin" />
                         ) : (
                           <ImageIcon className="w-12 h-12 text-muted-foreground mx-auto mb-4" strokeWidth={1.5} />
                         )}
-
                         <p className="text-foreground mb-2 z-10">
                           {isBannerLoading ? 'Lädt hoch...' : (user?.bannerUrl ? 'Banner ändern' : 'Bannerbild hochladen')}
                         </p>
                         <p className="text-sm text-muted-foreground z-10">Empfohlen: 1920x480px</p>
                       </div>
                     </div>
-
+                    {/* ... (DisplayName, Username, Wasserzeichen) ... */}
                     <div className="space-y-2">
                       <Label htmlFor="display-name" className="text-foreground">Anzeigename</Label>
                       <Input
@@ -377,19 +364,17 @@ export default function CreatorProfile() {
                         disabled={isBrandingLoading}
                       />
                     </div>
-
                     <div className="space-y-2">
                       <Label htmlFor="username" className="text-foreground">Username (@handle)</Label>
                       <Input
                         id="username"
                         value={username}
                         className="bg-neutral text-muted-foreground border-border"
-                        disabled // Username kann nicht geändert werden
+                        disabled
                         readOnly
                       />
                       <p className="text-xs text-muted-foreground">Der Username (@handle) kann nach der Erstellung nicht mehr geändert werden.</p>
                     </div>
-
                     <div className="flex items-center justify-between py-4 border-t border-border">
                       <div>
                         <h3 className="text-foreground font-medium">Wasserzeichen aktivieren</h3>
@@ -400,10 +385,10 @@ export default function CreatorProfile() {
                       <Switch
                         checked={watermarkEnabled}
                         onCheckedChange={setWatermarkEnabled}
-                        disabled // Deaktiviert, da nicht implementiert
+                        disabled
                       />
                     </div>
-
+                    {/* ... (Speichern Button) ... */}
                     <Button
                       type="submit"
                       className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
@@ -417,7 +402,7 @@ export default function CreatorProfile() {
               </Card>
             </TabsContent>
 
-            {/* --- AKTUALISIERTER "INFORMATIONEN"-TAB --- */}
+            {/* --- "INFORMATIONEN"-TAB (Unverändert) --- */}
             <TabsContent value="info" className="mt-6">
               <Card className="bg-card border-border">
                 <CardHeader>
@@ -425,6 +410,7 @@ export default function CreatorProfile() {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleInfoSave} className="space-y-6">
+                    {/* ... (Bio) ... */}
                     <div className="space-y-2">
                       <Label htmlFor="bio" className="text-foreground">Biografie</Label>
                       <Textarea
@@ -436,8 +422,7 @@ export default function CreatorProfile() {
                         disabled={isInfoLoading}
                       />
                     </div>
-
-                    {/* --- NEUER ABSCHNITT: PROFIL-HASHTAGS --- */}
+                    {/* ... (Hashtags) ... */}
                     <Separator className="bg-border" />
                     <div className="space-y-4">
                       <div>
@@ -446,8 +431,6 @@ export default function CreatorProfile() {
                           Füge bis zu 5 Tags hinzu, unter denen dein Profil gefunden werden kann.
                         </p>
                       </div>
-
-                      {/* Angezeigte Tags */}
                       <div className="flex flex-wrap gap-2">
                         {profileHashtags.map((tag) => (
                           <div key={tag} className="flex items-center gap-1 bg-neutral rounded-full pl-3 pr-1 py-1">
@@ -464,8 +447,6 @@ export default function CreatorProfile() {
                           </div>
                         ))}
                       </div>
-
-                      {/* Input-Feld für neue Tags */}
                       {profileHashtags.length < 5 && (
                         <div className="flex items-center gap-2">
                           <div className="relative flex-grow">
@@ -502,10 +483,8 @@ export default function CreatorProfile() {
                         Keine Leerzeichen oder Sonderzeichen (außer "_") verwenden.
                       </p>
                     </div>
-                    {/* --- ENDE HASHTAGS --- */}
-
                     <Separator className="bg-border" />
-
+                    {/* ... (Speichern Button) ... */}
                     <Button
                       type="submit"
                       className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
@@ -518,10 +497,8 @@ export default function CreatorProfile() {
                 </CardContent>
               </Card>
             </TabsContent>
-            {/* --- ENDE "INFORMATIONEN"-TAB --- */}
 
-
-            {/* --- MONETARISIERUNGS-TAB (unverändert) --- */}
+            {/* --- MONETARISIERUNGS-TAB (BEREINIGT) --- */}
             <TabsContent value="monetization" className="mt-6">
               <Card className="bg-card border-border">
                 <CardHeader>
@@ -531,6 +508,9 @@ export default function CreatorProfile() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
+                  {/* Der Live-Stream-Teil wurde entfernt */}
+
+                  {/* Abo-Stufen-Teil (bleibt) */}
                   <div className="pt-6">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-foreground font-medium">
@@ -549,7 +529,7 @@ export default function CreatorProfile() {
 
                     <p className="text-sm text-muted-foreground mb-4">
                         Fans können nur die Stufen abonnieren, die Sie hier erstellen.
-                        Wenn keine Stufen vorhanden sind, können Fans Ihr Profil nicht abonnieren.
+                        Dies legt auch die Stufen für den exklusiven Stream-Zugriff fest.
                     </p>
 
                     {isTierLoading && <p className="text-muted-foreground">Lade Stufen...</p>}
@@ -587,9 +567,8 @@ export default function CreatorProfile() {
                 </CardContent>
               </Card>
             </TabsContent>
-            {/* --- ENDE MONETARISIERUNG --- */}
 
-
+            {/* --- KOMMUNIKATIONS-TAB (Unverändert) --- */}
             <TabsContent value="communication" className="mt-6">
               <Card className="bg-card border-border">
                 <CardHeader>
@@ -616,7 +595,6 @@ export default function CreatorProfile() {
                           Diese Nachricht wird automatisch an jeden neuen Abonnenten gesendet (gilt für alle Stufen).
                       </p>
                     </div>
-
                     <Button
                         type="submit"
                         className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"

@@ -20,17 +20,16 @@ export interface AuthUser {
   subscriptionPrice?: number;
   welcomeMessage?: string;
   profileHashtags?: string[] | null;
-  // --- NEUE FELDER ---
   mux_stream_key?: string | null;
   mux_playback_id?: string | null;
   is_live?: boolean;
-  // --- ENDE ---
+  live_stream_tier_id?: string | null;
+  live_stream_requires_subscription?: boolean; // <-- NEU
 }
 
 export class AuthService {
 
   // ... (register, verifyOtp, resendOtp, checkUsernameAvailability, checkEmailAvailability, login, logout, getCurrentUser unverändert) ...
-
   async register(username: string, email: string, password: string, role: 'fan' | 'creator' = 'creator') {
     console.log("[authService] register CALLED");
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -155,7 +154,6 @@ export class AuthService {
     }
 
     console.log("[authService] User email IS confirmed. Fetching public.users profile.");
-    // Holt ALLE Spalten (inkl. mux_stream_key), da RLS (Policy 3) dies erlaubt
     const { data: userData, error } = await supabase
       .from('users')
       .select('*')
@@ -171,6 +169,7 @@ export class AuthService {
     return this.mapUserRowToAuthUser(userData, freshUser.email);
   }
 
+  // `updateProfile` muss das neue Feld akzeptieren
   async updateProfile(userId: string, updates: {
     display_name?: string;
     bio?: string;
@@ -180,8 +179,13 @@ export class AuthService {
     role?: 'FAN' | 'CREATOR';
     welcome_message?: string;
     profile_hashtags?: string[];
+    live_stream_tier_id?: string | null;
+    live_stream_requires_subscription?: boolean; // <-- NEU
+    is_live?: boolean; // <-- NEU (wird vom Stream-Modal gesetzt)
   }) {
-  // ... (Funktion bleibt unverändert, da RLS (Schritt 1) Updates auf Mux-Felder verhindert) ...
+    // Stellen Sie sicher, dass Ihre DB-Typen (database.types.ts)
+    // diese neuen Spalten in `users.Update` enthalten.
+    // Wenn Sie `supabase gen types` ausführen, sollte dies automatisch geschehen.
     const dbUpdates: UserUpdate = { ...updates };
 
     const { data, error } = await supabase
@@ -196,7 +200,6 @@ export class AuthService {
   }
 
   async changePassword(newPassword: string) {
-    // ... (unverändert) ...
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
     });
@@ -204,7 +207,6 @@ export class AuthService {
   }
 
   onAuthStateChange(callback: (user: AuthUser | null) => void) {
-    // ... (unverändert) ...
     return supabase.auth.onAuthStateChange((_event, session) => {
       console.log(`[authService] onAuthStateChange FIRED. Event: ${_event}, Session: ${!!session}`);
       (async () => {
@@ -236,11 +238,11 @@ export class AuthService {
       subscriptionPrice: userData.subscription_price,
       welcomeMessage: userData.welcome_message || '',
       profileHashtags: userData.profile_hashtags || [],
-      // --- NEUE FELDER ---
       mux_stream_key: userData.mux_stream_key,
       mux_playback_id: userData.mux_playback_id,
       is_live: userData.is_live,
-      // --- ENDE ---
+      live_stream_tier_id: userData.live_stream_tier_id,
+      live_stream_requires_subscription: userData.live_stream_requires_subscription, // <-- NEU
     };
   }
 }

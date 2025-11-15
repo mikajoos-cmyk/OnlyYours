@@ -15,10 +15,12 @@ export interface UserProfile {
   totalEarnings: number;
   createdAt: string;
   profileHashtags: string[] | null;
-  // --- NEUE FELDER ---
   mux_stream_key: string | null;
   mux_playback_id: string | null;
   is_live: boolean;
+  // --- KORREKTUR: Diese Felder müssen im Interface vorhanden sein ---
+  live_stream_tier_id: string | null;
+  live_stream_requires_subscription: boolean | null;
   // --- ENDE ---
 }
 
@@ -28,13 +30,14 @@ export class UserService {
     const normalizedUsername = username.toLowerCase();
     console.log("userService searching for username (lowercase):", normalizedUsername);
 
-    // 1. Prüfen, wer der aktuell eingeloggte Benutzer ist
     const { data: { user: currentUser } } = await supabase.auth.getUser();
 
-    // 2. Öffentliche Daten des Ziel-Creators abfragen (ohne Stream-Key)
+    // --- KORREKTUR: Die SELECT-Anweisung muss die neuen Spalten enthalten ---
+    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription';
+
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live')
+      .select(publicSelect) // <-- Korrigiert
       .eq('username', normalizedUsername)
       .maybeSingle();
 
@@ -47,7 +50,7 @@ export class UserService {
         return null;
     }
 
-    // 3. Wenn der gesuchte User der eingeloggte User ist, den privaten Stream-Key laden
+    // Wenn der gesuchte User der eingeloggte User ist, den privaten Stream-Key laden
     if (currentUser && currentUser.id === data.id) {
         const { data: privateData, error: privateError } = await supabase
             .from('users')
@@ -56,22 +59,22 @@ export class UserService {
             .single();
 
         if (privateError) {
-          console.warn("Konnte Stream-Key für eigenen Benutzer nicht laden (vielleicht noch nicht gesetzt?)", privateError.message);
+          console.warn("Konnte Stream-Key für eigenen Benutzer nicht laden", privateError.message);
         }
 
         // Kombiniere öffentliche und private Daten
         return this.mapToUserProfile({ ...data, ...privateData });
     }
 
-    // 4. Für alle anderen (Zuschauer) nur öffentliche Daten zurückgeben
-    console.log("User found by username (public view):", data);
     return this.mapToUserProfile(data);
   }
 
   async getUserById(userId: string): Promise<UserProfile | null> {
+    // --- KORREKTUR: SELECT * ist hier in Ordnung (da es keine öffentliche Suche ist),
+    // aber explizit ist besser, falls RLS nicht greift.
     const { data, error } = await supabase
       .from('users')
-      .select('*')
+      .select('*') // Lädt alle Spalten für die ID
       .eq('id', userId)
       .maybeSingle();
 
@@ -81,17 +84,16 @@ export class UserService {
     return this.mapToUserProfile(data);
   }
 
-  /**
-   * (AKTUALISIERT) Sucht Creators nur noch nach Text (Name, Username, Hashtags).
-   * Filter wurden entfernt.
-   */
   async searchCreators(query: string) {
     const cleanedQuery = query.toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
     if (!cleanedQuery) return [];
 
+    // --- KORREKTUR: Auch hier die neuen Spalten hinzufügen ---
+    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription';
+
     let queryBuilder = supabase
       .from('users')
-      .select('id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live') // Ohne Stream-Key
+      .select(publicSelect) // <-- Korrigiert
       .eq('role', 'CREATOR')
       .or(
         `username.ilike.%${cleanedQuery}%,` +
@@ -111,16 +113,15 @@ export class UserService {
     return (data || []).map(user => this.mapToUserProfile(user));
   }
 
-  // --- NEUE FUNKTION ---
-  /**
-   * Holt alle Creator, die aktuell live sind.
-   */
   async getLiveCreators(limit: number = 50) {
+    // --- KORREKTUR: Auch hier die neuen Spalten hinzufügen ---
+    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription';
+
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live') // Ohne Stream-Key
+      .select(publicSelect) // <-- Korrigiert
       .eq('role', 'CREATOR')
-      .eq('is_live', true) // <-- Der wichtige Filter
+      .eq('is_live', true)
       .order('followers_count', { ascending: false })
       .limit(limit);
 
@@ -131,13 +132,15 @@ export class UserService {
 
     return (data || []).map(user => this.mapToUserProfile(user));
   }
-  // --- ENDE NEUE FUNKTION ---
 
 
   async getTopCreators(limit: number = 20) {
+    // --- KORREKTUR: Auch hier die neuen Spalten hinzufügen ---
+    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription';
+
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live') // Ohne Stream-Key
+      .select(publicSelect) // <-- Korrigiert
       .eq('role', 'CREATOR')
       .order('followers_count', { ascending: false })
       .limit(limit);
@@ -150,7 +153,9 @@ export class UserService {
   async updateUserStats(userId: string, stats: {
     totalEarnings?: number;
   }) {
-    // ... (unverändert) ...
+    // Diese Funktion scheint unvollständig oder veraltet zu sein,
+    // da `total_earnings` jetzt durch Trigger aktualisiert wird.
+    // Wir lassen sie vorerst unverändert.
   }
 
   private mapToUserProfile(data: any): UserProfile {
@@ -168,10 +173,12 @@ export class UserService {
       totalEarnings: parseFloat(data.total_earnings),
       createdAt: data.created_at,
       profileHashtags: data.profile_hashtags || [],
-      // --- NEUE FELDER ---
       mux_stream_key: data.mux_stream_key || null,
       mux_playback_id: data.mux_playback_id || null,
       is_live: data.is_live || false,
+      // --- KORREKTUR: Felder mappen ---
+      live_stream_tier_id: data.live_stream_tier_id || null,
+      live_stream_requires_subscription: data.live_stream_requires_subscription === null ? true : data.live_stream_requires_subscription, // Default zu true (sicher)
       // --- ENDE ---
     };
   }
