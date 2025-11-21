@@ -1,17 +1,18 @@
 // src/components/fan/PaymentModal.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
-import { Button } from '../ui/button';
-import { CreditCardIcon, WalletIcon, Loader2Icon } from 'lucide-react';
-import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
-import { Label } from '../ui/label';
+import { Elements } from '@stripe/react-stripe-js';
+import { stripePromise } from '../../services/stripeService';
+import { supabase } from '../../lib/supabase';
+import StripeCheckoutForm from './StripeCheckoutForm';
+import { Loader2Icon } from 'lucide-react';
+import { subscriptionService } from '../../services/subscriptionService';
 import { useToast } from '../../hooks/use-toast';
-import { subscriptionService } from '../../services/subscriptionService'; // <-- Importiert
 
-// Erwartet jetzt dbId
+// Erwartet jetzt dbId für das Abo
 interface ModalTier {
   id: string;
-  dbId: string | null; // Die ID für die Datenbank
+  dbId: string | null;
   name: string;
   price: number;
 }
@@ -19,62 +20,105 @@ interface ModalTier {
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  tier: ModalTier; // Verwendet das aktualisierte Interface
+  tier: ModalTier;
   creatorId: string;
   creatorName: string;
   onPaymentSuccess: () => void;
 }
 
-export default function PaymentModal({ isOpen, onClose, tier, creatorId, creatorName, onPaymentSuccess }: PaymentModalProps) {
-  const [paymentMethod, setPaymentMethod] = useState('stripe');
-  const [isProcessing, setIsProcessing] = useState(false);
+export default function PaymentModal({
+  isOpen,
+  onClose,
+  tier,
+  creatorId,
+  creatorName,
+  onPaymentSuccess
+}: PaymentModalProps) {
+
+  const [clientSecret, setClientSecret] = useState('');
+  const [isLoadingSecret, setIsLoadingSecret] = useState(false);
   const { toast } = useToast();
 
-  const paymentMethods = [
-    { id: 'stripe', name: 'Kreditkarte (Stripe)', icon: CreditCardIcon },
-    { id: 'paypal', name: 'PayPal', icon: WalletIcon },
-  ];
+  // Sobald das Modal aufgeht, holen wir uns das Secret vom Backend (Edge Function)
+  useEffect(() => {
+    if (isOpen && tier && creatorId) {
+      const createIntent = async () => {
+        setIsLoadingSecret(true);
+        try {
+          const { data, error } = await supabase.functions.invoke('create-payment-intent', {
+            body: {
+                amount: tier.price,
+                creatorId: creatorId,
+                description: `Abo: ${tier.name} für ${creatorName}`,
+                metadata: {
+                  tierId: tier.dbId,
+                  tierName: tier.name
+                }
+            }
+          });
 
-  const handlePayment = async () => {
-    setIsProcessing(true);
+          if (error) throw error;
+          if (data?.clientSecret) {
+            setClientSecret(data.clientSecret);
+          } else {
+            throw new Error("Kein Client Secret erhalten");
+          }
+        } catch (err: any) {
+          console.error("Fehler beim Laden der Zahlung:", err);
+          toast({
+            title: "Fehler",
+            description: "Zahlungssystem konnte nicht initialisiert werden.",
+            variant: "destructive"
+          });
+        } finally {
+          setIsLoadingSecret(false);
+        }
+      };
+
+      createIntent();
+    }
+  }, [isOpen, tier, creatorId, creatorName, toast]);
+
+  // Wrapper für den Erfolgsfall: Erst Datenbank updaten, dann Modal schließen
+  const handleSuccess = async () => {
     try {
-      // --- KORREKTUR: tier.dbId wird jetzt hier verwendet ---
+      // 1. Abo in Supabase eintragen (nach erfolgreicher Stripe Zahlung)
       await subscriptionService.subscribe(
         creatorId,
-        tier.dbId, // Übergibt 'null' (Basis) oder die Tier-UUID
+        tier.dbId,
         tier.price
       );
-      // --- ENDE KORREKTUR ---
 
       toast({
         title: 'Zahlung erfolgreich!',
         description: `Sie haben ${tier.name} für ${creatorName} abonniert.`,
       });
-      onPaymentSuccess(); // Ruft Callback auf (schließt Modal & aktualisiert UI)
+
+      // 2. UI aktualisieren
+      onPaymentSuccess();
+      onClose();
 
     } catch (error: any) {
-      console.error("Fehler beim Abonnieren:", error);
+      console.error("Fehler beim Speichern des Abos:", error);
       toast({
-        title: 'Fehler bei der Zahlung',
-        description: error.message || 'Das Abonnement konnte nicht abgeschlossen werden.',
+        title: 'Abo-Fehler',
+        description: 'Zahlung war erfolgreich, aber das Abo konnte nicht gespeichert werden. Bitte Support kontaktieren.',
         variant: 'destructive',
       });
-    } finally {
-      setIsProcessing(false);
     }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-card text-card-foreground border-border max-w-md">
+      <DialogContent className="bg-card text-card-foreground border-border max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl font-serif text-foreground">
             Zahlung abschließen
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          <div className="bg-background rounded-lg p-4 space-y-2">
+        <div className="space-y-4">
+          <div className="bg-background rounded-lg p-4 space-y-2 border border-border">
             <div className="flex justify-between text-foreground">
               <span>Abonnement:</span>
               <span className="font-medium">{tier.name}</span>
@@ -86,47 +130,44 @@ export default function PaymentModal({ isOpen, onClose, tier, creatorId, creator
             <div className="border-t border-border pt-2 mt-2">
               <div className="flex justify-between text-foreground text-lg">
                 <span className="font-medium">Gesamt:</span>
-                <span className="font-serif text-secondary">{tier.price.toFixed(2)}€/Monat</span>
+                <span className="font-serif text-secondary">{tier.price.toFixed(2)}€</span>
               </div>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <Label className="text-foreground">Zahlungsmethode wählen</Label>
-            <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod} className="space-y-3">
-              {paymentMethods.map((method) => {
-                const Icon = method.icon;
-                return (
-                  <div
-                    key={method.id}
-                    className={`flex items-center gap-3 rounded-lg border-2 p-4 cursor-pointer transition-all ${
-                      paymentMethod === method.id
-                        ? 'border-secondary bg-secondary/10'
-                        : 'border-border hover:border-secondary/50'
-                    }`}
-                  >
-                    <RadioGroupItem value={method.id} id={method.id} />
-                    <Label htmlFor={method.id} className="flex items-center gap-3 flex-1 cursor-pointer">
-                      <Icon className="w-5 h-5 text-foreground" strokeWidth={1.5} />
-                      <span className="text-foreground">{method.name}</span>
-                    </Label>
-                  </div>
-                );
-              })}
-            </RadioGroup>
-          </div>
-
-          <Button
-            onClick={handlePayment}
-            className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90 py-6 text-base font-normal"
-            disabled={isProcessing}
-          >
-            {isProcessing ? (
-              <Loader2Icon className="w-5 h-5 animate-spin" />
-            ) : (
-              'Jetzt bezahlen'
-            )}
-          </Button>
+          {/* Stripe Elements laden */}
+          {clientSecret ? (
+            <Elements
+              stripe={stripePromise}
+              options={{
+                clientSecret,
+                appearance: {
+                  theme: 'night', // Passt sich deinem Dark Mode an
+                  variables: {
+                    colorPrimary: '#d4af37', // Deine Secondary Farbe (Gold)
+                    colorBackground: '#1a1a1a',
+                    colorText: '#ffffff',
+                  }
+                }
+              }}
+            >
+              <StripeCheckoutForm
+                  amount={tier.price}
+                  onSuccess={handleSuccess}
+              />
+            </Elements>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              {isLoadingSecret ? (
+                <>
+                  <Loader2Icon className="w-8 h-8 animate-spin mb-2 text-secondary" />
+                  <p>Verbindung zu Stripe wird hergestellt...</p>
+                </>
+              ) : (
+                <p>Laden fehlgeschlagen.</p>
+              )}
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
