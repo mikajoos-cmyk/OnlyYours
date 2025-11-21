@@ -622,3 +622,4 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
     </>
   );
 }
+{/* anzeige im suchbereich noch verändern */}
