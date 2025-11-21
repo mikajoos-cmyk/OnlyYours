@@ -32,7 +32,7 @@ import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import { Tier } from '../../services/tierService';
 import SubscriptionModal from '../fan/SubscriptionModal';
 import type { Post as ServicePostData } from '../../services/postService';
-import { motion, AnimatePresence } from 'framer-motion'; // Für Animationen
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface LiveMessage {
   id: string;
@@ -51,11 +51,10 @@ interface Tipper {
   total_tipped: number;
 }
 
-// Interface für fliegende Herzen
 interface FloatingHeart {
   id: number;
   color: string;
-  x: number; // Zufällige X-Position für Variation
+  x: number;
 }
 
 interface LiveStreamViewProps {
@@ -69,7 +68,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // --- STATE ---
   const [messages, setMessages] = useState<LiveMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(true);
@@ -78,20 +76,13 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
   const [viewerCount, setViewerCount] = useState(0);
   const [showTipModal, setShowTipModal] = useState(false);
   const [showStreamInfoModal, setShowStreamInfoModal] = useState(false);
-
-  // Feature 4: Stream Key Sicherheit
   const [showStreamKey, setShowStreamKey] = useState(false);
 
   const [leaderboard, setLeaderboard] = useState<Tipper[]>([]);
   const [activeTab, setActiveTab] = useState('chat');
 
-  // Feature 5: Offline Ansicht
   const [isStreamEnded, setIsStreamEnded] = useState(false);
-
-  // Feature 2: Floating Hearts
   const [hearts, setHearts] = useState<FloatingHeart[]>([]);
-
-  // Feature 3: Mobile Tastatur Handling
   const [viewportHeight, setViewportHeight] = useState('100vh');
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -103,7 +94,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
   const MUX_RTMP_URL = "rtmps://global-live.mux.com:443/app";
   const MUX_STREAM_KEY = creator.mux_stream_key;
 
-  // --- Feature 3: Visual Viewport Listener (Tastatur-Fix) ---
   useEffect(() => {
     const handleResize = () => {
       if (window.visualViewport) {
@@ -115,7 +105,7 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
 
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', handleResize);
-      handleResize(); // Initial
+      handleResize();
     } else {
       window.addEventListener('resize', handleResize);
     }
@@ -129,14 +119,12 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
     };
   }, []);
 
-  // Scroll-Logik
   useEffect(() => {
     setTimeout(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
   }, [messages]);
 
-  // Leaderboard-Ladefunktion
   const fetchLeaderboard = async () => {
     try {
       const { data, error } = await supabase.rpc('get_stream_leaderboard', {
@@ -149,11 +137,10 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
     }
   };
 
-  // --- Feature 2: Herz-Logik ---
   const addFloatingHeart = () => {
     const colors = ['#ef4444', '#ec4899', '#8b5cf6', '#eab308', '#3b82f6'];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
-    const randomX = Math.random() * 40 - 20; // Variation zwischen -20px und 20px
+    const randomX = Math.random() * 40 - 20;
 
     const newHeart: FloatingHeart = {
       id: Date.now(),
@@ -163,7 +150,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
 
     setHearts((prev) => [...prev, newHeart]);
 
-    // Aufräumen nach Animation
     setTimeout(() => {
       setHearts((prev) => prev.filter((h) => h.id !== newHeart.id));
     }, 2000);
@@ -171,11 +157,7 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
 
   const handleSendHeart = async () => {
     if (!channelRef.current) return;
-
-    // Lokal anzeigen (sofortiges Feedback)
     addFloatingHeart();
-
-    // An andere senden (throttled wäre besser in Prod, aber so ok)
     await channelRef.current.send({
       type: 'broadcast',
       event: 'heart',
@@ -183,7 +165,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
     });
   };
 
-  // --- Live-Chat & Channel Setup ---
   useEffect(() => {
     const fetchChatHistory = async () => {
       setIsChatLoading(true);
@@ -227,7 +208,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
     channelRef.current = channel;
 
     channel
-      // DB Changes (Chat & Tips)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -250,23 +230,21 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
           }
       })
       .on('postgres_changes', {
-        event: 'DELETE', // Feature 1: Auf Löschungen hören
+        event: 'DELETE',
         schema: 'public',
         table: 'live_chat_messages',
         filter: `creator_id=eq.${creator.id}`
       }, (payload) => {
           setMessages(prev => prev.filter(msg => msg.id !== payload.old.id));
       })
-      // Broadcasts (Hearts & End)
       .on('broadcast', { event: 'stream_end' }, () => {
         if (!isStreamer) {
-          setIsStreamEnded(true); // Feature 5: Offline View anzeigen
+          setIsStreamEnded(true);
         }
       })
       .on('broadcast', { event: 'heart' }, () => {
-        addFloatingHeart(); // Feature 2: Herz von anderen anzeigen
+        addFloatingHeart();
       })
-      // Presence
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
         const count = Object.keys(state).length;
@@ -288,7 +266,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
     };
   }, [creator.id, creator.username, isStreamer, navigate, toast, user?.id]);
 
-  // Chat-Nachricht senden
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !user || !channelRef.current) return;
     try {
@@ -310,7 +287,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
     }
   };
 
-  // --- Feature 1: Chat Moderation (Löschen) ---
   const handleDeleteMessage = async (messageId: string) => {
     try {
       const { error } = await supabase.rpc('delete_chat_message', {
@@ -321,7 +297,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
       if (error) throw error;
       toast({ title: "Gelöscht", description: "Nachricht entfernt." });
 
-      // Optimistisches Update (UI sofort aktualisieren)
       setMessages(prev => prev.filter(m => m.id !== messageId));
 
     } catch (error: any) {
@@ -330,34 +305,40 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
     }
   };
 
-  // Trinkgeld-Handler
   const handleTipClick = () => {
     if (isStreamer) return;
     setShowTipModal(true);
   };
 
+  // src/components/creator/LiveStreamView.tsx
+
   const handleTipSuccess = async (amount: number) => {
     const creatorName = creator.displayName;
     const tipAmountString = amount.toFixed(2);
+
     toast({ title: "Danke!", description: `Trinkgeld an ${creatorName} gesendet.` });
+
     if (!user || !channelRef.current) return;
+
     try {
       const { error: rpcError } = await supabase.rpc('send_tip_message', {
         creator_id_input: creator.id,
         user_id_input: user.id,
-        user_name_input: `${user.name} hat ${creatorName} ein Trinkgeld gegeben!`,
+        // KORREKTUR: Hier senden wir jetzt NUR den Usernamen
+        user_name_input: user.name,
         user_avatar_input: '🎉',
-        content_input: `${tipAmountString}€!`,
+        // KORREKTUR: Der Satz kommt in den Content-Bereich
+        content_input: `hat ${creatorName} ${tipAmountString}€ Trinkgeld gegeben!`,
         tip_amount_input: amount,
       });
+
       if (rpcError) throw rpcError;
     } catch (error: any) {
-      console.error("RPC Error:", error);
-      toast({ title: "Fehler", description: "Trinkgeld-Anzeige fehlgeschlagen.", variant: "destructive" });
+      console.error("Fehler beim Senden der Tip-Nachricht (RPC):", error);
+      toast({ title: "Fehler", description: "Trinkgeld-Anzeige im Chat fehlgeschlagen.", variant: "destructive" });
     }
   };
 
-  // Stream beenden
   const handleStopStream = async () => {
     if (!user) return;
     if (channelRef.current) {
@@ -376,7 +357,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
     navigate('/dashboard');
   };
 
-  // ZUGRIFFSLOGIK
   const checkStreamAccess = () => {
     if (isStreamer) return true;
     if (creator.live_stream_requires_subscription === false) return true;
@@ -397,7 +377,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
   }
   const hasAccess = checkStreamAccess();
 
-  // Abo-Handler
   const handleSubscribeClick = () => {
     if (!user) {
         toast({ title: "Bitte anmelden", description: "Sie müssen angemeldet sein.", variant: "destructive" });
@@ -416,7 +395,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
       loadSubscriptions();
   };
 
-  // Abo-Text
   const requiredTier = creator.live_stream_tier_id ? creatorTiers.find(t => t.id === creator.live_stream_tier_id) : null;
   const cheapestTier = creatorTiers.length > 0 ? creatorTiers[0] : null;
 
@@ -437,13 +415,11 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
 
   return (
     <>
-      {/* --- Feature 3: Dynamische Höhe für Mobile --- */}
       <div
         className="fixed inset-0 bg-black text-foreground flex flex-col md:flex-row w-screen"
-        style={{ height: viewportHeight }} // Passt sich an Tastatur an
+        style={{ height: viewportHeight }}
       >
 
-        {/* --- A: VIDEO-BEREICH --- */}
         <div className="relative md:flex-1 bg-neutral h-1/2 md:h-full">
 
           {MUX_PLAYBACK_ID ? (
@@ -470,7 +446,7 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
 
           {/* Feature 5: Offline Ansicht Overlay */}
           {isStreamEnded && !isStreamer && (
-            <div className="absolute inset-0 bg-black/80 z-30 flex flex-col items-center justify-center p-8 space-y-6">
+            <div className="absolute inset-0 bg-black z-50 flex flex-col items-center justify-center p-8 space-y-6">
               <div className="text-center">
                 <h2 className="text-3xl font-serif text-foreground mb-2">Stream beendet</h2>
                 <p className="text-muted-foreground">Danke fürs Zuschauen!</p>
@@ -499,7 +475,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
             </div>
           )}
 
-          {/* Header */}
           <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Avatar className="w-12 h-12 border-2 border-secondary">
@@ -552,7 +527,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
             </div>
           </div>
 
-          {/* Sperrbildschirm */}
           {!hasAccess && !isStreamer && creator.live_stream_requires_subscription && (
             <div
               className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8 z-20"
@@ -573,7 +547,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
             </div>
           )}
 
-          {/* --- Feature 2: Floating Hearts Container --- */}
           <div className="absolute bottom-0 right-0 w-24 h-64 pointer-events-none overflow-hidden z-20">
             <AnimatePresence>
               {hearts.map((heart) => (
@@ -594,10 +567,8 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
             </AnimatePresence>
           </div>
 
-          {/* Action Buttons (Tip & Heart) */}
           {!isStreamer && hasAccess && (
             <div className="absolute right-4 bottom-4 z-10 flex flex-col gap-3">
-              {/* Herz-Button */}
               <button
                 onClick={handleSendHeart}
                 className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
@@ -607,7 +578,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
                 </div>
               </button>
 
-              {/* Tip-Button */}
               <button
                 onClick={handleTipClick}
                 className="flex flex-col items-center gap-1 active:scale-90 transition-transform"
@@ -621,7 +591,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
 
         </div>
 
-        {/* --- B: CHAT-BEREICH --- */}
         <div className="flex flex-col w-full md:w-80 lg:w-96 bg-card border-l border-border h-1/2 md:h-full min-h-0">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex-1 flex flex-col min-h-0">
             <TabsList className="bg-card border-b border-border rounded-none justify-start px-4 flex-shrink-0">
@@ -656,7 +625,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-start">
                             <span className="text-sm font-medium text-muted-foreground">{msg.user_name}</span>
-                            {/* Feature 1: Delete Button (nur für Streamer beim Hover) */}
                             {isStreamer && (
                               <button
                                 onClick={() => handleDeleteMessage(msg.id)}
@@ -700,8 +668,14 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
                           <AvatarImage src={tipper.user_avatar || undefined} />
                           <AvatarFallback>{tipper.user_name.charAt(0)}</AvatarFallback>
                         </Avatar>
-                        <span className="text-foreground flex-1 truncate">{tipper.user_name}</span>
-                        <span className="text-secondary font-semibold">
+
+                        {/* Name linksbündig */}
+                        <span className="text-foreground flex-1 truncate font-medium">
+                          {tipper.user_name}
+                        </span>
+
+                        {/* KORREKTUR: Betrag rechtsbündig wieder hinzugefügt */}
+                        <span className="text-secondary font-semibold whitespace-nowrap">
                           {Number(tipper.total_tipped).toFixed(2)}€
                         </span>
                       </div>
@@ -712,7 +686,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
             </TabsContent>
           </Tabs>
 
-          {/* Chat-Eingabe */}
           <div className="p-4 border-t border-border flex-shrink-0 bg-card">
             <div className="flex gap-2">
               <Input
@@ -736,7 +709,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
         </div>
       </div>
 
-      {/* --- Modals --- */}
       {!isStreamer && (
         <TipModal
           isOpen={showTipModal}
@@ -773,7 +745,6 @@ export default function LiveStreamView({ isStreamer, creator, creatorTiers }: Li
               <Label className="text-muted-foreground">RTMP-URL</Label>
               <Input value={MUX_RTMP_URL} readOnly className="bg-background border-border" />
             </div>
-            {/* Feature 4: Key Toggle */}
             <div>
               <Label className="text-muted-foreground">Stream Key (Geheim)</Label>
               <div className="flex gap-2">
