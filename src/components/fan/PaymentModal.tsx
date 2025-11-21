@@ -49,6 +49,7 @@ export default function PaymentModal({
             body: {
                 amount: tier.price,
                 creatorId: creatorId,
+                userId: user.id,
                 description: `Abo: ${tier.name} für ${creatorName}`,
                 metadata: {
                   tierId: tier.dbId,
