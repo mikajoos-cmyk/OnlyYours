@@ -58,7 +58,11 @@ export default function PaymentModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-card text-card-foreground border-border max-w-md">
+      {/* ÄNDERUNG: 'max-h-[90vh]' und 'overflow-y-auto' hinzugefügt.
+          Damit passt sich das Modal der Bildschirmhöhe an und wird scrollbar,
+          wenn viele Zahlungsmethoden angezeigt werden.
+      */}
+      <DialogContent className="bg-card text-card-foreground border-border max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Zahlung abschließen</DialogTitle>
         </DialogHeader>
