@@ -5,6 +5,7 @@ import { stripePromise } from '../../services/stripeService';
 import { supabase } from '../../lib/supabase';
 import StripeCheckoutForm from './StripeCheckoutForm';
 import { useToast } from '../../hooks/use-toast';
+import { cn } from '../../lib/utils'; // cn importieren für sauberes Merging
 
 // Wir definieren flexiblere Props
 interface PaymentModalProps {
@@ -58,11 +59,11 @@ export default function PaymentModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      {/* ÄNDERUNG: 'max-h-[90vh]' und 'overflow-y-auto' hinzugefügt.
-          Damit passt sich das Modal der Bildschirmhöhe an und wird scrollbar,
-          wenn viele Zahlungsmethoden angezeigt werden.
-      */}
-      <DialogContent className="bg-card text-card-foreground border-border max-w-md max-h-[90vh] overflow-y-auto">
+      {/* ÄNDERUNG: 'chat-messages-scrollbar' für goldene Scrollbar hinzugefügt */}
+      <DialogContent className={cn(
+          "bg-card text-card-foreground border-border max-w-md max-h-[90vh] overflow-y-auto",
+          "chat-messages-scrollbar" // <-- Hier ist deine goldene Scrollbar
+      )}>
         <DialogHeader>
           <DialogTitle>Zahlung abschließen</DialogTitle>
         </DialogHeader>
