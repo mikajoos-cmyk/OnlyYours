@@ -1,93 +1,51 @@
-// src/components/fan/StripeCheckoutForm.tsx
 import { useState } from 'react';
 import { PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { Button } from '../ui/button';
 import { useToast } from '../../hooks/use-toast';
-import { Loader2Icon, LockIcon } from 'lucide-react';
+import { Loader2Icon } from 'lucide-react';
 
-interface StripeCheckoutFormProps {
-  amount: number;
-  onSuccess: () => void;
-}
-
-export default function StripeCheckoutForm({ amount, onSuccess }: StripeCheckoutFormProps) {
+export default function StripeCheckoutForm({ amount, onSuccess }: { amount: number, onSuccess: () => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const { toast } = useToast();
-
-  const [message, setMessage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!stripe || !elements) {
-      // Stripe ist noch nicht geladen
-      return;
-    }
+    if (!stripe || !elements) return;
 
     setIsProcessing(true);
-    setMessage(null);
 
-    const { error, paymentIntent } = await stripe.confirmPayment({
+    const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        // WICHTIG: Wohin soll der User geleitet werden, wenn z.B. PayPal einen Redirect braucht?
-        // Du solltest eine Route '/payment-success' oder ähnliches haben, oder einfach die aktuelle Seite:
-        return_url: window.location.href,
+        // Nach Erfolg hierhin zurückkehren (für Web-Redirects wie PayPal wichtig)
+        return_url: window.location.origin + '/payment-success',
       },
-      redirect: "if_required",
+      redirect: "if_required", // Verhindert Redirect, wenn nicht nötig (z.B. Kreditkarte)
     });
 
     if (error) {
-      // Fehler bei der Zahlung (z.B. Karte abgelehnt)
-      setMessage(error.message ?? "Ein unbekannter Fehler ist aufgetreten.");
-      toast({
-        title: "Zahlung fehlgeschlagen",
-        description: error.message,
-        variant: "destructive"
-      });
-      setIsProcessing(false);
-    } else if (paymentIntent && paymentIntent.status === "succeeded") {
-      // Zahlung direkt erfolgreich (ohne Redirect)
-      onSuccess();
+      toast({ title: "Zahlungsfehler", description: error.message, variant: "destructive" });
       setIsProcessing(false);
     } else {
-      // Unerwarteter Status
+      // Zahlung erfolgreich
+      onSuccess();
       setIsProcessing(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 pt-4">
-      <PaymentElement id="payment-element" options={{ layout: "tabs" }} />
-
-      {message && (
-        <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
-          {message}
-        </div>
-      )}
-
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Das hier rendert automatisch Kreditkarte, PayPal, Apple Pay etc. */}
+      <PaymentElement />
       <Button
-        disabled={isProcessing || !stripe || !elements}
-        className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90 py-6 text-base font-normal"
+        disabled={!stripe || isProcessing}
+        className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90"
       >
-        {isProcessing ? (
-          <>
-            <Loader2Icon className="w-5 h-5 animate-spin mr-2" />
-            Verarbeite...
-          </>
-        ) : (
-          <>
-            <LockIcon className="w-4 h-4 mr-2" />
-            Jetzt {amount.toFixed(2)}€ bezahlen
-          </>
-        )}
+        {isProcessing ? <Loader2Icon className="animate-spin" /> : `Bezahlen (${amount.toFixed(2)}€)`}
       </Button>
-
-      <p className="text-xs text-center text-muted-foreground mt-4">
-        Zahlungen werden sicher über Stripe verarbeitet. Wir speichern keine Kartendaten.
-      </p>
     </form>
   );
 }
