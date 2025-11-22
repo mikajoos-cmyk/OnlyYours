@@ -1,58 +1,58 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Elements } from '@stripe/react-stripe-js';
-import { stripePromise } from '../../services/stripeService'; // Unser neuer Service
+import { stripePromise } from '../../services/stripeService';
 import { supabase } from '../../lib/supabase';
-import StripeCheckoutForm from './StripeCheckoutForm'; // Unser neues Formular
-import { subscriptionService } from '../../services/subscriptionService';
+import StripeCheckoutForm from './StripeCheckoutForm';
 import { useToast } from '../../hooks/use-toast';
 
-// Interface Definitionen (beibehalten)
-interface ModalTier {
-  id: string;
-  dbId: string | null;
-  name: string;
-  price: number;
-}
-
+// Wir definieren flexiblere Props
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  tier: ModalTier;
-  creatorId: string;
-  creatorName: string;
-  onPaymentSuccess: () => void;
+  amount: number;           // Der Preis
+  description: string;      // Was wird gekauft? (z.B. "Abo für ...")
+  metadata: any;            // Daten für das Backend (creatorId, tierId, postId etc.)
+  onPaymentSuccess: () => Promise<void>; // Callback, der NACH Stripe-Erfolg ausgeführt wird
 }
 
-export default function PaymentModal({ isOpen, onClose, tier, creatorId, creatorName, onPaymentSuccess }: PaymentModalProps) {
+export default function PaymentModal({
+  isOpen,
+  onClose,
+  amount,
+  description,
+  metadata,
+  onPaymentSuccess
+}: PaymentModalProps) {
   const [clientSecret, setClientSecret] = useState('');
   const { toast } = useToast();
 
-  // Sobald das Modal aufgeht, holen wir uns das Secret vom Backend
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && amount > 0) {
+      // Payment Intent vom Backend holen
       supabase.functions.invoke('create-payment-intent', {
         body: {
-            amount: tier.price,
-            creatorId: creatorId,
-            description: `Abo für ${tier.name}`
+            amount: amount,
+            ...metadata // Wir reichen creatorId, postId etc. weiter
         }
       }).then(({ data, error }) => {
         if (data) setClientSecret(data.clientSecret);
-        if (error) console.error(error);
+        if (error) {
+            console.error("Fehler beim Laden des Payment Intents:", error);
+            toast({ title: "Fehler", description: "Zahlung konnte nicht initialisiert werden.", variant: "destructive" });
+        }
       });
     }
-  }, [isOpen, tier, creatorId]);
+  }, [isOpen, amount, JSON.stringify(metadata)]); // Metadata als dependency
 
-  const handleSuccess = async () => {
-      // Hier wird die Datenbank erst nach erfolgreicher Stripe-Zahlung aktualisiert
+  const handleStripeSuccess = async () => {
       try {
-        await subscriptionService.subscribe(creatorId, tier.dbId, tier.price);
-        toast({ title: 'Zahlung erfolgreich!', description: `Abo für ${creatorName} aktiv.` });
-        onPaymentSuccess();
+        // Erst WENN Stripe erfolgreich war, führen wir die Datenbank-Operation aus
+        await onPaymentSuccess();
         onClose();
-      } catch (error) {
-        console.error("Fehler beim Speichern des Abos:", error);
+      } catch (error: any) {
+        console.error("Fehler nach erfolgreicher Zahlung:", error);
+        toast({ title: "Fehler", description: "Kauf wurde bestätigt, aber Aktivierung schlug fehl.", variant: "destructive" });
       }
   };
 
@@ -64,19 +64,24 @@ export default function PaymentModal({ isOpen, onClose, tier, creatorId, creator
         </DialogHeader>
 
         <div className="p-4">
-            <p className="mb-4 text-lg font-serif text-secondary text-center">
-                {tier.price.toFixed(2)}€ / Monat
+            <p className="mb-2 text-lg font-medium text-foreground text-center">
+                {description}
+            </p>
+            <p className="mb-6 text-2xl font-serif text-secondary text-center">
+                {amount.toFixed(2)}€
             </p>
 
             {clientSecret ? (
             <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'night' } }}>
                 <StripeCheckoutForm
-                    amount={tier.price}
-                    onSuccess={handleSuccess}
+                    amount={amount}
+                    onSuccess={handleStripeSuccess}
                 />
             </Elements>
             ) : (
-            <p className="text-center text-muted-foreground">Lade Zahlungsdaten...</p>
+            <div className="flex justify-center py-8">
+                <p className="text-muted-foreground">Lade Zahlungsdaten...</p>
+            </div>
             )}
         </div>
       </DialogContent>

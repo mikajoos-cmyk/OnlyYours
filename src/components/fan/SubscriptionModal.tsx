@@ -6,13 +6,14 @@ import { CheckIcon } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Label } from '../ui/label';
 import PaymentModal from './PaymentModal';
-import type { Tier } from '../../services/tierService'; // Import Tier-Typ
-import type { Json } from '../../lib/database.types'; // Import Json Typ
+import type { Tier } from '../../services/tierService';
+import type { Json } from '../../lib/database.types';
+import { subscriptionService } from '../../services/subscriptionService';
+import { useToast } from '../../hooks/use-toast';
 
-// Definiert, wie ein Tier-Objekt im Modal intern aussieht
 interface ModalTier {
-  id: string; // Eindeutige ID für den Radio-Button (tier-uuid)
-  dbId: string | null; // Die ID, die an den PaymentService geht
+  id: string;
+  dbId: string | null;
   name: string;
   price: number;
   benefits: (string | Json)[];
@@ -25,9 +26,7 @@ interface SubscriptionModalProps {
     id: string;
     name: string;
   };
-  // --- PROPS GEÄNDERT ---
-  tiers: Tier[]; // Die vom Creator erstellten Tiers (Basis-Preis entfernt)
-  // ---
+  tiers: Tier[];
   onSubscriptionComplete: () => void;
 }
 
@@ -41,30 +40,25 @@ export default function SubscriptionModal({
 
   const [showPayment, setShowPayment] = useState(false);
   const [combinedTiers, setCombinedTiers] = useState<ModalTier[]>([]);
-  const [selectedTierId, setSelectedTierId] = useState<string>(''); // Default ist leer
+  const [selectedTierId, setSelectedTierId] = useState<string>('');
+  const { toast } = useToast();
 
   useEffect(() => {
-    // --- STANDARD-ABO ENTFERNT ---
-
-    // 1. Wandle DB-Tiers in ModalTiers um
     const customTiers: ModalTier[] = tiers.map(tier => ({
       id: tier.id,
-      dbId: tier.id, // Die echte Tier-ID
+      dbId: tier.id,
       name: tier.name,
       price: tier.price,
-      benefits: (tier.benefits as string[]) || [tier.description], // Fallback auf Beschreibung
+      benefits: (tier.benefits as string[]) || [tier.description],
     }));
 
     setCombinedTiers(customTiers);
 
-    // Setze das Standard-Tier (das erste in der Liste)
     if (customTiers.length > 0) {
       setSelectedTierId(customTiers[0].id);
     }
 
-  }, [tiers]); // Neu berechnen, wenn sich Tiers ändern
-  // --- ENDE DYNAMISCHE TIERS ---
-
+  }, [tiers]);
 
   const handleProceed = () => {
     setShowPayment(true);
@@ -72,24 +66,39 @@ export default function SubscriptionModal({
 
   const selectedTierData = combinedTiers.find((t) => t.id === selectedTierId);
 
-  // --- WICHTIG: PaymentModal nur öffnen, wenn ein Tier ausgewählt wurde ---
+  // Callback für den erfolgreichen Abschluss der Stripe-Zahlung
+  const handleConfirmedSubscription = async () => {
+      if (!selectedTierData) return;
+
+      try {
+        await subscriptionService.subscribe(creator.id, selectedTierData.dbId, selectedTierData.price);
+        toast({ title: 'Zahlung erfolgreich!', description: `Abo für ${creator.name} ist jetzt aktiv.` });
+        onSubscriptionComplete();
+      } catch (error) {
+        console.error("Fehler beim Speichern des Abos:", error);
+        throw error; // Fehler weiterwerfen, damit PaymentModal ihn fangen kann
+      }
+  };
+
   if (showPayment && selectedTierData) {
     return (
       <PaymentModal
         isOpen={isOpen}
         onClose={onClose}
-        // Übergibt das ausgewählte Tier-Objekt (mit dbId)
-        tier={selectedTierData}
-        creatorId={creator.id}
-        creatorName={creator.name}
-        onPaymentSuccess={onSubscriptionComplete}
+        amount={selectedTierData.price}
+        description={`Abonnement: ${selectedTierData.name} bei ${creator.name}`}
+        metadata={{
+            creatorId: creator.id,
+            tierId: selectedTierData.dbId,
+            type: 'SUBSCRIPTION'
+        }}
+        onPaymentSuccess={handleConfirmedSubscription}
       />
     );
   }
 
   // Verhindert Absturz, wenn Modal geöffnet wird, bevor Tiers geladen sind
   if (!selectedTierData && combinedTiers.length > 0) {
-      // Warten, bis selectedTierId (im useEffect) gesetzt ist
       return null;
   }
 
@@ -102,7 +111,6 @@ export default function SubscriptionModal({
           </DialogTitle>
         </DialogHeader>
 
-        {/* --- FALLBACK-MELDUNG, WENN KEINE TIERS EXISTIEREN --- */}
         {combinedTiers.length === 0 ? (
           <p className="text-muted-foreground py-8 text-center">
             Dieser Creator bietet derzeit keine Abonnements an.
@@ -147,7 +155,6 @@ export default function SubscriptionModal({
         <Button
           onClick={handleProceed}
           className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90 py-6 text-base font-normal"
-          // Deaktivieren, wenn keine Tiers oder keins ausgewählt
           disabled={combinedTiers.length === 0 || !selectedTierData}
         >
           Weiter zur Zahlung
