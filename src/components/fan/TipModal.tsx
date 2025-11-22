@@ -1,31 +1,31 @@
-// src/components/fan/TipModal.tsx
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Loader2Icon, DollarSignIcon } from 'lucide-react';
+import { DollarSignIcon } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { paymentService } from '../../services/paymentService';
-import { cn } from '../../lib/utils';
+import PaymentModal from './PaymentModal'; // PaymentModal importieren
 
 interface TipModalProps {
   isOpen: boolean;
   onClose: () => void;
   creator: {
     id: string;
-    name: string; // <-- HINWEIS: Dies ist 'displayName' aus UserProfile
+    name: string;
   };
   onTipSuccess: (amount: number) => void;
 }
 
 export default function TipModal({ isOpen, onClose, creator, onTipSuccess }: TipModalProps) {
   const [amount, setAmount] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [showPayment, setShowPayment] = useState(false); // Steuert das PaymentModal
   const { toast } = useToast();
   const presetAmounts = [5, 10, 20];
 
-  const handleSendTip = async () => {
+  // Validiert den Betrag und öffnet das Zahlungsfenster
+  const handleInitiateTip = () => {
     const tipAmount = parseFloat(amount);
     if (isNaN(tipAmount) || tipAmount <= 0.50) {
       toast({
@@ -35,26 +35,43 @@ export default function TipModal({ isOpen, onClose, creator, onTipSuccess }: Tip
       });
       return;
     }
+    setShowPayment(true);
+  };
 
-    setIsProcessing(true);
+  // Wird erst ausgeführt, NACHDEM Stripe die Zahlung bestätigt hat
+  const handleConfirmedTip = async () => {
+    const tipAmount = parseFloat(amount);
     try {
+      // Transaktion in der Datenbank speichern
       await paymentService.sendTip(creator.id, tipAmount);
 
-      // Callback mit Betrag aufrufen
+      // Callback aufrufen (z.B. für Konfetti oder Chat-Nachricht)
       onTipSuccess(tipAmount);
 
+      setShowPayment(false);
       onClose();
     } catch (error: any) {
-      toast({
-        title: 'Fehler beim Senden',
-        description: error.message || 'Das Trinkgeld konnte nicht gesendet werden.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsProcessing(false);
-      setAmount('');
+      console.error("Fehler beim Speichern des Trinkgelds:", error);
+      throw error; // Fehler weiterwerfen, damit PaymentModal ihn fangen kann
     }
   };
+
+  // Wenn der User auf "Senden" geklickt hat, zeigen wir das PaymentModal
+  if (showPayment) {
+    return (
+      <PaymentModal
+        isOpen={true}
+        onClose={() => setShowPayment(false)}
+        amount={parseFloat(amount)}
+        description={`Trinkgeld für ${creator.name}`}
+        metadata={{
+            creatorId: creator.id,
+            type: 'TIP'
+        }}
+        onPaymentSuccess={handleConfirmedTip}
+      />
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -63,7 +80,6 @@ export default function TipModal({ isOpen, onClose, creator, onTipSuccess }: Tip
           <DialogTitle className="text-2xl font-serif text-foreground">
             Trinkgeld senden
           </DialogTitle>
-          {/* KORREKTUR: 'creator.name' wird jetzt korrekt verwendet */}
           <DialogDescription className="text-muted-foreground">
             Unterstützen Sie {creator.name} mit einem Trinkgeld.
           </DialogDescription>
@@ -94,7 +110,6 @@ export default function TipModal({ isOpen, onClose, creator, onTipSuccess }: Tip
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className="pl-7 bg-background text-foreground border-border"
-                disabled={isProcessing}
               />
             </div>
           </div>
@@ -102,18 +117,12 @@ export default function TipModal({ isOpen, onClose, creator, onTipSuccess }: Tip
 
         <DialogFooter>
           <Button
-            onClick={handleSendTip}
+            onClick={handleInitiateTip}
             className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90 py-6 text-base font-normal"
-            disabled={isProcessing || !amount}
+            disabled={!amount}
           >
-            {isProcessing ? (
-              <Loader2Icon className="w-5 h-5 animate-spin" />
-            ) : (
-              <>
-                <DollarSignIcon className="w-4 h-4 mr-2" />
-                {`Senden (${parseFloat(amount || '0').toFixed(2)}€)`}
-              </>
-            )}
+            <DollarSignIcon className="w-4 h-4 mr-2" />
+            {`Weiter zur Zahlung (${parseFloat(amount || '0').toFixed(2)}€)`}
           </Button>
         </DialogFooter>
       </DialogContent>
