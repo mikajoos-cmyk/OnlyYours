@@ -19,11 +19,10 @@ interface ModalTier {
   name: string;
   price: number;
   benefits: (string | Json)[];
-  // Neue Felder für die UI-Logik
   isCurrent: boolean;
   isUpgrade: boolean;
   isDowngrade: boolean;
-  upgradePrice: number; // Der zu zahlende Differenzbetrag
+  upgradePrice: number;
 }
 
 interface SubscriptionModalProps {
@@ -50,24 +49,16 @@ export default function SubscriptionModal({
   const [selectedTierId, setSelectedTierId] = useState<string>('');
   const { toast } = useToast();
 
-  // Wir holen uns die aktuellen Abos aus dem Store
   const { subscriptionMap } = useSubscriptionStore();
 
   useEffect(() => {
-    // Prüfen, ob wir bereits ein Abo bei diesem Creator haben
     const activeSub = subscriptionMap.get(creator.id);
     const currentPrice = activeSub?.price || 0;
     const currentTierId = activeSub?.tierId;
 
-    // Tiers verarbeiten und Status berechnen
     const customTiers: ModalTier[] = tiers.map(tier => {
       const isCurrent = (activeSub?.status === 'ACTIVE') && (tier.id === currentTierId);
-
-      // Berechne Differenz (einfache Logik: Neuer Preis - Alter Preis)
-      // Hinweis: Echte Proration (zeitanteilig) macht Stripe im Backend,
-      // hier simulieren wir den Upgrade-Preis für die UI.
       const priceDiff = Math.max(0, tier.price - currentPrice);
-
       const isUpgrade = (activeSub?.status === 'ACTIVE') && (tier.price > currentPrice);
       const isDowngrade = (activeSub?.status === 'ACTIVE') && (tier.price < currentPrice);
 
@@ -86,14 +77,10 @@ export default function SubscriptionModal({
 
     setCombinedTiers(customTiers);
 
-    // Standard-Auswahl setzen
     if (customTiers.length > 0) {
-      // Wenn wir ein Abo haben, wählen wir nichts vor oder das nächsthöhere
-      // Wenn nicht, das erste (günstigste)
       if (!activeSub) {
           setSelectedTierId(customTiers[0].id);
       } else {
-          // Optional: Wenn Upgrade verfügbar, wähle das erste Upgrade vor
           const firstUpgrade = customTiers.find(t => t.isUpgrade);
           if (firstUpgrade) setSelectedTierId(firstUpgrade.id);
       }
@@ -107,16 +94,22 @@ export default function SubscriptionModal({
 
   const selectedTierData = combinedTiers.find((t) => t.id === selectedTierId);
 
-  // Callback für den erfolgreichen Abschluss der Stripe-Zahlung
   const handleConfirmedSubscription = async () => {
       if (!selectedTierData) return;
 
       try {
-        // Wir übergeben den (möglicherweise reduzierten) Preis
+        // WICHTIG: Wir übergeben 4 Argumente:
+        // 1. Creator ID
+        // 2. Tier ID
+        // 3. Neuer voller Preis (für das Abo-Objekt in der DB)
+        // 4. Tatsächlich gezahlter Betrag (für das Payment-Objekt, also z.B. die Differenz)
+        const amountToPay = selectedTierData.isUpgrade ? selectedTierData.upgradePrice : selectedTierData.price;
+
         await subscriptionService.subscribe(
             creator.id,
             selectedTierData.dbId,
-            selectedTierData.isUpgrade ? selectedTierData.upgradePrice : selectedTierData.price
+            selectedTierData.price, // <-- Neuer voller monatlicher Preis
+            amountToPay             // <-- Sofort gezahlter Betrag (Payment)
         );
 
         const successMsg = selectedTierData.isUpgrade
@@ -132,37 +125,33 @@ export default function SubscriptionModal({
   };
 
   if (showPayment && selectedTierData) {
-    // Bestimme den Text für das Payment Modal
     let descriptionText = `Abonnement: ${selectedTierData.name}`;
     if (selectedTierData.isUpgrade) {
         descriptionText = `Upgrade auf ${selectedTierData.name} (Differenzzahlung)`;
     }
 
+    // Der Betrag, der an Stripe geschickt wird (Differenz bei Upgrade, sonst voll)
+    const paymentAmount = selectedTierData.isUpgrade ? selectedTierData.upgradePrice : selectedTierData.price;
+
     return (
       <PaymentModal
         isOpen={isOpen}
         onClose={onClose}
-        amount={selectedTierData.isUpgrade ? selectedTierData.upgradePrice : selectedTierData.price}
+        amount={paymentAmount}
         description={descriptionText}
         metadata={{
             creatorId: creator.id,
             tierId: selectedTierData.dbId,
             type: 'SUBSCRIPTION',
-            isUpgrade: selectedTierData.isUpgrade // Info ans Backend senden
+            isUpgrade: selectedTierData.isUpgrade
         }}
         onPaymentSuccess={handleConfirmedSubscription}
       />
     );
   }
 
-  // Verhindert Absturz, wenn Modal geöffnet wird, bevor Tiers geladen sind
-  if (!selectedTierData && combinedTiers.length > 0 && !selectedTierId) {
-      // Rendern erlauben, aber Button deaktivieren
-  }
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      {/* Scrollbar Klasse hinzugefügt */}
       <DialogContent className="bg-card text-card-foreground border-border max-w-2xl chat-messages-scrollbar max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl font-serif text-foreground">
@@ -191,7 +180,7 @@ export default function SubscriptionModal({
                     value={tier.id}
                     id={tier.id}
                     className="mt-1"
-                    disabled={tier.isCurrent} // Aktuelles Abo nicht erneut wählbar
+                    disabled={tier.isCurrent}
                   />
                   <Label htmlFor={tier.id} className={cn("flex-1", !tier.isCurrent && "cursor-pointer")}>
                     <div className="space-y-3">
