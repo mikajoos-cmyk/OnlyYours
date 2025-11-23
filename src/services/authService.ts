@@ -25,6 +25,8 @@ export interface AuthUser {
   is_live?: boolean;
   live_stream_tier_id?: string | null;
   live_stream_requires_subscription?: boolean; // <-- NEU
+  stripe_account_id?: string;
+  stripe_onboarding_complete?: boolean;
 }
 
 export class AuthService {
@@ -243,6 +245,8 @@ export class AuthService {
       is_live: userData.is_live,
       live_stream_tier_id: userData.live_stream_tier_id,
       live_stream_requires_subscription: userData.live_stream_requires_subscription, // <-- NEU
+      stripe_account_id: userData.stripe_account_id;
+      stripe_onboarding_complete: userData.stripe_onboarding_complete;
     };
   }
 }

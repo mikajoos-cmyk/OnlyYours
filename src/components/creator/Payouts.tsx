@@ -1,10 +1,8 @@
-// src/components/creator/Payouts.tsx
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
-import { DollarSignIcon, TrendingUpIcon, CalendarIcon, Loader2Icon } from 'lucide-react';
+import { DollarSignIcon, TrendingUpIcon, CalendarIcon, Loader2Icon, Building2Icon } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
-// --- NEUE IMPORTS ---
 import { payoutService, PayoutSummary, PayoutTransaction } from '../../services/payoutService';
 import { useToast } from '../../hooks/use-toast';
 import {
@@ -19,43 +17,43 @@ import {
   AlertDialogTrigger,
 } from '../ui/alert-dialog';
 import { Input } from '../ui/input';
-// --- ENDE NEUE IMPORTS ---
+import { supabase } from '../../lib/supabase'; // Supabase für Function Call
 
 export default function Payouts() {
   const { user } = useAuthStore();
   const { toast } = useToast();
 
-  // Getrennte States für die Daten
   const [summary, setSummary] = useState<PayoutSummary | null>(null);
   const [history, setHistory] = useState<PayoutTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payoutAmount, setPayoutAmount] = useState('');
-  const [isRequestingPayout, setIsRequestingPayout] = useState(false);
 
-  // Helper zum Formatieren von Währungen
+  // Loading States für Aktionen
+  const [isRequestingPayout, setIsRequestingPayout] = useState(false);
+  const [isConnectingStripe, setIsConnectingStripe] = useState(false);
+
   const formatCurrency = (value: number) => {
     return `€${value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  // Funktion zum Abrufen aller Daten
   const fetchPayouts = async () => {
     if (!user?.id) return;
     setLoading(true);
     setError(null);
     try {
-      // Daten parallel abrufen
       const [summaryData, historyData] = await Promise.all([
         payoutService.getPayoutSummary(user.id),
         payoutService.getPayoutHistory(user.id, 10)
       ]);
-      
+
       setSummary(summaryData);
       setHistory(historyData);
 
     } catch (err: any) {
-      setError('Fehler beim Laden der Auszahlungsdaten. Stellen Sie sicher, dass die Supabase RPC-Funktionen (get_payout_summary, request_payout) existieren.');
+      // Fehler ignorieren, wenn noch keine Daten da sind, aber Loggen
       console.error(err);
+      setError('Konnte Finanzdaten nicht laden.');
     } finally {
       setLoading(false);
     }
@@ -65,86 +63,99 @@ export default function Payouts() {
     fetchPayouts();
   }, [user?.id]);
 
-  // Handler für den Auszahlungs-Button
+  // --- NEU: Handler für Stripe Connect (Bankkonto verbinden) ---
+  const handleConnectStripe = async () => {
+    setIsConnectingStripe(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('connect-stripe-account');
+
+      if (error) throw error;
+      if (data?.url) {
+        // Weiterleitung zu Stripe
+        window.location.href = data.url;
+      } else {
+        throw new Error("Keine Weiterleitungs-URL erhalten.");
+      }
+    } catch (err: any) {
+      console.error("Fehler beim Verbinden mit Stripe:", err);
+      toast({ title: "Fehler", description: "Verbindung zu Stripe fehlgeschlagen.", variant: "destructive" });
+      setIsConnectingStripe(false);
+    }
+  };
+
+  // Handler für Auszahlung (angepasst für echte Stripe Payouts)
   const handlePayoutRequest = async () => {
     if (!user?.id || !summary) return;
 
     const amount = parseFloat(payoutAmount);
-    if (isNaN(amount) || amount <= 0) {
-      toast({ title: "Ungültiger Betrag", description: "Bitte geben Sie einen positiven Betrag ein.", variant: "destructive" });
-      return;
-    }
-    if (amount > summary.availableBalance) {
-      toast({ title: "Fehler", description: "Der Betrag übersteigt Ihr verfügbares Guthaben.", variant: "destructive" });
-      return;
-    }
+    if (isNaN(amount) || amount <= 0) return;
 
     setIsRequestingPayout(true);
     try {
-      // RPC-Funktion aufrufen
-      await payoutService.requestPayout(user.id, amount);
-      
-      toast({
-        title: "Auszahlung beantragt",
-        description: `${formatCurrency(amount)} werden nun bearbeitet.`,
+      // Wir rufen jetzt die Edge Function auf, die die echte Überweisung tätigt
+      const { error } = await supabase.functions.invoke('payout-to-creator', {
+        body: { amount }
       });
-      
-      // Daten neu laden, um das aktualisierte Guthaben anzuzeigen
-      await fetchPayouts(); 
+
+      if (error) throw error;
+
+      toast({
+        title: "Auszahlung unterwegs!",
+        description: `${formatCurrency(amount)} wurden an dein Bankkonto gesendet.`,
+      });
+
+      await fetchPayouts();
       setPayoutAmount('');
-      
+
     } catch (err: any) {
-      console.error("Fehler bei Auszahlungsanfrage:", err);
+      console.error("Fehler bei Auszahlung:", err);
       toast({ title: "Fehler", description: err.message || "Auszahlung fehlgeschlagen.", variant: "destructive" });
     } finally {
       setIsRequestingPayout(false);
     }
   };
 
-  // Helper zum Anzeigen des Status
   const getStatusBadge = (status: PayoutTransaction['status']) => {
     switch (status) {
-      case 'COMPLETED':
-        return <span className="text-sm text-success">Abgeschlossen</span>;
-      case 'PENDING':
-        return <span className="text-sm text-warning">Ausstehend</span>;
-      case 'PROCESSING':
-        return <span className="text-sm text-blue-400">In Bearbeitung</span>;
-      case 'FAILED':
-        return <span className="text-sm text-destructive">Fehlgeschlagen</span>;
-      default:
-        return <span className="text-sm text-muted-foreground">{status}</span>;
+      case 'COMPLETED': return <span className="text-sm text-success">Ausgezahlt</span>;
+      case 'PENDING': return <span className="text-sm text-warning">In Bearbeitung</span>;
+      case 'FAILED': return <span className="text-sm text-destructive">Fehlgeschlagen</span>;
+      default: return <span className="text-sm text-muted-foreground">{status}</span>;
     }
   };
 
+  if (loading) return <div className="flex items-center justify-center h-screen"><p className="text-foreground">Lade Daten...</p></div>;
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-screen"><p className="text-foreground">Lade Auszahlungsdaten...</p></div>;
-  }
+  // Fallback für Summary, falls noch keine Daten existieren
+  const safeSummary = summary || {
+      availableBalance: 0,
+      currentMonthEarnings: 0,
+      lastMonthComparison: 0,
+      totalYearEarnings: 0,
+      nextPayoutDate: '-'
+  };
 
-  if (error) {
-    return <div className="flex items-center justify-center h-screen"><p className="text-destructive max-w-md text-center">{error}</p></div>;
-  }
-
-  if (!summary) {
-    return <div className="flex items-center justify-center h-screen"><p className="text-foreground">Keine Daten gefunden.</p></div>;
-  }
+  // Prüfen, ob der User mit Stripe verbunden ist
+  const isStripeConnected = !!user?.stripe_account_id;
 
   return (
     <div className="min-h-screen py-8 px-4">
       <div className="max-w-4xl mx-auto space-y-8">
         <h1 className="text-3xl font-serif text-foreground">Auszahlungen</h1>
 
-        <Card className="bg-gradient-2 border-secondary">
-          <CardContent className="p-8">
+        {/* --- STATUS KARTE --- */}
+        <Card className="bg-gradient-2 border-secondary relative overflow-hidden">
+          <CardContent className="p-8 relative z-10">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-secondary-foreground/80 mb-2">Verfügbares Guthaben</p>
                 <div className="text-5xl font-serif text-secondary-foreground">
-                  {formatCurrency(summary.availableBalance)}
+                  {formatCurrency(safeSummary.availableBalance)}
                 </div>
                 <p className="text-secondary-foreground/60 mt-2 text-sm">
-                  Nächste geplante Auszahlung: {summary.nextPayoutDate}
+                  {!isStripeConnected
+                    ? "Bitte Bankkonto verbinden, um Auszahlungen zu erhalten."
+                    : "Bereit zur Auszahlung via Stripe Express."}
                 </p>
               </div>
               <DollarSignIcon className="w-16 h-16 text-secondary-foreground/40" strokeWidth={1.5} />
@@ -161,10 +172,7 @@ export default function Payouts() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-serif text-foreground">{formatCurrency(summary.currentMonthEarnings)}</div>
-              <p className={`text-sm mt-2 ${summary.lastMonthComparison >= 0 ? 'text-success' : 'text-destructive'}`}>
-                {summary.lastMonthComparison.toFixed(1)}% vs. letzter Monat
-              </p>
+              <div className="text-3xl font-serif text-foreground">{formatCurrency(safeSummary.currentMonthEarnings)}</div>
             </CardContent>
           </Card>
 
@@ -176,62 +184,71 @@ export default function Payouts() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-serif text-foreground">{formatCurrency(summary.totalYearEarnings)}</div>
-              <p className="text-sm text-muted-foreground mt-2">Bisher in diesem Jahr</p>
+              <div className="text-3xl font-serif text-foreground">{formatCurrency(safeSummary.totalYearEarnings)}</div>
             </CardContent>
           </Card>
         </div>
 
         <Card className="bg-card border-border">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-foreground">Auszahlungshistorie</CardTitle>
-            
-            {/* --- Auszahlungs-Dialog-Button --- */}
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button 
-                  className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
-                  disabled={summary.availableBalance <= 0} // Deaktivieren, wenn kein Guthaben
-                >
-                  Guthaben auszahlen
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent className="bg-card border-border">
-                <AlertDialogHeader>
-                  <AlertDialogTitle className="text-foreground">Auszahlung beantragen</AlertDialogTitle>
-                  <AlertDialogDescription className="text-muted-foreground">
-                    Verfügbares Guthaben: {formatCurrency(summary.availableBalance)}.
-                    Bitte geben Sie den gewünschten Auszahlungsbetrag ein.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <div className="relative my-4">
-                  <Input
-                    type="number"
-                    placeholder="0.00"
-                    value={payoutAmount}
-                    onChange={(e) => setPayoutAmount(e.target.value)}
-                    className="bg-background text-foreground border-border text-lg pl-8"
-                  />
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">€</span>
-                </div>
-                <AlertDialogFooter>
-                  <AlertDialogCancel className="bg-background text-foreground border-border hover:bg-neutral">Abbrechen</AlertDialogCancel>
-                  <AlertDialogAction
+            <CardTitle className="text-foreground">Auszahlung</CardTitle>
+
+            {/* --- LOGIK: VERBINDEN VS. AUSZAHLEN --- */}
+            {!isStripeConnected ? (
+                <Button
+                    onClick={handleConnectStripe}
+                    disabled={isConnectingStripe}
                     className="bg-secondary text-secondary-foreground hover:bg-secondary/90"
-                    onClick={handlePayoutRequest}
-                    disabled={isRequestingPayout || parseFloat(payoutAmount) <= 0 || parseFloat(payoutAmount) > summary.availableBalance}
-                  >
-                    {isRequestingPayout ? (
-                      <Loader2Icon className="w-5 h-5 animate-spin" />
-                    ) : (
-                      'Auszahlung beantragen'
-                    )}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-            {/* --- ENDE Dialog-Button --- */}
-            
+                >
+                    {isConnectingStripe ? <Loader2Icon className="animate-spin mr-2" /> : <Building2Icon className="mr-2 w-4 h-4" />}
+                    Bankkonto verbinden
+                </Button>
+            ) : (
+                <AlertDialog>
+                <AlertDialogTrigger asChild>
+                    <Button
+                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
+                    disabled={safeSummary.availableBalance <= 0}
+                    >
+                    Guthaben auszahlen
+                    </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="bg-card border-border">
+                    <AlertDialogHeader>
+                    <AlertDialogTitle className="text-foreground">Auszahlung beantragen</AlertDialogTitle>
+                    <AlertDialogDescription className="text-muted-foreground">
+                        Verfügbares Guthaben: {formatCurrency(safeSummary.availableBalance)}.
+                        Bitte geben Sie den gewünschten Auszahlungsbetrag ein.
+                    </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="relative my-4">
+                    <Input
+                        type="number"
+                        placeholder="0.00"
+                        value={payoutAmount}
+                        onChange={(e) => setPayoutAmount(e.target.value)}
+                        className="bg-background text-foreground border-border text-lg pl-8"
+                    />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">€</span>
+                    </div>
+                    <AlertDialogFooter>
+                    <AlertDialogCancel className="bg-background text-foreground border-border hover:bg-neutral">Abbrechen</AlertDialogCancel>
+                    <AlertDialogAction
+                        className="bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                        onClick={handlePayoutRequest}
+                        disabled={isRequestingPayout || parseFloat(payoutAmount) <= 0 || parseFloat(payoutAmount) > safeSummary.availableBalance}
+                    >
+                        {isRequestingPayout ? (
+                        <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />
+                        ) : (
+                        'Auszahlung bestätigen'
+                        )}
+                    </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+                </AlertDialog>
+            )}
+
           </CardHeader>
           <CardContent>
             {history.length === 0 ? (
@@ -239,17 +256,14 @@ export default function Payouts() {
             ) : (
                 <div className="space-y-4">
                 {history.map((transaction) => (
-                    <div
-                    key={transaction.id}
-                    className="flex items-center justify-between py-4 border-b border-border last:border-0"
-                    >
-                    <div>
-                        <div className="text-foreground font-medium">{formatCurrency(transaction.amount)}</div>
-                        <div className="text-sm text-muted-foreground">{new Date(transaction.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {getStatusBadge(transaction.status)}
-                    </div>
+                    <div key={transaction.id} className="flex items-center justify-between py-4 border-b border-border last:border-0">
+                        <div>
+                            <div className="text-foreground font-medium">{formatCurrency(transaction.amount)}</div>
+                            <div className="text-sm text-muted-foreground">{new Date(transaction.date).toLocaleDateString()}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {getStatusBadge(transaction.status)}
+                        </div>
                     </div>
                 ))}
                 </div>
