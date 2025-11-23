@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
-import { DollarSignIcon, TrendingUpIcon, CalendarIcon, Loader2Icon, Building2Icon } from 'lucide-react';
+import { DollarSignIcon, TrendingUpIcon, CalendarIcon, Loader2Icon, Building2Icon, SettingsIcon } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { payoutService, PayoutSummary, PayoutTransaction } from '../../services/payoutService';
 import { useToast } from '../../hooks/use-toast';
@@ -63,15 +63,17 @@ export default function Payouts() {
     fetchPayouts();
   }, [user?.id]);
 
-  // --- NEU: Handler für Stripe Connect (Bankkonto verbinden) ---
+  // Handler für Stripe Connect (Bankkonto verbinden ODER Dashboard öffnen)
   const handleConnectStripe = async () => {
     setIsConnectingStripe(true);
     try {
+      // Ruft die Edge Function auf.
+      // Das Backend entscheidet: Onboarding-Link (Neu) oder Dashboard-Link (Login)
       const { data, error } = await supabase.functions.invoke('connect-stripe-account');
 
       if (error) throw error;
       if (data?.url) {
-        // Weiterleitung zu Stripe
+        // Weiterleitung zu Stripe (entweder Onboarding oder Dashboard zum Bearbeiten)
         window.location.href = data.url;
       } else {
         throw new Error("Keine Weiterleitungs-URL erhalten.");
@@ -79,11 +81,11 @@ export default function Payouts() {
     } catch (err: any) {
       console.error("Fehler beim Verbinden mit Stripe:", err);
       toast({ title: "Fehler", description: "Verbindung zu Stripe fehlgeschlagen.", variant: "destructive" });
-      setIsConnectingStripe(false);
+      setIsConnectingStripe(false); // Nur im Fehlerfall zurücksetzen, sonst leiten wir eh weiter
     }
   };
 
-  // Handler für Auszahlung (angepasst für echte Stripe Payouts)
+  // Handler für Auszahlung
   const handlePayoutRequest = async () => {
     if (!user?.id || !summary) return;
 
@@ -92,7 +94,6 @@ export default function Payouts() {
 
     setIsRequestingPayout(true);
     try {
-      // Wir rufen jetzt die Edge Function auf, die die echte Überweisung tätigt
       const { error } = await supabase.functions.invoke('payout-to-creator', {
         body: { amount }
       });
@@ -141,7 +142,23 @@ export default function Payouts() {
   return (
     <div className="min-h-screen py-8 px-4">
       <div className="max-w-4xl mx-auto space-y-8">
-        <h1 className="text-3xl font-serif text-foreground">Auszahlungen</h1>
+
+        {/* Header mit optionalem Einstellungs-Button */}
+        <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-serif text-foreground">Auszahlungen</h1>
+
+            {isStripeConnected && (
+                <Button
+                    variant="outline"
+                    onClick={handleConnectStripe}
+                    disabled={isConnectingStripe}
+                    className="bg-transparent border-border text-muted-foreground hover:text-foreground hover:bg-neutral"
+                >
+                    {isConnectingStripe ? <Loader2Icon className="w-4 h-4 animate-spin" /> : <SettingsIcon className="w-4 h-4 mr-2" />}
+                    Einstellungen / IBAN ändern
+                </Button>
+            )}
+        </div>
 
         {/* --- STATUS KARTE --- */}
         <Card className="bg-gradient-2 border-secondary relative overflow-hidden">
