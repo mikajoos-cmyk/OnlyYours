@@ -42,7 +42,6 @@ export class NotificationService {
     return data || [];
   }
 
-  // --- NEUE FUNKTION ---
   /**
    * Markiert alle ungelesenen Benachrichtigungen eines Benutzers als gelesen.
    */
@@ -55,6 +54,23 @@ export class NotificationService {
 
     if (error) {
       console.error('Error marking notifications as read:', error);
+      throw error;
+    }
+  }
+
+  // --- NEUE FUNKTION ---
+  /**
+   * Löscht eine einzelne Benachrichtigung.
+   */
+  async deleteNotification(notificationId: string, userId: string): Promise<void> {
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', notificationId)
+      .eq('user_id', userId); // Sicherheitscheck
+
+    if (error) {
+      console.error('Error deleting notification:', error);
       throw error;
     }
   }

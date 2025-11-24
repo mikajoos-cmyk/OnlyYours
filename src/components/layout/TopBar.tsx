@@ -1,5 +1,5 @@
 // src/components/layout/TopBar.tsx
-import { BellIcon, UserIcon, MessageCircleIcon, DollarSignIcon } from 'lucide-react';
+import { BellIcon, UserIcon, MessageCircleIcon, DollarSignIcon, XIcon } from 'lucide-react';
 import { Button } from '../ui/button';
 import {
   DropdownMenu,
@@ -7,24 +7,20 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuLabel, // Hinzugefügt
+  DropdownMenuLabel,
 } from '../ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { useAuthStore } from '../../stores/authStore';
 import { useNavigate } from 'react-router-dom';
-// --- NEUE IMPORTS ---
 import { useNotificationStore } from '../../stores/notificationStore';
 import { cn } from '../../lib/utils';
-// --- ENDE ---
 
 export default function TopBar() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
 
-  // --- NEUER STATUS ---
-  // Holen Sie sich den Status aus dem neuen Store
-  const { unreadCount, recentNotifications, markAsRead } = useNotificationStore();
-  // --- ENDE ---
+  // removeNotification hinzufügen
+  const { unreadCount, recentNotifications, markAsRead, removeNotification } = useNotificationStore();
 
   const handleLogout = async () => {
     try {
@@ -35,16 +31,19 @@ export default function TopBar() {
     }
   };
 
-  // --- NEU: Klick-Handler für Benachrichtigungen ---
   const handleNotificationClick = (notificationData: any) => {
-    // (Hier könnten Sie basierend auf notification.type zu /messages oder /profile/:username navigieren)
-    // Vorerst navigieren wir zu den Nachrichten, wenn es eine Nachricht ist
     if (notificationData.sender_id) {
       navigate('/messages');
     }
   };
 
-  // --- NEU: Icon-Helfer ---
+  // --- Handler für Löschen ---
+  const handleDeleteNotification = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation(); // Verhindert, dass das DropdownItem-Click-Event feuert (Navigation)
+    e.preventDefault();  // Verhindert, dass das Dropdown sich sofort schließt (optional)
+    removeNotification(id);
+  };
+
   const getNotificationIcon = (type: string) => {
     if (type === 'NEW_MESSAGE') {
       return <MessageCircleIcon className="w-4 h-4 text-secondary" />;
@@ -68,12 +67,10 @@ export default function TopBar() {
 
         <div className="flex items-center gap-4">
 
-          {/* --- AKTUALISIERTE GLOCKE (DropdownMenu) --- */}
           <DropdownMenu
             onOpenChange={(open) => {
-              // Wenn das Menü geöffnet wird UND ungelesene Nachrichten vorhanden sind
               if (open && unreadCount > 0 && user?.id) {
-                markAsRead(user.id); // Markiere als gelesen
+                markAsRead(user.id);
               }
             }}
           >
@@ -81,10 +78,9 @@ export default function TopBar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="text-foreground hover:text-secondary hover:bg-neutral relative" // 'relative' hinzugefügt
+                className="text-foreground hover:text-secondary hover:bg-neutral relative"
               >
                 <BellIcon className="w-5 h-5" />
-                {/* Badge für ungelesene Nachrichten */}
                 {unreadCount > 0 && (
                   <span className="absolute top-2 right-2 flex h-3 w-3">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75"></span>
@@ -106,31 +102,43 @@ export default function TopBar() {
                   <DropdownMenuItem
                     key={notification.id}
                     className={cn(
-                      "flex items-start gap-3 cursor-pointer hover:bg-neutral",
-                      !notification.is_read && "bg-neutral" // Ungelesene hervorheben
+                      "relative flex items-start gap-3 cursor-pointer hover:bg-neutral pr-8 group", // pr-8 für Platz für das X
+                      !notification.is_read && "bg-neutral"
                     )}
                     onClick={() => handleNotificationClick(notification.data)}
                   >
-                    {getNotificationIcon(notification.type)}
-                    <div className="flex-1 space-y-1">
-                      <p className="text-sm font-medium text-foreground leading-none">{notification.title}</p>
-                      <p className="text-sm text-muted-foreground">{notification.content}</p>
+                    <div className="mt-1">
+                      {getNotificationIcon(notification.type)}
                     </div>
+                    <div className="flex-1 space-y-1 overflow-hidden">
+                      <p className="text-sm font-medium text-foreground leading-none truncate">{notification.title}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-2">{notification.content}</p>
+                    </div>
+
+                    {/* --- LÖSCHEN BUTTON --- */}
+                    <div
+                      role="button"
+                      className="absolute right-2 top-2 p-1 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => handleDeleteNotification(e, notification.id)}
+                      title="Löschen"
+                    >
+                      <XIcon className="w-3 h-3" />
+                    </div>
+                    {/* --- ENDE BUTTON --- */}
+
                   </DropdownMenuItem>
                 ))
               )}
 
               <DropdownMenuSeparator className="bg-border" />
               <DropdownMenuItem
-                onClick={() => navigate('/profile')} // (Oder zu einer dedizierten /notifications Seite)
+                onClick={() => navigate('/profile')}
                 className="text-secondary hover:bg-neutral cursor-pointer justify-center"
               >
                 Alle anzeigen
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          {/* --- ENDE GLOCKE --- */}
-
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

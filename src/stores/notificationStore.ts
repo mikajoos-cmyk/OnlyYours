@@ -1,6 +1,7 @@
 // src/stores/notificationStore.ts
 import { create } from 'zustand';
 import { notificationService } from '../services/notificationService';
+import { useAuthStore } from './authStore'; // Import für userId
 import type { Database } from '../lib/database.types';
 
 type NotificationRow = Database['public']['Tables']['notifications']['Row'];
@@ -13,6 +14,7 @@ interface NotificationState {
   // Aktionen
   fetchNotifications: (userId: string) => Promise<void>;
   markAsRead: (userId: string) => Promise<void>;
+  removeNotification: (notificationId: string) => Promise<void>; // <-- NEU
   startPolling: (userId: string) => void;
   stopPolling: () => void;
 }
@@ -46,34 +48,52 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     // Optimistisches Update: Zähler sofort auf 0 setzen
     set(state => ({
       unreadCount: 0,
-      // Markiere auch die im Dropdown sichtbaren als gelesen
       recentNotifications: state.recentNotifications.map(n => ({ ...n, is_read: true }))
     }));
 
     try {
-      // API-Aufruf im Hintergrund
       await notificationService.markAllAsRead(userId);
-      // (Der Zähler ist bereits auf 0)
     } catch (error) {
       console.error("Fehler beim Markieren als gelesen:", error);
-      // Rollback (hole den echten Status erneut)
+      get().fetchNotifications(userId); // Rollback bei Fehler
+    }
+  },
+
+  // --- NEUE AKTION: LÖSCHEN ---
+  removeNotification: async (notificationId: string) => {
+    const userId = useAuthStore.getState().user?.id;
+    if (!userId) return;
+
+    // 1. Optimistisches Update im Store
+    set((state) => {
+      // Prüfen, ob die gelöschte Nachricht ungelesen war, um den Zähler zu korrigieren
+      const notification = state.recentNotifications.find(n => n.id === notificationId);
+      const wasUnread = notification && !notification.is_read;
+
+      return {
+        recentNotifications: state.recentNotifications.filter(n => n.id !== notificationId),
+        unreadCount: wasUnread ? Math.max(0, state.unreadCount - 1) : state.unreadCount
+      };
+    });
+
+    // 2. API Aufruf
+    try {
+      await notificationService.deleteNotification(notificationId, userId);
+    } catch (error) {
+      // Bei Fehler Liste neu laden
       get().fetchNotifications(userId);
     }
   },
+  // --- ENDE NEUE AKTION ---
 
   /**
    * Startet das Polling für Benachrichtigungen.
    */
   startPolling: (userId: string) => {
-    // Stoppe altes Polling, falls vorhanden
     get().stopPolling();
-
-    // Sofort einmal ausführen
     get().fetchNotifications(userId);
 
-    // Polling starten
     const interval = setInterval(() => {
-      console.log("[NotificationStore] Polling für neue Benachrichtigungen...");
       get().fetchNotifications(userId);
     }, POLLING_RATE);
 

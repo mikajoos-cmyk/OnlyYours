@@ -3,9 +3,12 @@ import { supabase } from '../lib/supabase';
 
 // --- Datentypen für die Statistiken ---
 
+// Neue Typ-Definition für Zeiträume
+export type TimeRange = '7d' | '30d' | '3m' | '6m' | '1y' | 'all';
+
 // Für Linien-/Balkendiagramme
 export interface MonthlyStatData {
-  month: string; // z.B. "Jan", "Feb"
+  month: string; // z.B. "Jan", "Feb" oder Datum "01.01"
   value: number;
 }
 
@@ -27,60 +30,65 @@ export interface EngagementStats {
 export class StatisticsService {
 
   /**
-   * Ruft die monatlichen Umsatzdaten für die letzten 6 Monate ab.
-   * HINWEIS: Erfordert eine RPC-Funktion 'get_monthly_revenue' in Supabase.
+   * Ruft die Umsatzdaten für einen bestimmten Zeitraum ab.
+   * Wir übergeben den 'period_input' an die RPC-Funktion.
    */
-  async getRevenueData(creatorId: string): Promise<MonthlyStatData[]> {
+  async getRevenueData(creatorId: string, range: TimeRange = '6m'): Promise<MonthlyStatData[]> {
+    // Hinweis: Die RPC-Funktion 'get_revenue_stats' muss in der DB existieren und den Parameter 'period_input' akzeptieren.
+    // Falls sie noch 'get_monthly_revenue' heißt, muss sie ggf. angepasst werden.
     const { data, error } = await supabase.rpc('get_monthly_revenue', {
-      creator_id_input: creatorId
+      creator_id_input: creatorId,
+      period_input: range // Neuer Parameter
     });
 
     if (error) {
       console.error('Error fetching revenue data:', error);
-      throw error;
+      // Fallback: Leeres Array zurückgeben, damit die UI nicht crasht
+      return [];
     }
-    // Annahme: RPC gibt { month_abbr: 'Jan', total_revenue: 123.45 } zurück
+
     return (data || []).map((item: any) => ({
-      month: item.month_abbr,
+      month: item.month_abbr || item.date_label, // Flexibel für Monat oder Datum
       value: item.total_revenue,
     }));
   }
 
   /**
-   * Ruft die monatlichen Abonnenten-Wachstumsdaten ab.
-   * HINWEIS: Erfordert eine RPC-Funktion 'get_monthly_subscriber_growth' in Supabase.
+   * Ruft die Abonnenten-Wachstumsdaten für einen bestimmten Zeitraum ab.
    */
-  async getSubscriberGrowth(creatorId: string): Promise<MonthlyStatData[]> {
-     const { data, error } = await supabase.rpc('get_monthly_subscriber_growth', {
-      creator_id_input: creatorId
+  async getSubscriberGrowth(creatorId: string, range: TimeRange = '6m'): Promise<MonthlyStatData[]> {
+    const { data, error } = await supabase.rpc('get_monthly_subscriber_growth', {
+      creator_id_input: creatorId,
+      period_input: range // Neuer Parameter
     });
 
      if (error) {
       console.error('Error fetching subscriber growth:', error);
-      throw error;
+      return [];
     }
-    // Annahme: RPC gibt { month_abbr: 'Jan', new_subscribers: 50 } zurück
+
      return (data || []).map((item: any) => ({
-      month: item.month_abbr,
+      month: item.month_abbr || item.date_label,
       value: item.new_subscribers,
     }));
   }
 
   /**
    * Ruft die Top-Fans (meiste Ausgaben) ab.
-   * HINWEIS: Erfordert eine RPC-Funktion 'get_top_fans' in Supabase.
+   * Auch hier könnte man theoretisch nach Zeitraum filtern (optional).
    */
-  async getTopFans(creatorId: string, limit: number = 5): Promise<TopFan[]> {
+  async getTopFans(creatorId: string, limit: number = 5, range: TimeRange = 'all'): Promise<TopFan[]> {
     const { data, error } = await supabase.rpc('get_top_fans', {
       creator_id_input: creatorId,
-      limit_input: limit
+      limit_input: limit,
+      period_input: range
     });
 
     if (error) {
       console.error('Error fetching top fans:', error);
-      throw error;
+      return [];
     }
-     // Annahme: RPC gibt { fan_id, display_name, avatar_url, total_spent } zurück
+
     return (data || []).map((fan: any) => ({
         id: fan.fan_id,
         name: fan.display_name,
@@ -90,21 +98,38 @@ export class StatisticsService {
   }
 
   /**
-   * Ruft grundlegende Engagement-Statistiken ab (Client-seitig).
+   * Ruft grundlegende Engagement-Statistiken ab.
+   * Hier filtern wir client-seitig oder passen die Query an.
    */
-  async getEngagementStats(creatorId: string): Promise<EngagementStats> {
-    const { data, error, count } = await supabase
+  async getEngagementStats(creatorId: string, range: TimeRange = 'all'): Promise<EngagementStats> {
+    let query = supabase
       .from('posts')
-      .select('likes_count, comments_count', { count: 'exact' })
+      .select('likes_count, comments_count, created_at', { count: 'exact' })
       .eq('creator_id', creatorId)
       .eq('is_published', true)
-      // Nur Posts berücksichtigen, die nicht in der Zukunft liegen
       .or(`scheduled_for.is.null,scheduled_for.lte.now()`);
 
+    // Einfacher Datumsfilter für die Query
+    if (range !== 'all') {
+        const now = new Date();
+        let pastDate = new Date();
+
+        switch (range) {
+            case '7d': pastDate.setDate(now.getDate() - 7); break;
+            case '30d': pastDate.setDate(now.getDate() - 30); break;
+            case '3m': pastDate.setMonth(now.getMonth() - 3); break;
+            case '6m': pastDate.setMonth(now.getMonth() - 6); break;
+            case '1y': pastDate.setFullYear(now.getFullYear() - 1); break;
+        }
+
+        query = query.gte('created_at', pastDate.toISOString());
+    }
+
+    const { data, error, count } = await query;
 
     if (error) {
       console.error('Error fetching engagement stats:', error);
-      throw error;
+      return { avgLikes: 0, avgComments: 0, totalPosts: 0 };
     }
 
     const totalPosts = count || 0;
