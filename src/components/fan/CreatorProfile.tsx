@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { UsersIcon, GridIcon, VideoIcon, CheckIcon, LockIcon, MessageCircleIcon, HeartIcon, LayoutGrid, Image as ImageIcon, Film as FilmIcon, RadioIcon } from 'lucide-react';
+import { UsersIcon, GridIcon, VideoIcon, CheckIcon, LockIcon, MessageCircleIcon, HeartIcon, LayoutGrid, Image as ImageIcon, Film as FilmIcon, RadioIcon, SettingsIcon } from 'lucide-react';
 import SubscriptionModal from './SubscriptionModal';
 import ProfilePostViewer from './ProfilePostViewer';
 import type { PostData as ViewerPostData } from './ProfilePostViewer';
@@ -17,7 +17,6 @@ import { cn } from '../../lib/utils';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import PpvModal from './PpvModal';
 
-// Interne Typdefinition für die Grid-Ansicht
 interface GridPost {
   id: string;
   thumbnailUrl: string;
@@ -55,7 +54,6 @@ export default function CreatorProfile() {
   const [mediaTypeFilter, setMediaTypeFilter] = useState<'all' | 'images' | 'videos'>('all');
   const [tierFilter, setTierFilter] = useState<string>('all');
 
-  // 1. Creator-Profil UND Tiers laden
   useEffect(() => {
     const fetchCreatorData = async () => {
       if (!username) {
@@ -99,7 +97,6 @@ export default function CreatorProfile() {
     fetchCreatorData();
   }, [username]);
 
-  // 2. Abonnement-Status prüfen
   useEffect(() => {
     if (!isLoadingProfile && !isLoadingSubs && creator && currentUser) {
       const subMap = useSubscriptionStore.getState().subscriptionMap;
@@ -116,8 +113,7 @@ export default function CreatorProfile() {
         return;
       }
 
-      const allActiveSubs = Array.from(subMap.values()).filter(s => s.creatorId === creator.id && (s.status === 'ACTIVE' || (s.status === 'CANCELED' && s.endDate && new Date(s.endDate) > new Date())));
-      const isAnyActive = allActiveSubs.some(s => s.status === 'ACTIVE');
+      const isAnyActive = subMap.get(creator.id)?.status === 'ACTIVE';
       setSubscriptionStatus(isAnyActive ? 'ACTIVE' : 'CANCELED');
 
     } else if (!currentUser || creator?.id === creator?.id) {
@@ -136,7 +132,6 @@ export default function CreatorProfile() {
     return <div className="flex justify-center items-center h-screen bg-background"><p className="text-muted-foreground">Benutzer konnte nicht geladen werden.</p></div>;
   }
 
-  // --- HANDLER ---
   const handleSubscribeClick = () => {
     if (!currentUser) {
       toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um zu abonnieren.", variant: "destructive" });
@@ -171,11 +166,6 @@ export default function CreatorProfile() {
     setShowPostFeed(false);
   };
 
-  const handleManageSubscriptionClick = () => {
-    navigate('/profile');
-    toast({ title: "Abonnement", description: "Verwalte deine Abonnements in deinem Profil." });
-  };
-
   const handleSubscriptionComplete = (subscribedCreatorId: string) => {
     setSubscriptionStatus('ACTIVE');
     setShowSubscriptionModal(false);
@@ -194,6 +184,30 @@ export default function CreatorProfile() {
     if (creator) postService.getCreatorPosts(creator.id).then(setPosts);
   };
 
+  // --- NEU: Handler für Updates aus dem Viewer ---
+  const handleLikeToggle = (postId: string) => {
+      setPosts(prev => prev.map(p => {
+          if (p.id === postId) {
+              const newIsLiked = !p.isLiked;
+              return {
+                  ...p,
+                  isLiked: newIsLiked,
+                  likes_count: p.likes_count + (newIsLiked ? 1 : -1), // DB uses likes_count
+                  likes: p.likes + (newIsLiked ? 1 : -1) // Frontend mapped sometimes to likes
+              };
+          }
+          return p;
+      }));
+  };
+
+  const handleCommentAdded = (postId: string) => {
+      setPosts(prev => prev.map(p =>
+          p.id === postId ? { ...p, comments: p.comments + 1, comments_count: p.comments_count + 1 } : p
+      ));
+  };
+  // --- ENDE NEU ---
+
+
   const isOwnProfile = currentUser?.id === creator.id;
 
   const filteredPosts = posts.filter(post => {
@@ -208,7 +222,7 @@ export default function CreatorProfile() {
   });
 
   const gridPosts: GridPost[] = filteredPosts.map((post) => {
-    const hasAccess = checkAccess(post, currentUser?.id);
+    const hasAccess = checkAccess(post, currentUser?.id, creatorTiers);
     return {
       id: post.id,
       thumbnailUrl: post.thumbnail_url || post.mediaUrl,
@@ -233,9 +247,7 @@ export default function CreatorProfile() {
     },
   }));
 
-  // --- renderSubscribeButton WURDE ÜBERARBEITET ---
   const renderSubscribeButton = () => {
-    // 1. Eigene Profil-Logik (hat Vorrang)
     if (isOwnProfile) {
       return (
         <Button
@@ -247,11 +259,9 @@ export default function CreatorProfile() {
       );
     }
 
-    // 2. Abo-Status-Button (Haupt-Button)
     let subscribeButton: React.ReactNode = null;
 
     if (creatorTiers.length === 0 && subscriptionStatus === null && !isLoadingSubs) {
-      // Creator bietet keine Abos an
       subscribeButton = (
         <Button
           disabled={true}
@@ -261,19 +271,18 @@ export default function CreatorProfile() {
         </Button>
       );
     } else {
-      // Creator bietet Abos an oder Status wird geladen
       const baseButtonClasses = "font-normal transition-colors duration-200 min-w-[200px] text-lg py-6 px-12 rounded-full shadow-lg";
 
       switch (subscriptionStatus) {
         case 'ACTIVE':
           subscribeButton = (
             <Button
-              onClick={handleManageSubscriptionClick}
+              onClick={handleSubscribeClick}
               disabled={isLoadingSubs}
               className={cn(baseButtonClasses, "bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10")}
             >
               <CheckIcon className="w-5 h-5 mr-2" strokeWidth={2} />
-              Abonniert
+              Abonniert <span className="ml-1 text-xs opacity-70">(Verwalten)</span>
             </Button>
           );
           break;
@@ -302,8 +311,6 @@ export default function CreatorProfile() {
       }
     }
 
-    // 3. Render-Logik
-    // Wenn der Creator live ist, zeige beide Buttons
     if (creator.is_live) {
       return (
         <div className="flex flex-col md:flex-row items-center gap-4 mt-8">
@@ -319,10 +326,8 @@ export default function CreatorProfile() {
       );
     }
 
-    // Wenn nicht live, zeige nur den Abo-Button
     return <div className="mt-8">{subscribeButton}</div>;
   };
-  // --- ENDE AKTUALISIERUNG ---
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -356,11 +361,9 @@ export default function CreatorProfile() {
             <span className="text-muted-foreground">Follower</span>
           </div>
 
-          {/* HIER WIRD DER NEUE BUTTON-BLOCK GERENDERT */}
           {renderSubscribeButton()}
         </div>
 
-        {/* Filter-Layout (unverändert) */}
         <div className="flex justify-center items-center gap-2 p-2 bg-card rounded-full shadow-lg mt-12 mb-2 border border-border flex-wrap">
           <Button
             onClick={() => setMediaTypeFilter('all')}
@@ -422,19 +425,10 @@ export default function CreatorProfile() {
           </div>
         )}
 
-        {/* Post Grid Section (unverändert) */}
         <div className="mt-6">
           {isLoadingPosts && <p className="text-muted-foreground text-center py-12">Lade Beiträge...</p>}
-          {!isLoadingPosts && posts.length === 0 && (
-            <p className="text-muted-foreground text-center py-12">
-              Dieser Creator hat noch nichts gepostet.
-            </p>
-          )}
-          {!isLoadingPosts && posts.length > 0 && filteredPosts.length === 0 && (
-            <p className="text-muted-foreground text-center py-12">
-              Keine Beiträge für die ausgewählten Filter gefunden.
-            </p>
-          )}
+          {!isLoadingPosts && posts.length === 0 && <p className="text-muted-foreground text-center py-12">Dieser Creator hat noch nichts gepostet.</p>}
+          {!isLoadingPosts && posts.length > 0 && filteredPosts.length === 0 && <p className="text-muted-foreground text-center py-12">Keine Beiträge für die ausgewählten Filter gefunden.</p>}
           {!isLoadingPosts && filteredPosts.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
               {gridPosts.map((post, index) => (
@@ -493,7 +487,6 @@ export default function CreatorProfile() {
         </div>
       </div>
 
-      {/* Modals (unverändert) */}
       {showSubscriptionModal && (
         <SubscriptionModal
           isOpen={showSubscriptionModal}
@@ -511,6 +504,10 @@ export default function CreatorProfile() {
           initialPosts={viewerPosts}
           initialIndex={selectedPostIndex}
           onClose={handleClosePostFeed}
+          initialCreatorTiers={creatorTiers}
+          // NEU: Callbacks übergeben
+          onLikeToggle={handleLikeToggle}
+          onCommentAdded={handleCommentAdded}
         />
       )}
       {showPpvModal && selectedPostForPpv && (

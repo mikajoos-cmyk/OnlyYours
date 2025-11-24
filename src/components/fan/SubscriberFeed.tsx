@@ -1,4 +1,3 @@
-// src/components/fan/SubscriberFeed.tsx
 import { useState, useRef, useEffect } from 'react';
 import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, LockIcon, UserCheckIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -13,13 +12,10 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import PpvModal from './PpvModal';
 import { useToast } from '../../hooks/use-toast';
-// --- NEUE IMPORTS ---
 import TipModal from './TipModal';
-import type { Post as PostData } from '../../services/postService'; // <-- PostData importiert
-import { tierService, Tier } from '../../services/tierService'; // <-- NEU
-import SubscriptionModal from './SubscriptionModal'; // <-- NEU
-// --- ENDE ---
-
+import type { Post as PostData } from '../../services/postService';
+import { tierService, Tier } from '../../services/tierService';
+import SubscriptionModal from './SubscriptionModal';
 
 interface PostData extends Omit<ServicePostData, 'creator'> {
   creator: {
@@ -56,10 +52,10 @@ export default function SubscriberFeed({
     loadSubscriberPosts,
     nextPost: nextPostAction,
     previousPost: previousPostAction,
-    toggleLike: toggleLikeAction
+    toggleLike: toggleLikeAction,
+    incrementCommentCount
   } = useFeedStore();
 
-  // --- loadSubscriptions hinzugefügt ---
   const { checkAccess, addPurchasedPost, isLoading: isLoadingSubs, loadSubscriptions } = useSubscriptionStore();
 
   const [posts, setPosts] = useState<ServicePostData[]>([]);
@@ -69,15 +65,11 @@ export default function SubscriberFeed({
   const [selectedPostIdForComments, setSelectedPostIdForComments] = useState<string | null>(null);
   const [showPpvModal, setShowPpvModal] = useState(false);
 
-  // --- NEUER STATE (von DiscoveryFeed übernommen) ---
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [creatorTiers, setCreatorTiers] = useState<Tier[]>([]);
-  // --- ENDE ---
 
-  // --- NEU: States für TipModal ---
   const [showTipModal, setShowTipModal] = useState(false);
   const [selectedCreatorForTip, setSelectedCreatorForTip] = useState<PostData['creator'] | null>(null);
-  // --- ENDE ---
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
@@ -106,13 +98,11 @@ export default function SubscriberFeed({
     }
   }, [isProfileView, storePosts, storeCurrentIndex, storeIsLoading]);
 
-  // Der aktuelle Post (wird für Tier-Laden benötigt)
   const currentPost = posts[currentIndex];
 
-  // --- NEUER EFFEKT: Tiers für den aktuellen Creator laden ---
   useEffect(() => {
     if (!currentPost?.creatorId) {
-      setCreatorTiers([]); // Zurücksetzen, wenn kein Post da ist
+      setCreatorTiers([]);
       return;
     }
 
@@ -123,16 +113,14 @@ export default function SubscriberFeed({
         setCreatorTiers(sortedTiers);
       } catch (err) {
         console.error("Failed to fetch tiers for modal", err);
-        setCreatorTiers([]); // Bei Fehler leeren
+        setCreatorTiers([]);
       }
     };
     fetchTiers();
-  }, [currentPost?.creatorId]); // Abhängig von der Creator-ID des aktuellen Posts
-  // --- ENDE ---
+  }, [currentPost?.creatorId]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // --- showSubscriptionModal hinzugefügt ---
       if (showPpvModal || showComments || showTipModal || showSubscriptionModal) return;
       if (!isProfileView) {
         if (e.key === 'ArrowDown') nextPostAction();
@@ -141,12 +129,11 @@ export default function SubscriberFeed({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isProfileView, nextPostAction, previousPostAction, showPpvModal, showComments, showTipModal, showSubscriptionModal]); // showSubscriptionModal hinzugefügt
+  }, [isProfileView, nextPostAction, previousPostAction, showPpvModal, showComments, showTipModal, showSubscriptionModal]);
 
   const scrollThreshold = 50;
 
   const handleScroll = (e: React.WheelEvent) => {
-    // --- showSubscriptionModal hinzugefügt ---
     if (isScrolling.current || Math.abs(e.deltaY) < scrollThreshold || posts.length <= 1 || showPpvModal || showComments || showTipModal || showSubscriptionModal) return;
     isScrolling.current = true;
     if (e.deltaY > 0 && currentIndex < posts.length - 1) {
@@ -159,7 +146,6 @@ export default function SubscriberFeed({
 
   const handleTouchStart = useRef({ y: 0 });
   const handleTouchMove = (e: React.TouchEvent) => {
-    // --- showSubscriptionModal hinzugefügt ---
     if (posts.length <= 1 || showPpvModal || showComments || showTipModal || showSubscriptionModal) return;
     const touch = e.touches[0];
     const deltaY = handleTouchStart.current.y - touch.clientY;
@@ -179,7 +165,7 @@ export default function SubscriberFeed({
 
   const handleLike = async (postId: string) => {
     if (isProfileView) {
-      // TODO: Lokale Like-Logik
+      // Lokale Like-Logik (für Profile View) kann hier noch erweitert werden
     } else {
       await toggleLikeAction(postId);
     }
@@ -188,6 +174,20 @@ export default function SubscriberFeed({
   const handleCommentClick = (postId: string) => {
     setSelectedPostIdForComments(postId);
     setShowComments(true);
+  };
+
+  const handleCommentAdded = () => {
+    if (selectedPostIdForComments) {
+        if (!isProfileView) {
+            incrementCommentCount(selectedPostIdForComments);
+        } else {
+            setPosts(prev => prev.map(p =>
+                p.id === selectedPostIdForComments
+                    ? { ...p, comments: p.comments + 1 }
+                    : p
+            ));
+        }
+    }
   };
 
   const copyToClipboard = (url: string) => {
@@ -240,7 +240,6 @@ export default function SubscriberFeed({
     setShowPpvModal(true);
   };
 
-  // --- AKTUALISIERT: handleSubscribeClick (öffnet jetzt das Modal) ---
   const handleSubscribeClick = (e?: React.MouseEvent) => {
     e?.stopPropagation();
 
@@ -253,18 +252,15 @@ export default function SubscriberFeed({
        return;
     }
 
-    setShowPpvModal(false); // Schließt PPV-Modal, falls offen
+    setShowPpvModal(false);
     setShowSubscriptionModal(true);
   };
-  // --- ENDE ---
 
-  // --- NEU: handleSubscriptionComplete ---
   const handleSubscriptionComplete = () => {
     setShowSubscriptionModal(false);
     toast({ title: "Erfolgreich abonniert!", description: "Der Post ist jetzt freigeschaltet." });
-    loadSubscriptions(); // Wichtig, damit checkAccess() funktioniert
+    loadSubscriptions();
   };
-  // --- ENDE ---
 
   const handlePurchaseSuccess = (postId: string) => {
     addPurchasedPost(postId);
@@ -273,8 +269,6 @@ export default function SubscriberFeed({
       loadSubscriberPosts();
     }
   };
-
-  // const currentPost = posts[currentIndex]; // Bereits oben definiert
 
   if (isLoading || (isLoadingSubs && !isProfileView)) {
     return (
@@ -302,8 +296,8 @@ export default function SubscriberFeed({
     return null;
   }
 
-  // --- AKTUALISIERT: Logik für Zugriffs-Buttons (von DiscoveryFeed übernommen) ---
-  const hasAccess = checkAccess(currentPost, user?.id);
+  // ÄNDERUNG: creatorTiers übergeben
+  const hasAccess = checkAccess(currentPost, user?.id, creatorTiers);
 
   const canPpv = currentPost.price > 0;
   const requiredTier = currentPost.tier_id ? creatorTiers.find(t => t.id === currentPost.tier_id) : null;
@@ -319,15 +313,12 @@ export default function SubscriberFeed({
     subscribeText = "Abonnieren nicht verfügbar";
   }
 
-  // Eigene Logik für Subscriber Feed: Wenn der Post ein Tier erfordert UND der User ein Abo hat,
-  // ist es ein Upgrade.
   const activeSub = useSubscriptionStore.getState().subscriptionMap.get(currentPost.creatorId);
   if (requiredTier && activeSub) {
       subscribeText = `Upgrade auf "${requiredTier.name}" erforderlich`;
   } else if (requiredTier) {
       subscribeText = `Mit "${requiredTier.name}"-Abo freischalten`;
   }
-  // --- ENDE AKTUALISIERUNG ---
 
   return (
     <>
@@ -387,7 +378,6 @@ export default function SubscriberFeed({
               )}
             </div>
 
-            {/* --- Overlay mit Schloss und Button-Auswahl --- */}
             {!hasAccess && (
               <div
                 className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8"
@@ -397,7 +387,7 @@ export default function SubscriberFeed({
                 {canPpv && (
                   <Button
                     className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6 w-full max-w-sm"
-                    onClick={handlePpvClick} // <-- Verwendet PPV-Handler
+                    onClick={handlePpvClick}
                   >
                     {`Beitrag für ${currentPost.price.toFixed(2)}€ freischalten`}
                   </Button>
@@ -416,7 +406,6 @@ export default function SubscriberFeed({
                   </div>
                 )}
 
-                {/* --- AKTUALISIERT: Verwendet jetzt den neuen subscribeText --- */}
                 {canSubscribe && (
                   <Button
                     variant={canPpv ? "outline" : "secondary"}
@@ -426,14 +415,12 @@ export default function SubscriberFeed({
                             ? "bg-transparent border-secondary text-secondary hover:bg-secondary/10 hover:text-secondary"
                             : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
                     )}
-                    onClick={handleSubscribeClick} // <-- Verwendet Abo-Handler
+                    onClick={handleSubscribeClick}
                   >
                     <UserCheckIcon className="w-5 h-5 mr-2" />
                     {subscribeText}
                   </Button>
                 )}
-                {/* --- ENDE --- */}
-
               </div>
             )}
 
@@ -542,6 +529,8 @@ export default function SubscriberFeed({
               setSelectedPostIdForComments(null);
             }}
             post={posts.find(p => p.id === selectedPostIdForComments)}
+            // NEU: Callback
+            onCommentAdded={handleCommentAdded}
           />
         )}
       </AnimatePresence>
@@ -552,12 +541,11 @@ export default function SubscriberFeed({
             onClose={() => setShowPpvModal(false)}
             post={currentPost}
             onPaymentSuccess={handlePurchaseSuccess}
-            creatorTiers={creatorTiers} // <-- Tiers übergeben
-            onSubscribeClick={handleSubscribeClick} // Handler übergeben
+            creatorTiers={creatorTiers}
+            onSubscribeClick={handleSubscribeClick}
          />
       )}
 
-      {/* --- NEU: SubscriptionModal hinzugefügt --- */}
       {showSubscriptionModal && currentPost && creatorTiers.length > 0 && (
         <SubscriptionModal
           isOpen={showSubscriptionModal}
@@ -570,7 +558,6 @@ export default function SubscriberFeed({
           onSubscriptionComplete={handleSubscriptionComplete}
         />
       )}
-      {/* --- ENDE --- */}
 
       {showTipModal && selectedCreatorForTip && (
         <TipModal

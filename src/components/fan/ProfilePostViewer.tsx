@@ -1,4 +1,3 @@
-// src/components/fan/ProfilePostViewer.tsx
 import { useState, useRef, useEffect } from 'react';
 import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, LockIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -7,15 +6,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import CommentsSheet from './CommentsSheet';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
-// --- NEUE IMPORTS ---
 import { useAuthStore } from '../../stores/authStore';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import PpvModal from './PpvModal';
 import type { Post as ServicePostData } from '../../services/postService';
-// --- ENDE ---
+import { postService } from '../../services/postService';
+import { tierService, Tier } from '../../services/tierService';
 
-
-// --- Interface für Posts (angepasst an ServicePostData) ---
 export interface CreatorInfo {
   name: string;
   avatar: string;
@@ -25,29 +22,34 @@ export interface CreatorInfo {
 
 export interface PostData extends Omit<ServicePostData, 'creator'> {
   creator: CreatorInfo;
-  media: string; // mediaUrl wird als 'media' übergeben
+  media: string;
 }
-// --- Ende Interface ---
 
 interface ProfilePostViewerProps {
-  initialPosts: PostData[]; // Posts werden jetzt immer übergeben
-  initialIndex: number;    // Startindex
-  onClose: () => void;     // Schließen-Funktion
+  initialPosts: PostData[];
+  initialIndex: number;
+  onClose: () => void;
+  initialCreatorTiers?: Tier[];
+  // NEU: Callbacks für Status-Updates im Parent
+  onLikeToggle?: (postId: string) => void;
+  onCommentAdded?: (postId: string) => void;
 }
 
 export default function ProfilePostViewer({
   initialPosts,
   initialIndex,
-  onClose
+  onClose,
+  initialCreatorTiers = [],
+  onLikeToggle,
+  onCommentAdded
 }: ProfilePostViewerProps) {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { checkAccess, addPurchasedPost, isLoading: isLoadingSubs } = useSubscriptionStore();
+  const { checkAccess, addPurchasedPost } = useSubscriptionStore();
 
-  const [posts] = useState<PostData[]>(initialPosts);
+  const [posts, setPosts] = useState<PostData[]>(initialPosts);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
-  // Lokaler Like-State (da dieser Viewer nicht an den FeedStore angebunden ist)
   const [isLiked, setIsLiked] = useState<{ [key: string]: boolean }>({});
   const [likes, setLikes] = useState<{ [key: string]: number }>({});
 
@@ -55,12 +57,7 @@ export default function ProfilePostViewer({
   const [selectedPostIdForComments, setSelectedPostIdForComments] = useState<string | null>(null);
   const [showPpvModal, setShowPpvModal] = useState(false);
 
-  // --- NEU: Tiers für PPV-Modal (wird in CreatorProfile.tsx noch nicht geladen, daher leer) ---
-  // In SearchPage.tsx (wo es herkommt) wird es ebenfalls nicht geladen.
-  // Wir übergeben ein leeres Array an das PpvModal, falls es benötigt wird.
-  // HINWEIS: Das PpvModal in *diesem* Viewer kann aktuell kein Abo anbieten, nur PPV.
-  const creatorTiersForPpvModal: Tier[] = [];
-  // --- ENDE ---
+  const [loadedCreatorTiers, setLoadedCreatorTiers] = useState<Tier[]>(initialCreatorTiers);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
@@ -77,13 +74,26 @@ export default function ProfilePostViewer({
     setIsLiked(initialIsLikedState);
   }, [initialPosts]);
 
-  // Index zurücksetzen
   useEffect(() => {
     setCurrentIndex(initialIndex);
   }, [initialIndex]);
 
+  const currentPost = posts[currentIndex];
 
-  // ----- Scrolling/Swiping Logic -----
+  useEffect(() => {
+    if (currentPost && loadedCreatorTiers.length === 0) {
+        const loadTiers = async () => {
+            try {
+                const tiers = await tierService.getCreatorTiers(currentPost.creatorId);
+                setLoadedCreatorTiers(tiers.sort((a, b) => a.price - b.price));
+            } catch (e) {
+                console.error("Failed to load tiers inside viewer", e);
+            }
+        };
+        loadTiers();
+    }
+  }, [currentPost?.creatorId]);
+
   const scrollThreshold = 50;
   const handleScroll = (e: React.WheelEvent) => {
     if (isScrolling.current || Math.abs(e.deltaY) < scrollThreshold || posts.length <= 1 || showPpvModal || showComments) return;
@@ -113,12 +123,10 @@ export default function ProfilePostViewer({
   const handleTouchStartCapture = (e: React.TouchEvent) => {
     handleTouchStart.current = { y: e.touches[0].clientY };
   };
-  // ----- Ende Scrolling -----
 
-  // Like/Comment Handler
-  const handleLike = (postId: string) => {
-    // TODO: Lokale Like-Logik implementieren (Optimistic Update + Service Call)
-    // Vorerst nur lokaler State:
+  // --- AKTUALISIERT: handleLike ---
+  const handleLike = async (postId: string) => {
+    // 1. Optimistisches Update im Viewer
     setIsLiked((prev) => ({ ...prev, [postId]: !prev[postId] }));
     setLikes((prev) => {
         const currentLikes = prev[postId] ?? posts.find(p => p.id === postId)?.likes ?? 0;
@@ -127,12 +135,49 @@ export default function ProfilePostViewer({
           [postId]: currentLikes + (isLiked[postId] ? -1 : 1),
         };
     });
-    // await postService.toggleLike(postId); // Echter Aufruf
+
+    try {
+        // 2. API Call
+        await postService.toggleLike(postId);
+
+        // 3. Parent (Profil-Seite) benachrichtigen, damit es dort auch gespeichert bleibt
+        if (onLikeToggle) {
+            onLikeToggle(postId);
+        }
+    } catch (e) {
+        console.error("Failed to toggle like:", e);
+        // Rollback
+        setIsLiked((prev) => ({ ...prev, [postId]: !prev[postId] }));
+        setLikes((prev) => {
+            const currentLikes = prev[postId] ?? posts.find(p => p.id === postId)?.likes ?? 0;
+            return {
+                ...prev,
+                [postId]: currentLikes + (isLiked[postId] ? 1 : -1),
+            };
+        });
+    }
   };
 
   const handleCommentClick = (postId: string) => {
     setSelectedPostIdForComments(postId);
     setShowComments(true);
+  };
+
+  // --- AKTUALISIERT: handleCommentAdded ---
+  const handleCommentAdded = () => {
+      if (currentPost) {
+          // 1. Update im Viewer
+          setPosts(prev => prev.map(p =>
+              p.id === currentPost.id
+                  ? { ...p, comments: p.comments + 1 }
+                  : p
+          ));
+
+          // 2. Update im Parent (Profil)
+          if (onCommentAdded) {
+              onCommentAdded(currentPost.id);
+          }
+      }
   };
 
   const handleMediaClick = (hasAccess: boolean) => {
@@ -143,13 +188,8 @@ export default function ProfilePostViewer({
 
   const handlePurchaseSuccess = (postId: string) => {
     addPurchasedPost(postId);
-    // Da wir in einem Modal sind, müssen wir den Parent (CreatorProfile) nicht
-    // unbedingt neu laden. Der `checkAccess` wird beim nächsten Rendern (durch addPurchasedPost)
-    // den Zugriff korrekt (optimistisch) bewerten.
-    setShowPpvModal(false); // Modal nach Erfolg schließen
+    setShowPpvModal(false);
   };
-
-  const currentPost = posts[currentIndex];
 
   if (!currentPost) {
      return (
@@ -160,200 +200,89 @@ export default function ProfilePostViewer({
      );
   }
 
-  // Zugriff prüfen
-  // Wir müssen das `PostData`-Objekt in ein `Post`-Objekt umwandeln, das `checkAccess` erwartet
   const postForCheck: ServicePostData = {
     ...currentPost,
     mediaUrl: currentPost.media,
     thumbnail_url: currentPost.thumbnail_url || currentPost.media,
   };
-  const hasAccess = checkAccess(postForCheck, user?.id);
+
+  const hasAccess = checkAccess(postForCheck, user?.id, loadedCreatorTiers);
 
   return (
     <>
-      <div
-        ref={containerRef}
-        className={cn(
-          "fixed top-16 left-0 right-0 bottom-16 z-40 overflow-hidden bg-black", // bg-black Fallback
-          "md:left-64 md:bottom-0 md:h-[calc(100vh-4rem)]"
-        )}
-        onWheel={handleScroll}
-        onTouchStart={handleTouchStartCapture}
-        onTouchMove={handleTouchMove}
-      >
-         <Button
-            onClick={onClose}
-            size="icon"
-            variant="ghost"
-            className="absolute top-4 right-4 z-50 bg-black/50 text-foreground hover:bg-black/70 rounded-full"
-           >
-            <XIcon className="w-6 h-6" strokeWidth={1.5} />
-           </Button>
+      <div ref={containerRef} className={cn("fixed top-16 left-0 right-0 bottom-16 z-40 overflow-hidden bg-black", "md:left-64 md:bottom-0 md:h-[calc(100vh-4rem)]")} onWheel={handleScroll} onTouchStart={handleTouchStartCapture} onTouchMove={handleTouchMove}>
+         <Button onClick={onClose} size="icon" variant="ghost" className="absolute top-4 right-4 z-50 bg-black/50 text-foreground hover:bg-black/70 rounded-full"><XIcon className="w-6 h-6" strokeWidth={1.5} /></Button>
 
-        <motion.div
-           key={currentIndex}
-           initial={{ opacity: 0 }}
-           animate={{ opacity: 1 }}
-           exit={{ opacity: 0 }}
-           transition={{ duration: 0.3 }}
-           className="h-full w-full relative"
-         >
-            {/* --- VERPIXELTE LOGIK --- */}
-            <div
-              className="w-full h-full"
-              onClick={() => handleMediaClick(hasAccess)}
-            >
+        <motion.div key={currentIndex} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="h-full w-full relative">
+            <div className="w-full h-full" onClick={() => handleMediaClick(hasAccess)}>
               {currentPost.mediaType === 'video' ? (
-                <video
-                  src={currentPost.media}
-                  autoPlay muted loop playsInline
-                  className={cn(
-                    "w-full h-full object-cover",
-                    !hasAccess && "filter blur-2xl"
-                  )}
-                />
+                <video src={currentPost.media} autoPlay muted loop playsInline className={cn("w-full h-full object-cover", !hasAccess && "filter blur-2xl")} />
               ) : (
-                <img
-                  src={hasAccess ? currentPost.media : (currentPost.thumbnail_url || currentPost.media)}
-                  alt={currentPost.caption}
-                  className={cn(
-                    "w-full h-full object-cover",
-                    !hasAccess && "filter blur-2xl"
-                  )}
-                />
+                <img src={hasAccess ? currentPost.media : (currentPost.thumbnail_url || currentPost.media)} alt={currentPost.caption} className={cn("w-full h-full object-cover", !hasAccess && "filter blur-2xl")} />
               )}
             </div>
 
-            {/* Gesperrt-Overlay */}
             {!hasAccess && (
-              <div
-                className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-pointer"
-                onClick={() => handleMediaClick(hasAccess)}
-              >
+              <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-pointer" onClick={() => handleMediaClick(hasAccess)}>
                 <LockIcon className="w-16 h-16 text-foreground" />
                 <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6">
-                  {currentPost.price > 0
-                    ? `Beitrag für ${currentPost.price.toFixed(2)}€ freischalten`
-                    : `Abonnieren, um zu sehen`
-                  }
+                  Inhalt freischalten
                 </Button>
               </div>
             )}
 
-            {/* Gradient (nur bei Zugriff) */}
             {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
 
-
-           {/* --- KORREKTUR HIER: Creator Info klickbar gemacht --- */}
            <div className="absolute top-4 left-4 right-20 z-10">
-             <div
-                className="flex items-center gap-3 cursor-pointer group"
-                onClick={() => {
-                  onClose(); // Viewer schließen
-                  navigate(`/profile/${currentPost.creator.username}`);
-                }}
-             >
+             <div className="flex items-center gap-3 cursor-pointer group" onClick={() => { onClose(); navigate(`/profile/${currentPost.creator.username}`); }}>
                <Avatar className="w-12 h-12 border-2 border-foreground">
                  <AvatarImage src={currentPost.creator.avatar} alt={currentPost.creator.name} />
-                 <AvatarFallback className="bg-secondary text-secondary-foreground">
-                   {currentPost.creator.name.charAt(0)}
-                 </AvatarFallback>
+                 <AvatarFallback className="bg-secondary text-secondary-foreground">{currentPost.creator.name.charAt(0)}</AvatarFallback>
                </Avatar>
                <div>
-                 <p className="font-medium text-foreground drop-shadow-lg group-hover:underline">
-                   {currentPost.creator.name}
-                 </p>
-                 {/* --- @username hinzugefügt --- */}
-                 <p className="text-sm text-foreground/80 drop-shadow-lg">
-                    @{currentPost.creator.username}
-                 </p>
-                 {/* --- Ende --- */}
+                 <p className="font-medium text-foreground drop-shadow-lg group-hover:underline">{currentPost.creator.name}</p>
+                 <p className="text-sm text-foreground/80 drop-shadow-lg">@{currentPost.creator.username}</p>
                </div>
              </div>
            </div>
-           {/* --- ENDE KORREKTUR --- */}
 
-           {/* Icons rechts */}
            <div className="absolute right-4 bottom-32 z-10 flex flex-col gap-6">
-                <motion.button
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => hasAccess && handleLike(currentPost.id)}
-                    className="flex flex-col items-center gap-1"
-                    disabled={!hasAccess}
-                >
-                    <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
-                        <HeartIcon
-                        className={cn(
-                            "w-7 h-7",
-                            isLiked[currentPost.id] ? 'fill-secondary text-secondary' : 'text-foreground',
-                            !hasAccess && "opacity-50"
-                        )}
-                        strokeWidth={1.5}
-                        />
-                    </div>
-                    <span className={cn("text-sm font-medium text-foreground drop-shadow-lg", !hasAccess && "opacity-50")}>
-                        {(likes[currentPost.id] ?? currentPost.likes).toLocaleString()}
-                    </span>
+                <motion.button whileTap={{ scale: 0.9 }} onClick={() => hasAccess && handleLike(currentPost.id)} className="flex flex-col items-center gap-1" disabled={!hasAccess}>
+                    <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center"><HeartIcon className={cn("w-7 h-7", isLiked[currentPost.id] ? 'fill-secondary text-secondary' : 'text-foreground', !hasAccess && "opacity-50")} strokeWidth={1.5} /></div>
+                    <span className={cn("text-sm font-medium text-foreground drop-shadow-lg", !hasAccess && "opacity-50")}>{(likes[currentPost.id] ?? currentPost.likes).toLocaleString()}</span>
                 </motion.button>
-
-                <button
-                    onClick={() => handleCommentClick(currentPost.id)}
-                    className="flex flex-col items-center gap-1"
-                >
-                    <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
-                        <MessageCircleIcon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
-                    </div>
-                    <span className="text-sm font-medium text-foreground drop-shadow-lg">
-                        {currentPost.comments}
-                    </span>
+                <button onClick={() => handleCommentClick(currentPost.id)} className="flex flex-col items-center gap-1">
+                    <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center"><MessageCircleIcon className="w-7 h-7 text-foreground" strokeWidth={1.5} /></div>
+                    <span className="text-sm font-medium text-foreground drop-shadow-lg">{currentPost.comments}</span>
                 </button>
-                {/* ... (Share, Tip) ... */}
            </div>
 
-           {/* Caption & Hashtags */}
            <div className="absolute bottom-4 left-4 right-20 z-10">
-                <p className={cn("text-foreground drop-shadow-lg mb-2", !hasAccess && "filter blur-sm select-none")}>
-                  {hasAccess ? currentPost.caption : "Gesperrter Inhalt"}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                    {currentPost.hashtags.map((tag) => (
-                        <span key={tag} className="text-secondary text-sm drop-shadow-lg">
-                        #{tag}
-                        </span>
-                    ))}
-                </div>
+                <p className={cn("text-foreground drop-shadow-lg mb-2", !hasAccess && "filter blur-sm select-none")}>{hasAccess ? currentPost.caption : "Gesperrter Inhalt"}</p>
+                <div className="flex flex-wrap gap-2">{currentPost.hashtags.map((tag) => (<span key={tag} className="text-secondary text-sm drop-shadow-lg">#{tag}</span>))}</div>
            </div>
          </motion.div>
       </div>
 
-      {/* Comments Sheet */}
        <AnimatePresence>
         {selectedPostIdForComments !== null && showComments && (
           <CommentsSheet
             isOpen={showComments}
-            onClose={() => {
-              setShowComments(false);
-              setSelectedPostIdForComments(null);
-            }}
+            onClose={() => { setShowComments(false); setSelectedPostIdForComments(null); }}
             post={posts.find(p => p.id === selectedPostIdForComments)}
+            onCommentAdded={handleCommentAdded}
           />
         )}
       </AnimatePresence>
 
-      {/* PPV Modal */}
       {showPpvModal && (
          <PpvModal
             isOpen={showPpvModal}
             onClose={() => setShowPpvModal(false)}
-            post={postForCheck} // Übergibt das ServicePostData-Objekt
+            post={postForCheck}
             onPaymentSuccess={handlePurchaseSuccess}
-            creatorTiers={creatorTiersForPpvModal} // Übergibt leeres Array (oder geladene Tiers)
-            onSubscribeClick={() => {
-              // Diese Funktion navigiert zum Profil, da wir im Viewer keine Tiers laden
-              setShowPpvModal(false);
-              onClose(); // Viewer schließen
-              navigate(`/profile/${currentPost.creator.username}`);
-            }}
+            creatorTiers={loadedCreatorTiers}
+            onSubscribeClick={() => { setShowPpvModal(false); onClose(); navigate(`/profile/${currentPost.creator.username}`); }}
          />
       )}
     </>

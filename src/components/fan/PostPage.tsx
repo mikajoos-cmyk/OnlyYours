@@ -16,7 +16,6 @@ import { tierService, Tier } from '../../services/tierService';
 import SubscriptionModal from './SubscriptionModal';
 import TipModal from './TipModal';
 
-// Wir definieren den Post-Typ hier, da wir keinen FeedStore verwenden
 type PostData = ServicePostData;
 
 export default function PostPage() {
@@ -24,23 +23,19 @@ export default function PostPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Stores
   const { user } = useAuthStore();
   const { checkAccess, addPurchasedPost, loadSubscriptions, isLoading: isLoadingSubs } = useSubscriptionStore();
 
-  // Lokaler State für diese Seite
   const [post, setPost] = useState<PostData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creatorTiers, setCreatorTiers] = useState<Tier[]>([]);
 
-  // Modale States
   const [showComments, setShowComments] = useState(false);
   const [showPpvModal, setShowPpvModal] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showTipModal, setShowTipModal] = useState(false);
 
-  // 1. Post laden
   useEffect(() => {
     if (!postId) {
       setError('Keine Post-ID gefunden.');
@@ -68,7 +63,6 @@ export default function PostPage() {
     fetchPost();
   }, [postId]);
 
-  // 2. Tiers laden, wenn der Post geladen ist
   useEffect(() => {
     if (!post?.creatorId) {
       setCreatorTiers([]);
@@ -87,11 +81,8 @@ export default function PostPage() {
     fetchTiers();
   }, [post?.creatorId]);
 
-  // --- Alle Handler (kopiert und angepasst von DiscoveryFeed) ---
-
   const handleLike = async (postId: string) => {
     if (!post) return;
-    // Optimistisches Update für den lokalen State
     const optimisticIsLiked = !post.isLiked;
     const optimisticLikes = optimisticIsLiked ? post.likes + 1 : post.likes - 1;
     setPost({ ...post, isLiked: optimisticIsLiked, likes: optimisticLikes });
@@ -99,7 +90,6 @@ export default function PostPage() {
     try {
       await postService.toggleLike(postId);
     } catch (error) {
-      // Rollback bei Fehler
       setPost({ ...post, isLiked: !optimisticIsLiked, likes: !optimisticIsLiked ? optimisticLikes - 1 : optimisticLikes + 1 });
       toast({ title: "Fehler", description: "Like konnte nicht gespeichert werden.", variant: "destructive" });
     }
@@ -169,23 +159,19 @@ export default function PostPage() {
   const handlePurchaseSuccess = (postId: string) => {
     addPurchasedPost(postId);
     setShowPpvModal(false);
-    // Post neu laden, um `isLiked` etc. frisch zu haben (optional, aber gut für `checkAccess`)
-    if (post) setPost({ ...post, price: 0 }); // Optimistisches Update für den Zugriff
+    if (post) setPost({ ...post, price: 0 });
   };
 
   const handleSubscriptionComplete = () => {
     setShowSubscriptionModal(false);
     toast({ title: "Erfolgreich abonniert!", description: "Der Post ist jetzt freigeschaltet." });
-    loadSubscriptions(); // Wichtig, damit checkAccess() funktioniert
-    // Post neu laden (oder State aktualisieren), um Zugriff zu gewähren
-    if (post) setPost({ ...post, tier_id: null }); // Optimistisches Update für Zugriff
+    loadSubscriptions();
+    if (post) setPost({ ...post, tier_id: null });
   };
 
   const handleTipSuccess = () => {
     console.log("Tip success!");
   };
-
-  // --- RENDER-LOGIK ---
 
   if (isLoading || isLoadingSubs) {
     return (
@@ -213,10 +199,9 @@ export default function PostPage() {
     );
   }
 
-  // Zugriff prüfen
-  const hasAccess = checkAccess(post, user?.id);
+  // WICHTIG: Auch hier creatorTiers übergeben
+  const hasAccess = checkAccess(post, user?.id, creatorTiers);
 
-  // Optionen prüfen
   const canPpv = post.price > 0;
   const requiredTier = post.tier_id ? creatorTiers.find(t => t.id === post.tier_id) : null;
   const cheapestTier = creatorTiers.length > 0 ? creatorTiers[0] : null;
@@ -233,11 +218,8 @@ export default function PostPage() {
 
   return (
     <>
-      <div
-        className="w-full overflow-hidden relative h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]"
-      >
+      <div className="w-full overflow-hidden relative h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]">
         <div className="h-full w-full relative bg-black">
-          {/* --- Mediaplayer --- */}
           <div className="w-full h-full">
             {post.mediaType === 'video' ? (
               <video
@@ -260,11 +242,8 @@ export default function PostPage() {
             )}
           </div>
 
-          {/* --- Sperr-Overlay --- */}
           {!hasAccess && (
-            <div
-              className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8"
-            >
+            <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8">
               <LockIcon className="w-16 h-16 text-foreground" />
               {canPpv && (
                 <Button
@@ -300,7 +279,6 @@ export default function PostPage() {
 
           {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
 
-          {/* --- Header --- */}
           <div className="absolute top-4 left-4 right-20 z-10">
             <div className="flex items-center gap-3">
               <Button onClick={() => navigate(-1)} variant="ghost" size="icon" className="bg-black/50 text-foreground hover:bg-black/70 rounded-full mr-2">
@@ -325,7 +303,6 @@ export default function PostPage() {
             </div>
           </div>
 
-          {/* --- Aktionen (Like, Comment, Share, Tip) --- */}
           <div className="absolute right-4 bottom-32 z-10 flex flex-col gap-6">
             <motion.button
               whileTap={{ scale: 0.9 }}
@@ -382,7 +359,6 @@ export default function PostPage() {
             </button>
           </div>
 
-          {/* --- Caption --- */}
           <div className="absolute bottom-4 left-4 right-20 z-10">
             <p className={cn(
                 "text-foreground drop-shadow-lg mb-2",
@@ -401,7 +377,6 @@ export default function PostPage() {
         </div>
       </div>
 
-      {/* --- Modale --- */}
       <AnimatePresence>
         {showComments && (
           <CommentsSheet

@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { postService } from '../services/postService';
-// Importiere den Post-Typ direkt vom Service, um Duplizierung zu vermeiden
 import type { Post as ServicePostData } from '../services/postService';
 
 // Verwende den Service-Post-Typ (der jetzt price/tier_id enthält)
@@ -10,22 +9,24 @@ interface FeedState {
   posts: Post[];
   currentIndex: number;
   isLoading: boolean;
-  error: string | null; // Fehler-Handling hinzugefügt
+  error: string | null;
   loadDiscoveryPosts: () => Promise<void>;
   loadSubscriberPosts: () => Promise<void>;
   loadCreatorPosts: (creatorId: string) => Promise<void>;
   nextPost: () => void;
   previousPost: () => void;
   toggleLike: (postId: string) => Promise<void>;
+  // NEU: Aktion zum Erhöhen des Kommentar-Zählers
+  incrementCommentCount: (postId: string) => void;
 }
 
 export const useFeedStore = create<FeedState>((set, get) => ({
   posts: [],
   currentIndex: 0,
   isLoading: false,
-  error: null, // Initialer Fehlerstatus
+  error: null,
   loadDiscoveryPosts: async () => {
-    set({ isLoading: true, error: null }); // Fehler zurücksetzen
+    set({ isLoading: true, error: null });
     try {
       const posts = await postService.getDiscoveryFeed(20);
       set({ posts, currentIndex: 0, isLoading: false });
@@ -86,6 +87,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       await postService.toggleLike(postId);
     } catch (error) {
       console.error('Failed to toggle like:', error);
+      // Rollback
       set((state) => ({
         posts: state.posts.map((p) =>
           p.id === postId
@@ -99,4 +101,13 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       }));
     }
   },
+  // NEU: Implementierung
+  incrementCommentCount: (postId: string) =>
+    set((state) => ({
+      posts: state.posts.map((p) =>
+        p.id === postId
+          ? { ...p, comments: p.comments + 1 }
+          : p
+      ),
+    })),
 }));

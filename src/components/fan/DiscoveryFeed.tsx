@@ -1,6 +1,5 @@
-// src/components/fan/DiscoveryFeed.tsx
 import { useState, useRef, useEffect } from 'react';
-import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, LockIcon, UserCheckIcon } from 'lucide-react'; // UserCheckIcon hinzugefügt
+import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, LockIcon, UserCheckIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,13 +12,11 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import PpvModal from './PpvModal';
 import { useToast } from '../../hooks/use-toast';
-import { Separator } from '../ui/separator'; // Separator importieren
-// --- NEUE IMPORTS ---
+import { Separator } from '../ui/separator';
 import { tierService, Tier } from '../../services/tierService';
 import SubscriptionModal from './SubscriptionModal';
-import TipModal from './TipModal'; // <-- Trinkgeld-Modal importiert
-import type { Post as PostData } from '../../services/postService'; // <-- PostData importiert
-// --- ENDE ---
+import TipModal from './TipModal';
+import type { Post as PostData } from '../../services/postService';
 
 export default function DiscoveryFeed() {
   const [showComments, setShowComments] = useState(false);
@@ -28,27 +25,22 @@ export default function DiscoveryFeed() {
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [selectedPostIndex, setSelectedPostIndex] = useState(0);
   const [showPpvModal, setShowPpvModal] = useState(false);
-  // --- NEUER STATE ---
+
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [creatorTiers, setCreatorTiers] = useState<Tier[]>([]);
-  // --- ENDE ---
 
-  // --- NEU: States für TipModal ---
   const [showTipModal, setShowTipModal] = useState(false);
   const [selectedCreatorForTip, setSelectedCreatorForTip] = useState<PostData['creator'] | null>(null);
-  // --- ENDE ---
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Stores
   const { user } = useAuthStore();
-  const { posts, currentIndex, isLoading, error, loadDiscoveryPosts, nextPost, previousPost, toggleLike } = useFeedStore();
+  const { posts, currentIndex, isLoading, error, loadDiscoveryPosts, nextPost, previousPost, toggleLike, incrementCommentCount } = useFeedStore();
   const { checkAccess, addPurchasedPost, isLoading: isLoadingSubs, loadSubscriptions } = useSubscriptionStore();
 
-  // Daten laden
   useEffect(() => {
     if (posts.length === 0) {
       loadDiscoveryPosts();
@@ -57,55 +49,47 @@ export default function DiscoveryFeed() {
 
   const currentPost = posts[currentIndex];
 
-  // --- NEUER EFFEKT: Tiers für den aktuellen Creator laden ---
   useEffect(() => {
     if (!currentPost?.creatorId) {
-      setCreatorTiers([]); // Zurücksetzen, wenn kein Post da ist
+      setCreatorTiers([]);
       return;
     }
 
     const fetchTiers = async () => {
       try {
-        // Tiers für den Creator des aktuellen Posts abrufen
         const fetchedTiers = await tierService.getCreatorTiers(currentPost.creatorId);
-        // Nach Preis sortieren, damit "ab X€" den günstigsten anzeigt
         const sortedTiers = (fetchedTiers || []).sort((a, b) => a.price - b.price);
         setCreatorTiers(sortedTiers);
       } catch (err) {
         console.error("Failed to fetch tiers for modal", err);
-        setCreatorTiers([]); // Bei Fehler leeren
+        setCreatorTiers([]);
       }
     };
     fetchTiers();
-  }, [currentPost?.creatorId]); // Abhängig von der Creator-ID des aktuellen Posts
-  // --- ENDE ---
+  }, [currentPost?.creatorId]);
 
 
-  // Tastatur-Navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Modale blockieren Navigation
-      if (showPpvModal || showComments || isViewerOpen || showSubscriptionModal || showTipModal) return; // showTipModal hinzugefügt
+      if (showPpvModal || showComments || isViewerOpen || showSubscriptionModal || showTipModal) return;
       if (e.key === 'ArrowDown') nextPost();
       else if (e.key === 'ArrowUp') previousPost();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nextPost, previousPost, showPpvModal, showComments, isViewerOpen, showSubscriptionModal, showTipModal]); // showTipModal hinzugefügt
+  }, [nextPost, previousPost, showPpvModal, showComments, isViewerOpen, showSubscriptionModal, showTipModal]);
 
-  // Mausrad-Navigation
   const handleScroll = (e: React.WheelEvent) => {
-    if (isScrolling.current || Math.abs(e.deltaY) < 50 || showPpvModal || showComments || isViewerOpen || showSubscriptionModal || showTipModal) return; // showTipModal hinzugefügt
+    if (isScrolling.current || Math.abs(e.deltaY) < 50 || showPpvModal || showComments || isViewerOpen || showSubscriptionModal || showTipModal) return;
     isScrolling.current = true;
     if (e.deltaY > 0) nextPost();
     else if (e.deltaY < 0) previousPost();
     setTimeout(() => { isScrolling.current = false; }, 800);
   };
 
-  // Touch-Navigation
   const handleTouchStart = useRef({ y: 0 });
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (showPpvModal || showComments || isViewerOpen || showSubscriptionModal || showTipModal) return; // showTipModal hinzugefügt
+    if (showPpvModal || showComments || isViewerOpen || showSubscriptionModal || showTipModal) return;
     const touch = e.touches[0];
     const deltaY = handleTouchStart.current.y - touch.clientY;
     if (Math.abs(deltaY) > 50 && !isScrolling.current) {
@@ -128,7 +112,12 @@ export default function DiscoveryFeed() {
     setShowComments(true);
   };
 
-  // --- AKTUALISIERT: Handler für Teilen (Share) ---
+  const handleCommentAdded = () => {
+    if (selectedPostId) {
+      incrementCommentCount(selectedPostId);
+    }
+  };
+
   const copyToClipboard = (url: string) => {
     navigator.clipboard.writeText(url).then(() => {
       toast({ title: 'Link kopiert!', description: 'Der Link zum Post wurde in die Zwischenablage kopiert.' });
@@ -139,11 +128,10 @@ export default function DiscoveryFeed() {
   };
 
   const handleShare = async (postId: string, creatorUsername: string, creatorName: string) => {
-    const shareUrl = `${window.location.origin}/post/${postId}`; // <-- URL ZUM POST
+    const shareUrl = `${window.location.origin}/post/${postId}`;
     const shareText = `Schau dir diesen Post von ${creatorName} auf OnlyYours an!`;
 
     if (navigator.share) {
-      // Web Share API nutzen
       try {
         await navigator.share({
           title: `OnlyYours - ${creatorName}`,
@@ -157,13 +145,10 @@ export default function DiscoveryFeed() {
         }
       }
     } else {
-      // Fallback auf Clipboard API
       copyToClipboard(shareUrl);
     }
   };
-  // --- ENDE Handler für Teilen ---
 
-  // --- Handler für Trinkgeld (Tip) ---
   const handleTipClick = (e: React.MouseEvent, creator: PostData['creator']) => {
     e.stopPropagation();
     if (!user) {
@@ -177,15 +162,12 @@ export default function DiscoveryFeed() {
   const handleTipSuccess = () => {
     console.log("Tip success!");
   };
-  // --- ENDE Handler für Trinkgeld ---
 
-  // Klick auf PPV-Button (öffnet PPV-Modal)
   const handlePpvClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowPpvModal(true);
   };
 
-  // Klick auf Abo-Button (öffnet Abo-Modal)
   const handleSubscribeClick = (e?: React.MouseEvent) => {
     e?.stopPropagation();
 
@@ -202,21 +184,17 @@ export default function DiscoveryFeed() {
     setShowSubscriptionModal(true);
   };
 
-  // Callback nach erfolgreichem PPV-Kauf
   const handlePurchaseSuccess = (postId: string) => {
     addPurchasedPost(postId);
     setShowPpvModal(false);
   };
 
-  // Callback nach erfolgreichem Abo-Kauf
   const handleSubscriptionComplete = () => {
     setShowSubscriptionModal(false);
     toast({ title: "Erfolgreich abonniert!", description: "Der Post ist jetzt freigeschaltet." });
     loadSubscriptions();
   };
 
-
-  // Lade- und Fehlerzustände
   if (isLoading || isLoadingSubs) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]">
@@ -239,10 +217,9 @@ export default function DiscoveryFeed() {
     );
   }
 
-  // Zugriff prüfen
-  const hasAccess = checkAccess(currentPost, user?.id);
+  // ÄNDERUNG: creatorTiers übergeben
+  const hasAccess = checkAccess(currentPost, user?.id, creatorTiers);
 
-  // Optionen prüfen
   const canPpv = currentPost.price > 0;
   const requiredTier = currentPost.tier_id ? creatorTiers.find(t => t.id === currentPost.tier_id) : null;
   const cheapestTier = creatorTiers.length > 0 ? creatorTiers[0] : null;
@@ -256,7 +233,6 @@ export default function DiscoveryFeed() {
   } else {
     subscribeText = "Abonnieren nicht verfügbar";
   }
-
 
   return (
     <>
@@ -275,11 +251,7 @@ export default function DiscoveryFeed() {
           transition={{ duration: 0.3 }}
           className="h-full w-full relative bg-black"
         >
-          {/* --- LOGIK FÜR VERPIXELTEN INHALT --- */}
-          <div
-            className="w-full h-full"
-            onClick={() => { if(hasAccess) return; }}
-          >
+          <div className="w-full h-full" onClick={() => { if(hasAccess) return; }}>
             {currentPost.mediaType === 'video' ? (
               <video
                 src={currentPost.mediaUrl}
@@ -304,13 +276,9 @@ export default function DiscoveryFeed() {
             )}
           </div>
 
-          {/* --- Overlay mit Schloss und Button-Auswahl --- */}
           {!hasAccess && (
-            <div
-              className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8"
-            >
+            <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8">
               <LockIcon className="w-16 h-16 text-foreground" />
-
               {canPpv && (
                 <Button
                   className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6 w-full max-w-sm"
@@ -319,7 +287,6 @@ export default function DiscoveryFeed() {
                   {`Beitrag für ${currentPost.price.toFixed(2)}€ freischalten`}
                 </Button>
               )}
-
               {canPpv && canSubscribe && (
                  <div className="relative w-full max-w-sm">
                   <div className="absolute inset-0 flex items-center">
@@ -332,7 +299,6 @@ export default function DiscoveryFeed() {
                   </div>
                 </div>
               )}
-
               {canSubscribe && (
                 <Button
                   variant={canPpv ? "outline" : "secondary"}
@@ -350,7 +316,6 @@ export default function DiscoveryFeed() {
               )}
             </div>
           )}
-
 
           {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
 
@@ -407,12 +372,10 @@ export default function DiscoveryFeed() {
               </span>
             </button>
 
-            {/* --- AKTUALISIERT: Share-Button --- */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 const creator = currentPost.creator;
-                // --- NEU: Post-ID wird übergeben ---
                 handleShare(currentPost.id, creator.username || creator.id, creator.name);
               }}
               className="flex flex-col items-center gap-1"
@@ -422,7 +385,6 @@ export default function DiscoveryFeed() {
               </div>
             </button>
 
-            {/* --- AKTUALISIERT: Tip-Button --- */}
             <button
               onClick={(e) => handleTipClick(e, currentPost.creator)}
               className="flex flex-col items-center gap-1"
@@ -460,6 +422,8 @@ export default function DiscoveryFeed() {
               setSelectedPostId(null);
             }}
             post={posts.find(p => p.id === selectedPostId)}
+            // NEU: Callback übergeben
+            onCommentAdded={handleCommentAdded}
           />
         )}
       </AnimatePresence>
@@ -488,7 +452,6 @@ export default function DiscoveryFeed() {
         />
       )}
 
-      {/* --- NEU: TipModal hinzugefügt --- */}
       {showTipModal && selectedCreatorForTip && (
         <TipModal
           isOpen={showTipModal}
