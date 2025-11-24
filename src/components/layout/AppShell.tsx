@@ -15,43 +15,46 @@ export default function AppShell({ children }: AppShellProps) {
   const location = useLocation();
   const { currentRole } = useAppStore();
 
-  // --- NEUE LOGIK: Vollbild-Modus für Live-Streams ---
   const isLiveStreamPage = location.pathname.startsWith('/live');
-  // --- ENDE ---
 
-  // Scrollbar-Logik (unverändert)
-  const routesToHideScrollbar = [
+  // Seiten, die ihre eigene Scroll-Logik haben (kein Padding unten nötig)
+  const isFullScreenPage = [
     '/discover',
     '/feed',
-    '/vault'
-  ];
-  const shouldHideScrollbar = routesToHideScrollbar.includes(location.pathname);
+    '/vault',
+    '/messages' // Messages auch hier, damit es volle Höhe nutzt
+  ].includes(location.pathname);
 
-  // --- KORREKTUR: Wenn Live-Stream, nur children rendern ---
   if (isLiveStreamPage) {
     return (
-      <div className="h-screen flex flex-col bg-background">
-        {/* Die <main> füllt den gesamten Bildschirm, keine Menüs */}
-        <main className="flex-1 overflow-y-auto">
+      <div className="h-[100dvh] flex flex-col bg-background overflow-hidden">
+        <main className="flex-1 relative">
           {children}
         </main>
       </div>
     );
   }
-  // --- ENDE KORREKTUR ---
 
-  // Normales Layout für alle anderen Seiten
   return (
-    <div className="h-screen flex flex-col bg-background">
+    // h-[100dvh] sorgt für korrekte Höhe auf Mobile Browsern
+    <div className="h-[100dvh] w-full flex flex-col bg-background overflow-hidden">
       <TopBar />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden relative">
         <Sidebar isCreatorMode={currentRole === 'creator'} />
+
         <main className={cn(
-          "flex-1 pb-20 md:pb-0 md:ml-64 overflow-y-auto",
-          !shouldHideScrollbar && "chat-messages-scrollbar",
-          shouldHideScrollbar && "scrollbar-hide"
+          "flex-1 flex flex-col min-h-0 w-full md:ml-64 transition-all duration-200",
+          // Auf Mobile fügen wir padding-bottom hinzu, wenn es KEINE Fullscreen-Seite ist,
+          // damit der Inhalt nicht hinter der BottomNav verschwindet.
+          !isFullScreenPage && "pb-16 md:pb-0 overflow-y-auto chat-messages-scrollbar",
+          // Fullscreen-Seiten (Feed, Messages) managen ihren Scroll selbst
+          isFullScreenPage && "overflow-hidden h-full"
         )}>
-          <div className="max-w-7xl mx-auto h-full">
+          {/* Wrapper für max-width, außer bei Fullscreen Seiten */}
+          <div className={cn(
+            "h-full w-full",
+            !isFullScreenPage && "max-w-7xl mx-auto"
+          )}>
             {children}
           </div>
         </main>

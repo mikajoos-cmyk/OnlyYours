@@ -1,3 +1,4 @@
+// src/components/fan/SubscriberFeed.tsx
 import { useState, useRef, useEffect } from 'react';
 import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, LockIcon, UserCheckIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -16,17 +17,6 @@ import TipModal from './TipModal';
 import type { Post as PostData } from '../../services/postService';
 import { tierService, Tier } from '../../services/tierService';
 import SubscriptionModal from './SubscriptionModal';
-
-interface PostData extends Omit<ServicePostData, 'creator'> {
-  creator: {
-    id: string;
-    name: string;
-    avatar: string;
-    username: string;
-    isVerified?: boolean;
-  };
-  media: string;
-}
 
 interface SubscriberFeedProps {
   initialPosts?: PostData[] | ServicePostData[];
@@ -78,9 +68,9 @@ export default function SubscriberFeed({
     if (isProfileView && initialPostsProp) {
       const transformedPosts = initialPostsProp.map(p => ({
         ...p,
-        mediaUrl: (p as PostData).media || (p as ServicePostData).mediaUrl,
-        creator: (p as ServicePostData).creator || (p as PostData).creator,
-        creatorId: (p as ServicePostData).creatorId || (p as PostData).creator.id,
+        mediaUrl: (p as any).media || (p as any).mediaUrl,
+        creator: (p as any).creator,
+        creatorId: (p as any).creatorId || (p as any).creator.id,
       }));
       setPosts(transformedPosts as ServicePostData[]);
       setCurrentIndex(initialIndex);
@@ -165,7 +155,7 @@ export default function SubscriberFeed({
 
   const handleLike = async (postId: string) => {
     if (isProfileView) {
-      // Lokale Like-Logik (für Profile View) kann hier noch erweitert werden
+      // TODO: Lokale Like-Logik wenn nötig
     } else {
       await toggleLikeAction(postId);
     }
@@ -181,7 +171,7 @@ export default function SubscriberFeed({
         if (!isProfileView) {
             incrementCommentCount(selectedPostIdForComments);
         } else {
-            setPosts(prev => prev.map(p =>
+             setPosts(prev => prev.map(p =>
                 p.id === selectedPostIdForComments
                     ? { ...p, comments: p.comments + 1 }
                     : p
@@ -296,7 +286,6 @@ export default function SubscriberFeed({
     return null;
   }
 
-  // ÄNDERUNG: creatorTiers übergeben
   const hasAccess = checkAccess(currentPost, user?.id, creatorTiers);
 
   const canPpv = currentPost.price > 0;
@@ -325,10 +314,8 @@ export default function SubscriberFeed({
       <div
         ref={containerRef}
         className={cn(
-          "w-full overflow-hidden relative bg-black",
-          isProfileView
-            ? "fixed top-16 left-0 right-0 bottom-16 z-40 md:left-64 md:bottom-0 md:h-[calc(100vh-4rem)]"
-            : "h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]"
+          "w-full h-[100dvh] overflow-hidden relative bg-black", // Mobile-fix
+          isProfileView && "fixed inset-0 z-40 md:left-64 md:bottom-0 md:h-[calc(100vh-4rem)]"
         )}
         onWheel={handleScroll}
         onTouchStart={handleTouchStartCapture}
@@ -424,7 +411,6 @@ export default function SubscriberFeed({
               </div>
             )}
 
-
             {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
 
             <div className="absolute top-4 left-4 right-20 z-10">
@@ -448,7 +434,7 @@ export default function SubscriberFeed({
                 </div>
             </div>
 
-            <div className="absolute right-4 bottom-32 z-10 flex flex-col gap-6 md:bottom-8">
+            <div className="absolute right-4 bottom-32 z-10 flex flex-col gap-6 md:bottom-8 pb-safe">
                 <motion.button
                     whileTap={{ scale: 0.9 }}
                     onClick={() => hasAccess && handleLike(currentPost.id)}
@@ -505,7 +491,7 @@ export default function SubscriberFeed({
                 </button>
             </div>
 
-            <div className="absolute bottom-4 left-4 right-20 z-10 md:bottom-8">
+            <div className="absolute bottom-4 left-4 right-20 z-10 md:bottom-8 pb-safe">
                 <p className={cn("text-foreground drop-shadow-lg mb-2", !hasAccess && "filter blur-sm select-none")}>
                   {hasAccess ? currentPost.caption : "Abonnieren oder kaufen, um die Beschreibung zu sehen."}
                 </p>
@@ -529,7 +515,6 @@ export default function SubscriberFeed({
               setSelectedPostIdForComments(null);
             }}
             post={posts.find(p => p.id === selectedPostIdForComments)}
-            // NEU: Callback
             onCommentAdded={handleCommentAdded}
           />
         )}

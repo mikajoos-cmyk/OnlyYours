@@ -38,6 +38,18 @@
     --radius: 0.75rem;
   }
 
+  /* NEU: Verhindert das "Bouncen" der ganzen Seite auf Mobile */
+  html,
+  body,
+  #app {
+    height: 100%;
+    width: 100%;
+    overflow: hidden; /* Wichtig: Deaktiviert Scrollen auf Body-Ebene */
+    overscroll-behavior: none; /* Verhindert Pull-to-Refresh/Bounce Effekte */
+    touch-action: manipulation; /* Verbessert Touch-Reaktion */
+    -webkit-tap-highlight-color: transparent;
+  }
+
   * {
     @apply border-border;
   }
@@ -63,47 +75,35 @@
   .text-balance {
     text-wrap: balance;
   }
-}
-/* src/index.css */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* ... andere Basis-Styles ... */
-
-@layer utilities {
   /* Benutzerdefinierte Scrollbar für den Chat-Nachrichtenbereich */
   .chat-messages-scrollbar {
-    /* Firefox */
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--color-secondary)) transparent; /* Daumenfarbe, Trackfarbe */
+    scrollbar-color: hsl(var(--color-secondary)) transparent;
   }
 
-  /* Webkit-Browser (Chrome, Safari, Edge, etc.) */
   .chat-messages-scrollbar::-webkit-scrollbar {
-    width: 6px; /* Breite der Scrollbar */
+    width: 6px;
   }
 
   .chat-messages-scrollbar::-webkit-scrollbar-track {
-    background: transparent; /* Hintergrund des Tracks (unsichtbar) */
+    background: transparent;
   }
 
   .chat-messages-scrollbar::-webkit-scrollbar-thumb {
-    background-color: hsl(var(--color-secondary)); /* Farbe des Scroll-Daumens (deine Akzentfarbe) */
-    border-radius: 3px; /* Abrundung des Daumens */
+    background-color: hsl(var(--color-secondary));
+    border-radius: 3px;
   }
 
   .chat-messages-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: hsl(var(--color-secondary) / 0.8); /* Leicht transparent beim Hover */
+    background-color: hsl(var(--color-secondary) / 0.8);
   }
 
-  /* Optional: Hilfsklasse zum kompletten Ausblenden */
   .scrollbar-hide::-webkit-scrollbar {
       display: none;
   }
   .scrollbar-hide {
-      -ms-overflow-style: none;  /* IE and Edge */
-      scrollbar-width: none;  /* Firefox */
+      -ms-overflow-style: none;
+      scrollbar-width: none;
   }
 }
