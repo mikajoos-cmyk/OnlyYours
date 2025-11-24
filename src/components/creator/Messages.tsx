@@ -10,8 +10,6 @@ import { messageService, Message, Chat as ServiceChat } from '../../services/mes
 import { useAuthStore } from '../../stores/authStore';
 import MassMessageModal from './MassMessageModal';
 import { useAppStore } from '../../stores/appStore';
-// --- FIX: cn importieren ---
-import { cn } from '../../lib/utils';
 
 interface Chat {
   id: string;
@@ -45,7 +43,7 @@ export default function Messages() {
 
   const [showMassMessageModal, setShowMassMessageModal] = useState(false);
 
-
+  // Lade die Chat-Liste
   useEffect(() => {
     const fetchChatList = async () => {
       try {
@@ -70,6 +68,7 @@ export default function Messages() {
     fetchChatList();
   }, []);
 
+  // Lade Nachrichten, wenn ein Chat ausgewählt wird
   useEffect(() => {
     if (!selectedChat?.user.id) return;
 
@@ -100,6 +99,7 @@ export default function Messages() {
     fetchConversation();
   }, [selectedChat?.user.id]);
 
+  // Effekt für Polling
   useEffect(() => {
       const pollNewMessages = async () => {
           if (!selectedChat?.user.id || !lastMessageTimestampRef.current) {
@@ -221,53 +221,56 @@ export default function Messages() {
     }
   };
 
-
   return (
-     <div className="flex flex-col h-full w-full">
+     // --- ÄNDERUNG HIER: Responsive Höhe ---
+     // Auf Mobile: h-[calc(100dvh-8rem)] (100vh minus TopBar & BottomNav)
+     // Auf Desktop: h-full
+     <div className="flex flex-col h-[calc(100dvh-8rem)] lg:h-full">
+         <div className="max-w-5xl mx-auto w-full flex flex-col flex-1 p-4 min-h-0">
 
-         <div className="hidden lg:flex items-center justify-between p-4 border-b border-border flex-shrink-0">
-           <h1 className="text-2xl font-serif text-foreground">
-             Nachrichten
-           </h1>
-           {currentRole === 'creator' && (
+           <div className="flex items-center justify-between mb-8 flex-shrink-0">
+             <h1 className="text-3xl font-serif text-foreground hidden lg:block">
+               Nachrichten
+             </h1>
+
+             {currentRole === 'creator' && (
                <Button
                   variant="outline"
-                  size="sm"
+                  className="bg-card text-foreground border-border hover:bg-neutral font-normal hidden lg:flex" // Button nur Desktop
                   onClick={() => setShowMassMessageModal(true)}
                >
-                  <Send className="w-4 h-4 mr-2" strokeWidth={1.5} />
-                  Massen-Nachricht
+                  <Send className="w-5 h-5 mr-2" strokeWidth={1.5} />
+                  Massen-Nachricht senden
                </Button>
-           )}
-         </div>
+             )}
 
-         <div className="flex-1 flex min-h-0 w-full max-w-7xl mx-auto lg:p-4 lg:gap-6">
+             {/* Mobile Massen-Nachricht Button */}
+             {currentRole === 'creator' && !selectedChat && (
+                <Button
+                    variant="outline"
+                    className="bg-card text-foreground border-border hover:bg-neutral font-normal lg:hidden w-full mb-4"
+                    onClick={() => setShowMassMessageModal(true)}
+                >
+                    <Send className="w-5 h-5 mr-2" strokeWidth={1.5} />
+                    Massen-Nachricht
+                </Button>
+             )}
 
-             <Card className={cn(
-                 "bg-card border-border flex flex-col h-full w-full lg:w-1/3 lg:rounded-lg border-0 lg:border",
-                 selectedChat ? 'hidden lg:flex' : 'flex'
-             )}>
-               <div className="p-4 border-b border-border lg:hidden flex justify-between items-center">
-                 <h1 className="text-xl font-serif">Nachrichten</h1>
-                 {currentRole === 'creator' && (
-                    <Button variant="ghost" size="icon" onClick={() => setShowMassMessageModal(true)}>
-                        <Send className="w-5 h-5" />
-                    </Button>
-                 )}
-               </div>
+           </div>
 
+           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
+
+             <Card className={`bg-card border-border lg:col-span-1 overflow-hidden ${selectedChat ? 'hidden lg:flex lg:flex-col' : 'flex flex-col'} h-full`}>
                <div className="overflow-y-auto flex-1 chat-messages-scrollbar">
                  {loadingChats && <p className="p-4 text-center text-muted-foreground">Lade Chats...</p>}
-                 {!loadingChats && chats.length === 0 && <p className="p-4 text-center text-muted-foreground">Keine Chats.</p>}
-                 <div className="p-2 space-y-1">
+                 {error && !loadingChats && <p className="p-4 text-destructive">{error}</p>}
+                 {!loadingChats && !error && chats.length === 0 && <p className="p-4 text-center text-muted-foreground">Keine Chats vorhanden.</p>}
+                 <div className="p-4 space-y-2">
                    {chats.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((chat) => (
                      <button
                        key={chat.id}
                        onClick={() => handleChatSelect(chat)}
-                       className={cn(
-                           "w-full flex items-center gap-3 p-3 rounded-lg transition-colors",
-                           selectedChat?.user.id === chat.user.id ? 'bg-secondary/20' : 'hover:bg-neutral'
-                       )}>
+                       className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${selectedChat?.user.id === chat.user.id ? 'bg-secondary/20' : 'hover:bg-neutral'}`}>
                        <Avatar className="w-12 h-12 flex-shrink-0">
                          <AvatarImage src={chat.user.avatar} alt={chat.user.name} />
                          <AvatarFallback className="bg-secondary text-secondary-foreground">{chat.user.name.charAt(0)}</AvatarFallback>
@@ -278,7 +281,7 @@ export default function Messages() {
                            {chat.unread > 0 && <span className="bg-secondary text-secondary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">{chat.unread}</span>}
                          </div>
                          <p className="text-sm text-muted-foreground truncate">{chat.lastMessage}</p>
-                         <span className="text-xs text-muted-foreground opacity-70">{chat.timestamp}</span>
+                         <span className="text-xs text-muted-foreground">{chat.timestamp}</span>
                        </div>
                      </button>
                    ))}
@@ -286,78 +289,75 @@ export default function Messages() {
                </div>
              </Card>
 
-             <div className={cn(
-                 "bg-card lg:border border-border lg:rounded-lg lg:flex-1 flex-col h-full overflow-hidden",
-                 selectedChat ? 'flex fixed inset-0 z-50 lg:static' : 'hidden lg:flex'
-             )}>
-                {selectedChat ? (
-                 <>
-                    <div className="p-3 border-b border-border flex items-center gap-3 flex-shrink-0 bg-card">
-                        <Button variant="ghost" size="icon" onClick={handleBack} className="lg:hidden">
-                            <ArrowLeftIcon className="w-6 h-6" strokeWidth={1.5} />
-                        </Button>
-                        <Avatar className="w-10 h-10 cursor-pointer" onClick={() => handleProfileClick(selectedChat.user.username)}>
-                            <AvatarImage src={selectedChat.user.avatar} alt={selectedChat.user.name} />
-                            <AvatarFallback className="bg-secondary text-secondary-foreground">{selectedChat.user.name.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 cursor-pointer" onClick={() => handleProfileClick(selectedChat.user.username)}>
-                            <span className="font-medium text-foreground block leading-tight">{selectedChat.user.name}</span>
-                            <span className="text-xs text-muted-foreground">@{selectedChat.user.username || 'user'}</span>
-                        </div>
-                    </div>
+             {selectedChat ? (
+               <div className={`bg-card border border-border rounded-lg lg:col-span-2 flex flex-col h-full overflow-hidden ${selectedChat ? 'flex' : 'hidden lg:flex'}`}>
+                 <div className="p-4 border-b border-border flex items-center gap-3 flex-shrink-0">
+                   <Button variant="ghost" size="icon" onClick={handleBack} className="lg:hidden text-foreground hover:text-secondary hover:bg-neutral">
+                     <ArrowLeftIcon className="w-5 h-5" strokeWidth={1.5} />
+                   </Button>
+                   <Avatar className="w-10 h-10 cursor-pointer" onClick={() => handleProfileClick(selectedChat.user.username)}>
+                     <AvatarImage src={selectedChat.user.avatar} alt={selectedChat.user.name} />
+                     <AvatarFallback className="bg-secondary text-secondary-foreground">{selectedChat.user.name.charAt(0)}</AvatarFallback>
+                   </Avatar>
+                   <div className="flex-1 cursor-pointer" onClick={() => handleProfileClick(selectedChat.user.username)}>
+                     <span className="font-medium text-foreground block">{selectedChat.user.name}</span>
+                     {selectedChat.user.username && <span className="text-sm text-muted-foreground">@{selectedChat.user.username}</span>}
+                   </div>
+                   <Button variant="ghost" size="icon" onClick={() => handleProfileClick(selectedChat.user.username)} className="text-foreground hover:text-secondary hover:bg-neutral">
+                     <UserIcon className="w-5 h-5" strokeWidth={1.5} />
+                   </Button>
+                 </div>
 
-                    <div className="flex-1 overflow-y-auto p-4 min-h-0 chat-messages-scrollbar bg-background lg:bg-card">
-                        {loadingMessages && <p className="text-center text-muted-foreground mt-4">Lade...</p>}
-                        {!loadingMessages && messages.length === 0 && <p className="text-center text-muted-foreground mt-4">Schreib die erste Nachricht!</p>}
-                        <div className="space-y-3 flex flex-col pb-2">
-                            {messages.map((msg) => (
-                            <div key={msg.id} className={`flex ${msg.senderId === currentUser?.id ? 'justify-end' : 'justify-start'}`}>
-                                <div className={cn(
-                                    "max-w-[80%] px-4 py-2 rounded-2xl text-sm",
-                                    msg.senderId === currentUser?.id
-                                        ? 'bg-secondary text-secondary-foreground rounded-br-sm'
-                                        : 'bg-neutral text-foreground rounded-bl-sm'
-                                )}>
-                                <p className="break-words whitespace-pre-wrap">{msg.content}</p>
-                                <div className="flex items-center justify-end gap-1 mt-1 text-[10px] opacity-70">
-                                    <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                    {msg.senderId === currentUser?.id && <CheckCheckIcon className={cn("w-3 h-3", msg.isRead && "text-blue-400")} />}
-                                </div>
-                                </div>
-                            </div>
-                            ))}
-                            <div ref={messagesEndRef} />
-                        </div>
-                    </div>
+                 <div className="flex-1 overflow-y-auto p-4 min-h-0 chat-messages-scrollbar">
+                   {loadingMessages && <p className="text-center text-muted-foreground">Lade Nachrichten...</p>}
+                   {error && loadingMessages && <p className="p-4 text-destructive">{error}</p>}
+                   {!loadingMessages && messages.length === 0 && <p className="text-center text-muted-foreground">Beginne eine neue Konversation.</p>}
+                   <div className="space-y-4 flex flex-col">
+                     {messages.map((msg) => (
+                       <div key={msg.id} className={`flex ${msg.senderId === currentUser?.id ? 'justify-end' : 'justify-start'}`}>
+                         <div className={`max-w-[75%] lg:max-w-[65%] px-4 py-2 rounded-lg ${msg.senderId === currentUser?.id ? 'bg-secondary text-secondary-foreground rounded-br-none' : 'bg-neutral text-foreground rounded-bl-none'}`}>
+                           <p className="break-words whitespace-pre-wrap">{msg.content}</p>
+                           <div className="flex items-center justify-end gap-1 mt-1 text-xs opacity-70">
+                             <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                             {msg.senderId === currentUser?.id && <CheckCheckIcon className={`w-4 h-4 ${msg.isRead ? 'text-blue-400' : ''}`} strokeWidth={1.5} />}
+                           </div>
+                         </div>
+                       </div>
+                     ))}
+                     <div ref={messagesEndRef} />
+                   </div>
+                 </div>
 
-                    <div className="p-3 border-t border-border flex-shrink-0 bg-card pb-safe">
-                        <div className="flex gap-2 items-end">
-                            <Input
-                            placeholder="Nachricht..."
-                            value={message}
-                            onChange={(e) => setMessage(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                            className="bg-neutral border-transparent focus:border-secondary rounded-full px-4 py-2 min-h-[44px]"
-                            disabled={!currentUser}
-                            />
-                            <Button
-                            onClick={handleSend}
-                            size="icon"
-                            className="bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-full h-11 w-11 flex-shrink-0"
-                            disabled={!message.trim() || !currentUser}
-                            >
-                            <SendIcon className="w-5 h-5 ml-0.5" />
-                            </Button>
-                        </div>
-                    </div>
-                 </>
-                ) : (
-                    <div className="hidden lg:flex flex-col items-center justify-center h-full text-muted-foreground">
-                        <MessageCircleIcon className="w-16 h-16 mb-4 opacity-20" />
-                        <p>Wähle einen Chat aus, um zu beginnen.</p>
-                    </div>
-                )}
-             </div>
+                 <div className="p-4 border-t border-border flex-shrink-0 bg-card">
+                   <div className="flex gap-2">
+                     <Input
+                       placeholder="Nachricht schreiben..."
+                       value={message}
+                       onChange={(e) => setMessage(e.target.value)}
+                       onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                       className="bg-background text-foreground border-border"
+                       disabled={!currentUser}
+                     />
+                     <Button
+                       onClick={handleSend}
+                       size="icon"
+                       className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal flex-shrink-0"
+                       disabled={!message.trim() || !currentUser}
+                       >
+                       <SendIcon className="w-5 h-5" strokeWidth={1.5} />
+                     </Button>
+                   </div>
+                 </div>
+               </div>
+             ) : (
+                <Card className="hidden lg:flex bg-card border-border lg:col-span-2 items-center justify-center h-full">
+                  <div className="text-center text-muted-foreground">
+                    <MessageCircleIcon className="w-12 h-12 mx-auto mb-4" strokeWidth={1}/>
+                    <p>Wähle eine Konversation aus</p>
+                  </div>
+                </Card>
+              )}
+           </div>
          </div>
 
          {currentRole === 'creator' && (
