@@ -1,3 +1,4 @@
+// src/components/fan/DiscoveryFeed.tsx
 import { useState, useRef, useEffect } from 'react';
 import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, LockIcon, UserCheckIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -36,7 +37,6 @@ export default function DiscoveryFeed() {
 
   const { checkAccess, addPurchasedPost, isLoading: isLoadingSubs, loadSubscriptions } = useSubscriptionStore();
 
-  // Lokale States
   const [showComments, setShowComments] = useState(false);
   const [selectedPostIdForComments, setSelectedPostIdForComments] = useState<string | null>(null);
   const [showPpvModal, setShowPpvModal] = useState(false);
@@ -47,12 +47,11 @@ export default function DiscoveryFeed() {
   const [showTipModal, setShowTipModal] = useState(false);
   const [selectedCreatorForTip, setSelectedCreatorForTip] = useState<PostData['creator'] | null>(null);
 
-  const [isViewerOpen, setIsViewerOpen] = useState(false); // Falls wir Details öffnen wollen (optional)
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
 
-  // 1. Posts laden
   useEffect(() => {
     if (posts.length === 0) {
       loadDiscoveryPosts();
@@ -61,7 +60,6 @@ export default function DiscoveryFeed() {
 
   const currentPost = posts[currentIndex];
 
-  // 2. Tiers für den aktuellen Creator laden (für Sperrbildschirm/Modal)
   useEffect(() => {
     if (!currentPost?.creatorId) {
       setCreatorTiers([]);
@@ -81,7 +79,6 @@ export default function DiscoveryFeed() {
     fetchTiers();
   }, [currentPost?.creatorId]);
 
-  // 3. Keyboard Navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (showPpvModal || showComments || isViewerOpen || showSubscriptionModal || showTipModal) return;
@@ -92,7 +89,6 @@ export default function DiscoveryFeed() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [nextPost, previousPost, showPpvModal, showComments, isViewerOpen, showSubscriptionModal, showTipModal]);
 
-  // 4. Scroll/Swipe Logic
   const handleScroll = (e: React.WheelEvent) => {
     if (isScrolling.current || Math.abs(e.deltaY) < 50 || showPpvModal || showComments || showSubscriptionModal || showTipModal) return;
     isScrolling.current = true;
@@ -117,7 +113,6 @@ export default function DiscoveryFeed() {
     handleTouchStart.current = { y: e.touches[0].clientY };
   };
 
-  // 5. Actions
   const handleLike = (postId: string) => {
     toggleLike(postId);
   };
@@ -197,33 +192,31 @@ export default function DiscoveryFeed() {
   };
 
   const handleTipSuccess = () => {
-    // Optional: Konfetti oder Feedback
   };
 
-  // 6. Render Logic
+  // --- ÄNDERUNG: Container auf h-full setzen ---
   if (isLoading || isLoadingSubs) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]">
+      <div className="flex items-center justify-center h-full">
         <p className="text-foreground">Lade Entdeckungs-Feed...</p>
       </div>
     );
   }
   if (error) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]">
+      <div className="flex items-center justify-center h-full">
         <p className="text-destructive">{error}</p>
       </div>
     );
   }
   if (!currentPost) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]">
+      <div className="flex items-center justify-center h-full">
         <p className="text-foreground">Keine Posts gefunden.</p>
       </div>
     );
   }
 
-  // Zugriff prüfen
   const hasAccess = checkAccess(currentPost, user?.id, creatorTiers);
 
   const canPpv = currentPost.price > 0;
@@ -244,7 +237,8 @@ export default function DiscoveryFeed() {
     <>
       <div
         ref={containerRef}
-        className="w-full overflow-hidden relative h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]"
+        // --- ÄNDERUNG: h-full statt calc() ---
+        className="w-full overflow-hidden relative h-full"
         onWheel={handleScroll}
         onTouchStart={handleTouchStartCapture}
         onTouchMove={handleTouchMove}
@@ -257,7 +251,6 @@ export default function DiscoveryFeed() {
           transition={{ duration: 0.3 }}
           className="h-full w-full relative bg-black"
         >
-          {/* Medien Inhalt */}
           <div className="w-full h-full" onClick={() => { if(hasAccess) return; }}>
             {currentPost.mediaType === 'video' ? (
               <video
@@ -283,7 +276,6 @@ export default function DiscoveryFeed() {
             )}
           </div>
 
-          {/* Locked Overlay */}
           {!hasAccess && (
             <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8">
               <LockIcon className="w-16 h-16 text-foreground" />
@@ -330,7 +322,6 @@ export default function DiscoveryFeed() {
 
           {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
 
-          {/* Header Info */}
           <div className="absolute top-4 left-4 right-20 z-10">
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/profile/${currentPost.creator.username || currentPost.creatorId}`)}>
               <Avatar className="w-12 h-12 border-2 border-foreground">
@@ -350,7 +341,6 @@ export default function DiscoveryFeed() {
             </div>
           </div>
 
-          {/* Rechte Sidebar Aktionen */}
           <div className="absolute right-4 bottom-32 z-10 flex flex-col gap-6">
             <motion.button
               whileTap={{ scale: 0.9 }}
@@ -408,7 +398,6 @@ export default function DiscoveryFeed() {
             </button>
           </div>
 
-          {/* Caption Footer */}
           <div className="absolute bottom-4 left-4 right-20 z-10">
             <p className={cn(
                 "text-foreground drop-shadow-lg mb-2",
@@ -427,7 +416,6 @@ export default function DiscoveryFeed() {
         </motion.div>
       </div>
 
-      {/* Modals */}
       <AnimatePresence>
         {selectedPostIdForComments !== null && showComments && (
           <CommentsSheet

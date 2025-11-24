@@ -1,3 +1,4 @@
+// src/components/fan/CommentsSheet.tsx
 import { useState, useEffect } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Input } from '../ui/input';
@@ -7,12 +8,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { commentService, Comment } from '../../services/commentService';
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../hooks/use-toast';
+import { cn } from '../../lib/utils'; // cn importieren
 
 interface CommentsSheetProps {
   isOpen: boolean;
   onClose: () => void;
   post: any;
-  // NEU: Callback für erfolgreichen Kommentar
   onCommentAdded?: () => void;
 }
 
@@ -22,6 +23,32 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
   const [isLoading, setIsLoading] = useState(false);
   const { user: currentUser } = useAuthStore();
   const { toast } = useToast();
+
+  // --- NEU: Tastatur-Erkennung ---
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const handleFocus = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        setIsKeyboardOpen(true);
+      }
+    };
+    const handleBlur = () => {
+       setTimeout(() => {
+        if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+            setIsKeyboardOpen(false);
+        }
+      }, 100);
+    };
+    window.addEventListener('focusin', handleFocus);
+    window.addEventListener('focusout', handleBlur);
+    return () => {
+      window.removeEventListener('focusin', handleFocus);
+      window.removeEventListener('focusout', handleBlur);
+    };
+  }, []);
+  // --- ENDE NEU ---
 
   const fetchComments = async () => {
     if (!post?.id) return;
@@ -72,7 +99,6 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
       setComments(prevComments => [...prevComments, newComment]);
       setCommentInput('');
 
-      // NEU: Callback aufrufen, um Zähler im Parent zu aktualisieren
       if (onCommentAdded) {
         onCommentAdded();
       }
@@ -96,7 +122,14 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed bottom-16 md:bottom-0 left-0 md:left-64 right-0 bg-card/95 backdrop-blur-md border-t border-border max-h-[70vh] flex flex-col rounded-t-3xl z-50"
+        className={cn(
+          "fixed left-0 md:left-64 right-0 bg-card/95 backdrop-blur-md border-t border-border flex flex-col rounded-t-3xl z-50 transition-all duration-200",
+          // --- ÄNDERUNG: Dynamische Positionierung ---
+          // Wenn Tastatur offen: bottom-0 (direkt darüber)
+          // Wenn Tastatur zu: bottom-16 (über der Navigationsleiste auf Mobile)
+          // Desktop (md): immer bottom-0
+          isKeyboardOpen ? "bottom-0 h-[50vh]" : "bottom-16 md:bottom-0 max-h-[70vh]"
+        )}
       >
         <div className="p-4 border-b border-border flex-shrink-0 flex items-center justify-between">
           <h3 className="text-foreground text-center font-medium flex-1">
@@ -151,7 +184,7 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
           )}
         </div>
 
-        <div className="p-4 border-t border-border flex-shrink-0 bg-card">
+        <div className="p-4 border-t border-border flex-shrink-0 bg-card pb-safe">
           <div className="flex gap-2">
             <Input
               placeholder="Kommentar hinzufügen..."

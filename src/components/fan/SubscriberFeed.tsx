@@ -260,9 +260,10 @@ export default function SubscriberFeed({
     }
   };
 
+  // --- ÄNDERUNG: Container auf h-full setzen ---
   if (isLoading || (isLoadingSubs && !isProfileView)) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]">
+      <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">Lade Feed...</p>
       </div>
     );
@@ -277,7 +278,7 @@ export default function SubscriberFeed({
   }
   if (!currentPost && !isLoading) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]">
+      <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">Keine abonnierten Posts zum Anzeigen.</p>
       </div>
     );
@@ -314,7 +315,8 @@ export default function SubscriberFeed({
       <div
         ref={containerRef}
         className={cn(
-          "w-full h-[100dvh] overflow-hidden relative bg-black", // Mobile-fix
+          // --- ÄNDERUNG: h-full statt h-[100dvh] ---
+          "w-full h-full overflow-hidden relative bg-black",
           isProfileView && "fixed inset-0 z-40 md:left-64 md:bottom-0 md:h-[calc(100vh-4rem)]"
         )}
         onWheel={handleScroll}
