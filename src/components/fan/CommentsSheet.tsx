@@ -1,4 +1,3 @@
-// src/components/fan/CommentsSheet.tsx
 import { useState, useEffect } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Input } from '../ui/input';
@@ -24,6 +23,7 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
   const { user: currentUser } = useAuthStore();
   const { toast } = useToast();
 
+  // State zur Erkennung, ob die Tastatur offen ist (Fokus auf Input)
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
   useEffect(() => {
@@ -33,13 +33,16 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
         setIsKeyboardOpen(true);
       }
     };
+
     const handleBlur = () => {
+       // Kleine Verzögerung, um Fokus-Wechsel nicht als Schließen zu werten
        setTimeout(() => {
         if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
             setIsKeyboardOpen(false);
         }
       }, 100);
     };
+
     window.addEventListener('focusin', handleFocus);
     window.addEventListener('focusout', handleBlur);
     return () => {
@@ -122,6 +125,10 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
         className={cn(
           "fixed left-0 md:left-64 right-0 bg-card/95 backdrop-blur-md border-t border-border flex flex-col rounded-t-3xl z-50 transition-all duration-200",
+          // LAYOUT-FIX:
+          // Wenn Tastatur offen (Fokus): bottom-0 (direkt über Tastatur, da BottomNav weg ist)
+          // Wenn Tastatur zu: bottom-16 (Platz für BottomNav auf Mobile)
+          // Desktop (md): immer bottom-0
           isKeyboardOpen ? "bottom-0 h-[50vh]" : "bottom-16 md:bottom-0 max-h-[70vh]"
         )}
       >
@@ -187,11 +194,14 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
               onKeyPress={(e) => e.key === 'Enter' && handleCommentSubmit()}
               className="bg-background text-foreground border-border flex-1"
               disabled={!currentUser}
-              // --- ÄNDERUNG: Attribute gegen Autofill/Leiste ---
+              // --- FIX FÜR VORSCHLAGSLEISTE / AUTOFILL ---
               autoComplete="off"
               autoCorrect="off"
+              autoCapitalize="off"
               spellCheck={false}
-              // --- ENDE ---
+              data-form-type="other"
+              name={`comment_field_${post?.id}`} // Eindeutiger Name verhindert oft Autofill
+              // -------------------------------------------
             />
             <Button
               onClick={handleCommentSubmit}
