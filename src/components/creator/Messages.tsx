@@ -10,6 +10,7 @@ import { messageService, Message, Chat as ServiceChat } from '../../services/mes
 import { useAuthStore } from '../../stores/authStore';
 import MassMessageModal from './MassMessageModal';
 import { useAppStore } from '../../stores/appStore';
+import { cn } from '../../lib/utils';
 
 interface Chat {
   id: string;
@@ -42,6 +43,31 @@ export default function Messages() {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [showMassMessageModal, setShowMassMessageModal] = useState(false);
+
+  // State für Tastatur-Erkennung, um Padding unten zu steuern
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const handleFocus = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        setIsKeyboardOpen(true);
+      }
+    };
+    const handleBlur = () => {
+       setTimeout(() => {
+        if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+            setIsKeyboardOpen(false);
+        }
+      }, 100);
+    };
+    window.addEventListener('focusin', handleFocus);
+    window.addEventListener('focusout', handleBlur);
+    return () => {
+      window.removeEventListener('focusin', handleFocus);
+      window.removeEventListener('focusout', handleBlur);
+    };
+  }, []);
 
   // Lade die Chat-Liste
   useEffect(() => {
@@ -222,12 +248,20 @@ export default function Messages() {
   };
 
   return (
-     // ÄNDERUNG HIER: Responsive Höhe für Mobile UND Desktop
-     // h-full statt calc(), da AppShell die Höhe kontrolliert
-     <div className="flex flex-col h-full">
-         <div className="max-w-5xl mx-auto w-full flex flex-col flex-1 p-4 min-h-0">
+     <div className={cn(
+       "flex flex-col h-full",
+       // WICHTIG: Padding unten hinzufügen, damit BottomNav nicht das Inputfeld verdeckt.
+       // Aber nur, wenn Tastatur NICHT offen ist (da BottomNav dann ausgeblendet wird).
+       !isKeyboardOpen && "pb-16 lg:pb-0"
+     )}>
+         {/* Container: p-0 auf Mobile um Platz zu sparen, p-4 auf Desktop */}
+         <div className="max-w-5xl mx-auto w-full flex flex-col flex-1 p-0 lg:p-4 min-h-0">
 
-           <div className="flex items-center justify-between mb-8 flex-shrink-0">
+           {/* Header Bereich - p-4 hinzufügen, da Container p-0 hat */}
+           <div className={cn(
+             "flex items-center justify-between flex-shrink-0 px-4 pt-4 lg:px-0 lg:pt-0",
+             selectedChat ? "hidden lg:flex lg:mb-8" : "mb-4 lg:mb-8"
+           )}>
              <h1 className="text-3xl font-serif text-foreground hidden lg:block">
                Nachrichten
              </h1>
@@ -246,29 +280,37 @@ export default function Messages() {
              {currentRole === 'creator' && !selectedChat && (
                 <Button
                     variant="outline"
-                    className="bg-card text-foreground border-border hover:bg-neutral font-normal lg:hidden w-full mb-4"
+                    className="bg-card text-foreground border-border hover:bg-neutral font-normal lg:hidden w-full"
                     onClick={() => setShowMassMessageModal(true)}
                 >
                     <Send className="w-5 h-5 mr-2" strokeWidth={1.5} />
                     Massen-Nachricht
                 </Button>
              )}
-
            </div>
 
-           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
+           <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 lg:gap-6 flex-1 min-h-0">
 
-             <Card className={`bg-card border-border lg:col-span-1 overflow-hidden ${selectedChat ? 'hidden lg:flex lg:flex-col' : 'flex flex-col'} h-full`}>
+             {/* Chat Liste */}
+             <Card className={cn(
+               "bg-card border-border lg:col-span-1 overflow-hidden flex flex-col h-full",
+               // Auf Mobile: border und rounded entfernen für full-screen feel
+               "border-x-0 border-b-0 rounded-none lg:border lg:rounded-lg",
+               selectedChat ? 'hidden lg:flex' : 'flex'
+             )}>
                <div className="overflow-y-auto flex-1 chat-messages-scrollbar">
                  {loadingChats && <p className="p-4 text-center text-muted-foreground">Lade Chats...</p>}
                  {error && !loadingChats && <p className="p-4 text-destructive">{error}</p>}
                  {!loadingChats && !error && chats.length === 0 && <p className="p-4 text-center text-muted-foreground">Keine Chats vorhanden.</p>}
-                 <div className="p-4 space-y-2">
+                 <div className="p-2 lg:p-4 space-y-2">
                    {chats.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((chat) => (
                      <button
                        key={chat.id}
                        onClick={() => handleChatSelect(chat)}
-                       className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${selectedChat?.user.id === chat.user.id ? 'bg-secondary/20' : 'hover:bg-neutral'}`}>
+                       className={cn(
+                         "w-full flex items-center gap-3 p-3 rounded-lg transition-colors",
+                         selectedChat?.user.id === chat.user.id ? 'bg-secondary/20' : 'hover:bg-neutral'
+                       )}>
                        <Avatar className="w-12 h-12 flex-shrink-0">
                          <AvatarImage src={chat.user.avatar} alt={chat.user.name} />
                          <AvatarFallback className="bg-secondary text-secondary-foreground">{chat.user.name.charAt(0)}</AvatarFallback>
@@ -287,37 +329,45 @@ export default function Messages() {
                </div>
              </Card>
 
+             {/* Chat Fenster */}
              {selectedChat ? (
-               <div className={`bg-card border border-border rounded-lg lg:col-span-2 flex flex-col h-full overflow-hidden ${selectedChat ? 'flex' : 'hidden lg:flex'}`}>
-                 <div className="p-4 border-b border-border flex items-center gap-3 flex-shrink-0">
+               <div className={cn(
+                 "bg-card border-border lg:col-span-2 flex-col h-full overflow-hidden",
+                 // Mobile Styling Anpassungen
+                 "border-0 rounded-none lg:border lg:rounded-lg",
+                 selectedChat ? 'flex' : 'hidden lg:flex'
+               )}>
+                 {/* Chat Header - Kompakter auf Mobile */}
+                 <div className="p-2 lg:p-4 border-b border-border flex items-center gap-3 flex-shrink-0 bg-card/95 backdrop-blur z-10">
                    <Button variant="ghost" size="icon" onClick={handleBack} className="lg:hidden text-foreground hover:text-secondary hover:bg-neutral">
                      <ArrowLeftIcon className="w-5 h-5" strokeWidth={1.5} />
                    </Button>
-                   <Avatar className="w-10 h-10 cursor-pointer" onClick={() => handleProfileClick(selectedChat.user.username)}>
+                   <Avatar className="w-8 h-8 lg:w-10 lg:h-10 cursor-pointer" onClick={() => handleProfileClick(selectedChat.user.username)}>
                      <AvatarImage src={selectedChat.user.avatar} alt={selectedChat.user.name} />
                      <AvatarFallback className="bg-secondary text-secondary-foreground">{selectedChat.user.name.charAt(0)}</AvatarFallback>
                    </Avatar>
-                   <div className="flex-1 cursor-pointer" onClick={() => handleProfileClick(selectedChat.user.username)}>
-                     <span className="font-medium text-foreground block">{selectedChat.user.name}</span>
-                     {selectedChat.user.username && <span className="text-sm text-muted-foreground">@{selectedChat.user.username}</span>}
+                   <div className="flex-1 cursor-pointer min-w-0" onClick={() => handleProfileClick(selectedChat.user.username)}>
+                     <span className="font-medium text-foreground block truncate">{selectedChat.user.name}</span>
+                     {selectedChat.user.username && <span className="text-xs lg:text-sm text-muted-foreground truncate">@{selectedChat.user.username}</span>}
                    </div>
                    <Button variant="ghost" size="icon" onClick={() => handleProfileClick(selectedChat.user.username)} className="text-foreground hover:text-secondary hover:bg-neutral">
                      <UserIcon className="w-5 h-5" strokeWidth={1.5} />
                    </Button>
                  </div>
 
-                 <div className="flex-1 overflow-y-auto p-4 min-h-0 chat-messages-scrollbar">
-                   {loadingMessages && <p className="text-center text-muted-foreground">Lade Nachrichten...</p>}
-                   {error && loadingMessages && <p className="p-4 text-destructive">{error}</p>}
-                   {!loadingMessages && messages.length === 0 && <p className="text-center text-muted-foreground">Beginne eine neue Konversation.</p>}
-                   <div className="space-y-4 flex flex-col">
+                 {/* Nachrichten Liste */}
+                 <div className="flex-1 overflow-y-auto p-2 lg:p-4 min-h-0 chat-messages-scrollbar bg-neutral/5">
+                   {loadingMessages && <p className="text-center text-muted-foreground mt-4">Lade Nachrichten...</p>}
+                   {error && loadingMessages && <p className="p-4 text-destructive text-center">{error}</p>}
+                   {!loadingMessages && messages.length === 0 && <p className="text-center text-muted-foreground mt-10">Beginne eine neue Konversation.</p>}
+                   <div className="space-y-4 flex flex-col pb-2">
                      {messages.map((msg) => (
                        <div key={msg.id} className={`flex ${msg.senderId === currentUser?.id ? 'justify-end' : 'justify-start'}`}>
-                         <div className={`max-w-[75%] lg:max-w-[65%] px-4 py-2 rounded-lg ${msg.senderId === currentUser?.id ? 'bg-secondary text-secondary-foreground rounded-br-none' : 'bg-neutral text-foreground rounded-bl-none'}`}>
-                           <p className="break-words whitespace-pre-wrap">{msg.content}</p>
-                           <div className="flex items-center justify-end gap-1 mt-1 text-xs opacity-70">
+                         <div className={`max-w-[85%] lg:max-w-[65%] px-3 py-2 lg:px-4 lg:py-2 rounded-2xl ${msg.senderId === currentUser?.id ? 'bg-secondary text-secondary-foreground rounded-tr-none' : 'bg-card border border-border text-foreground rounded-tl-none'}`}>
+                           <p className="break-words whitespace-pre-wrap text-sm lg:text-base">{msg.content}</p>
+                           <div className="flex items-center justify-end gap-1 mt-1 text-[10px] lg:text-xs opacity-70">
                              <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                             {msg.senderId === currentUser?.id && <CheckCheckIcon className={`w-4 h-4 ${msg.isRead ? 'text-blue-400' : ''}`} strokeWidth={1.5} />}
+                             {msg.senderId === currentUser?.id && <CheckCheckIcon className={`w-3 h-3 lg:w-4 lg:h-4 ${msg.isRead ? 'text-blue-600' : ''}`} strokeWidth={1.5} />}
                            </div>
                          </div>
                        </div>
@@ -326,7 +376,8 @@ export default function Messages() {
                    </div>
                  </div>
 
-                 <div className="p-4 border-t border-border flex-shrink-0 bg-card">
+                 {/* Input Bereich */}
+                 <div className="p-2 lg:p-4 border-t border-border flex-shrink-0 bg-card safe-area-pb">
                    <div className="flex gap-2">
                      <Input
                        placeholder="Nachricht schreiben..."
