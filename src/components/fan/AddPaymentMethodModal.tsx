@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'; // DialogDescription importieren
 import { Elements } from '@stripe/react-stripe-js';
 import { stripePromise } from '../../services/stripeService';
 import { supabase } from '../../lib/supabase';
@@ -19,7 +19,6 @@ export default function AddPaymentMethodModal({ isOpen, onClose, onSuccess }: Ad
 
   useEffect(() => {
     if (isOpen) {
-      // Setup Intent vom Backend holen
       supabase.functions.invoke('create-setup-intent')
         .then(({ data, error }) => {
           if (data) setClientSecret(data.clientSecret);
@@ -44,6 +43,10 @@ export default function AddPaymentMethodModal({ isOpen, onClose, onSuccess }: Ad
       )}>
         <DialogHeader>
           <DialogTitle>Neue Karte hinzufügen</DialogTitle>
+          {/* KORREKTUR: Description hinzugefügt */}
+          <DialogDescription className="text-muted-foreground">
+            Füge eine neue Kreditkarte für zukünftige Zahlungen hinzu.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="p-4">
