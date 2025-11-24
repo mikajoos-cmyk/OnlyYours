@@ -222,10 +222,9 @@ export default function Messages() {
   };
 
   return (
-     // --- ÄNDERUNG HIER: Responsive Höhe ---
-     // Auf Mobile: h-[calc(100dvh-8rem)] (100vh minus TopBar & BottomNav)
-     // Auf Desktop: h-full
-     <div className="flex flex-col h-[calc(100dvh-8rem)] lg:h-full">
+     // ÄNDERUNG HIER: Responsive Höhe für Mobile UND Desktop
+     // h-full statt calc(), da AppShell die Höhe kontrolliert
+     <div className="flex flex-col h-full">
          <div className="max-w-5xl mx-auto w-full flex flex-col flex-1 p-4 min-h-0">
 
            <div className="flex items-center justify-between mb-8 flex-shrink-0">
@@ -236,7 +235,7 @@ export default function Messages() {
              {currentRole === 'creator' && (
                <Button
                   variant="outline"
-                  className="bg-card text-foreground border-border hover:bg-neutral font-normal hidden lg:flex" // Button nur Desktop
+                  className="bg-card text-foreground border-border hover:bg-neutral font-normal hidden lg:flex"
                   onClick={() => setShowMassMessageModal(true)}
                >
                   <Send className="w-5 h-5 mr-2" strokeWidth={1.5} />
@@ -244,7 +243,6 @@ export default function Messages() {
                </Button>
              )}
 
-             {/* Mobile Massen-Nachricht Button */}
              {currentRole === 'creator' && !selectedChat && (
                 <Button
                     variant="outline"

@@ -38,34 +38,35 @@
     --radius: 0.75rem;
   }
 
-  /* NEU: Verhindert das "Bouncen" der ganzen Seite auf Mobile */
-  html,
-  body,
+  /* ÄNDERUNG: Striktere Regeln für html/body/app gegen Scrollen */
+  html {
+    height: 100%;
+    overflow: hidden; /* Verhindert Scrollen auf Wurzelebene */
+  }
+
+  body {
+    height: 100%;
+    overflow: hidden;
+    position: fixed; /* "Fixiert" den Body, damit er nicht hinter der Tastatur scrollt */
+    width: 100%;
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    overscroll-behavior: none; /* Verhindert Pull-to-Refresh/Bounce */
+  }
+
   #app {
     height: 100%;
     width: 100%;
-    overflow: hidden; /* Wichtig: Deaktiviert Scrollen auf Body-Ebene */
-    overscroll-behavior: none; /* Verhindert Pull-to-Refresh/Bounce Effekte */
-    touch-action: manipulation; /* Verbessert Touch-Reaktion */
-    -webkit-tap-highlight-color: transparent;
+    overflow: hidden;
+    /* Wir nutzen hier eine CSS Variable, die wir gleich via JS setzen */
+    height: var(--app-height, 100%);
   }
 
   * {
     @apply border-border;
   }
 
-  html,
-  body {
-    @apply bg-background text-foreground;
-    font-family: var(--font-sans);
-  }
-
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
+  h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-serif);
     @apply text-foreground;
   }
@@ -76,7 +77,6 @@
     text-wrap: balance;
   }
 
-  /* Benutzerdefinierte Scrollbar für den Chat-Nachrichtenbereich */
   .chat-messages-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--color-secondary)) transparent;
@@ -105,5 +105,10 @@
   .scrollbar-hide {
       -ms-overflow-style: none;
       scrollbar-width: none;
+  }
+
+  /* Helper für Safe-Area auf iPhones (optional, falls benötigt) */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }
