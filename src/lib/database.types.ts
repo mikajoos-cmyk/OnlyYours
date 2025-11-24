@@ -24,6 +24,7 @@ export type Database = {
           total_earnings: number
           created_at: string
           updated_at: string
+          interests: string[] | null
         }
         Insert: {
           id: string
@@ -39,6 +40,7 @@ export type Database = {
           total_earnings?: number
           created_at?: string
           updated_at?: string
+          interests?: string[] | null
         }
         Update: {
           id?: string
@@ -54,6 +56,7 @@ export type Database = {
           total_earnings?: number
           created_at?: string
           updated_at?: string
+          interests?: string[] | null
         }
       }
       subscription_tiers: {

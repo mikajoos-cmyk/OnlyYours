@@ -1,4 +1,3 @@
-// src/services/postService.ts
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
 
@@ -80,45 +79,108 @@ export class PostService {
     return data;
   }
 
-
+  /**
+   * Holt den Discovery Feed.
+   * Nutzt jetzt den "get_recommended_feed" Algorithmus via RPC, wenn eingeloggt.
+   */
   async getDiscoveryFeed(limit: number = 20, offset: number = 0) {
-    const { data: posts, error } = await supabase
-      .from('posts')
-      .select(`
-        *,
-        creator:users!creator_id (
-          id,
-          username,
-          display_name,
-          avatar_url,
-          is_verified,
-          bio,
-          followers_count,
-          subscription_price
-        )
-      `)
-      .eq('is_published', true)
-      .is('scheduled_for', null)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    let posts: any[] = [];
+    let error: any = null;
+
+    if (user) {
+      // 1. Personalisierter Algorithmus für eingeloggte User
+      const { data, error: rpcError } = await supabase
+        .rpc('get_recommended_feed', {
+          p_user_id: user.id,
+          p_limit: limit,
+          p_offset: offset
+        });
+
+      if (rpcError) {
+        console.error("Algorithmus-Fehler, Fallback auf Standard:", rpcError);
+        // Fallback unten
+      } else {
+        // Die RPC gibt Posts zurück, aber wir müssen die Creator-Daten joinen.
+        // Da RPCs keine Joins direkt als JSON-Struktur zurückgeben (meistens flach),
+        // müssen wir tricksen oder die IDs nehmen und Creator fetchen.
+        // Bessere Lösung für Performance: Wir laden die Creator-Daten für die IDs nach.
+
+        const postIds = data?.map((p: any) => p.id) || [];
+        if (postIds.length > 0) {
+           const { data: richPosts, error: richError } = await supabase
+            .from('posts')
+            .select(`
+              *,
+              creator:users!creator_id (
+                id,
+                username,
+                display_name,
+                avatar_url,
+                is_verified,
+                bio,
+                followers_count,
+                subscription_price
+              )
+            `)
+            .in('id', postIds);
+
+            if (!richError && richPosts) {
+                // Wir müssen die Sortierung des Algorithmus (data) beibehalten!
+                // richPosts kommt unsortiert zurück.
+                const sortMap = new Map(data.map((p: any, index: number) => [p.id, index]));
+                posts = richPosts.sort((a, b) => {
+                    return (sortMap.get(a.id) || 0) - (sortMap.get(b.id) || 0);
+                });
+            } else {
+                error = richError;
+            }
+        }
+      }
+    }
+
+    // Fallback: Wenn nicht eingeloggt oder keine Ergebnisse vom Algo
+    if (posts.length === 0 && !error) {
+       const { data: standardPosts, error: standardError } = await supabase
+        .from('posts')
+        .select(`
+          *,
+          creator:users!creator_id (
+            id,
+            username,
+            display_name,
+            avatar_url,
+            is_verified,
+            bio,
+            followers_count,
+            subscription_price
+          )
+        `)
+        .eq('is_published', true)
+        .or('scheduled_for.is.null,scheduled_for.lte.now()')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+        posts = standardPosts || [];
+        error = standardError;
+    }
 
     if (error) throw error;
 
-    const { data: { user } } = await supabase.auth.getUser();
     const userId = user?.id;
-
     let userLikes: Set<string> = new Set();
-    if (userId) {
+    if (userId && posts.length > 0) {
       const { data: likes } = await supabase
         .from('likes')
         .select('post_id')
         .eq('user_id', userId)
-        .in('post_id', posts?.map(p => p.id) || []);
+        .in('post_id', posts.map(p => p.id));
 
       userLikes = new Set(likes?.map(l => l.post_id) || []);
     }
 
-    return this.mapPostsToFrontend(posts || [], userLikes);
+    return this.mapPostsToFrontend(posts, userLikes);
   }
 
   async getSubscriberFeed(limit: number = 20, offset: number = 0) {
@@ -210,10 +272,6 @@ export class PostService {
     return this.mapPostsToFrontend(posts || [], userLikes);
   }
 
-  // --- NEUE FUNKTION ---
-  /**
-   * Ruft einen einzelnen Post anhand seiner ID ab.
-   */
   async getPostById(postId: string): Promise<Post | null> {
     const { data: post, error } = await supabase
       .from('posts')
@@ -231,12 +289,12 @@ export class PostService {
         )
       `)
       .eq('id', postId)
-      .eq('is_published', true) // Nur veröffentlichte Posts
-      .or('scheduled_for.is.null,scheduled_for.lte.now()') // Nur, wenn nicht in Zukunft geplant
+      .eq('is_published', true)
+      .or('scheduled_for.is.null,scheduled_for.lte.now()')
       .single();
 
     if (error || !post) {
-      if (error && error.code !== 'PGRST116') { // PGRST116 = not found
+      if (error && error.code !== 'PGRST116') {
         console.error("Error fetching post by ID:", error);
       }
       return null;
@@ -261,8 +319,6 @@ export class PostService {
 
     return this.mapPostsToFrontend([post], userLikes)[0];
   }
-  // --- ENDE NEUE FUNKTION ---
-
 
   async getCreatorVaultPosts(creatorId: string, limit: number = 50, offset: number = 0): Promise<Post[]> {
     const { data: { user } } = await supabase.auth.getUser();
@@ -356,12 +412,6 @@ export class PostService {
     if (error) throw error;
   }
 
-
-  // --- AKTUALISIERTE FUNKTION: searchPosts ---
-  /**
-   * Sucht Posts anhand von Hashtags oder Bildbeschriftung.
-   * Akzeptiert jetzt Filter für Preis, Typ und Abos.
-   */
   async searchPosts(
     query: string,
     limit: number = 30,
@@ -390,15 +440,11 @@ export class PostService {
       `)
       .eq('is_published', true)
       .or(
-        `caption.ilike.%${cleanedQuery}%,` +     // Suche in der Beschreibung
-        `hashtags.cs.{${cleanedQuery}}`        // Suche in Hashtags (array contains string)
+        `caption.ilike.%${cleanedQuery}%,` +
+        `hashtags.cs.{${cleanedQuery}}`
       );
 
-    // --- FILTER-LOGIK HINZUGEFÜGT ---
-
-    // 1. Abo-Filter
     if (filters?.subscribedOnly && userId) {
-      // 1. Hole abonnierte Creator-IDs
       const { data: subscriptions } = await supabase
         .from('subscriptions')
         .select('creator_id')
@@ -408,13 +454,11 @@ export class PostService {
       const creatorIds = subscriptions?.map(s => s.creator_id) || [];
 
       if (creatorIds.length === 0) {
-        return []; // Wenn keine Abos, dann keine Ergebnisse
+        return [];
       }
-      // 2. Füge der Abfrage hinzu
       queryBuilder = queryBuilder.in('creator_id', creatorIds);
     }
 
-    // 2. Preis-Filter
     if (filters?.price) {
       if (filters.price === 'free') {
         queryBuilder = queryBuilder.eq('price', 0).is('tier_id', null);
@@ -427,7 +471,6 @@ export class PostService {
       }
     }
 
-    // 3. Medientyp-Filter
     if (filters?.type) {
       if (filters.type === 'video') {
         queryBuilder = queryBuilder.eq('media_type', 'VIDEO');
@@ -435,7 +478,6 @@ export class PostService {
         queryBuilder = queryBuilder.eq('media_type', 'IMAGE');
       }
     }
-    // --- ENDE FILTER-LOGIK ---
 
     const { data: posts, error } = await queryBuilder
       .order('created_at', { ascending: false })
@@ -446,7 +488,6 @@ export class PostService {
       throw error;
     }
 
-    // Likes für die gefundenen Posts abrufen
     let userLikes: Set<string> = new Set();
     if (userId && posts.length > 0) {
       const { data: likes } = await supabase
@@ -460,8 +501,6 @@ export class PostService {
 
     return this.mapPostsToFrontend(posts || [], userLikes);
   }
-  // --- ENDE ---
-
 
   private mapPostsToFrontend(posts: any[], userLikes: Set<string>): Post[] {
     return posts.map(post => ({

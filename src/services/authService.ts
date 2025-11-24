@@ -2,7 +2,6 @@
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
 
-type UserRow = Database['public']['Tables']['users']['Row'];
 type UserUpdate = Database['public']['Tables']['users']['Update'];
 
 export interface AuthUser {
@@ -19,19 +18,19 @@ export interface AuthUser {
   bannerUrl?: string | null;
   subscriptionPrice?: number;
   welcomeMessage?: string;
-  profileHashtags?: string[] | null;
+  profileHashtags?: string[] | null; // Creator-Tags
+  interests?: string[] | null;       // NEU: Fan-Interessen
   mux_stream_key?: string | null;
   mux_playback_id?: string | null;
   is_live?: boolean;
   live_stream_tier_id?: string | null;
-  live_stream_requires_subscription?: boolean; // <-- NEU
+  live_stream_requires_subscription?: boolean;
   stripe_account_id?: string;
   stripe_onboarding_complete?: boolean;
 }
 
 export class AuthService {
 
-  // ... (register, verifyOtp, resendOtp, checkUsernameAvailability, checkEmailAvailability, login, logout, getCurrentUser unverändert) ...
   async register(username: string, email: string, password: string, role: 'fan' | 'creator' = 'creator') {
     console.log("[authService] register CALLED");
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -171,7 +170,6 @@ export class AuthService {
     return this.mapUserRowToAuthUser(userData, freshUser.email);
   }
 
-  // `updateProfile` muss das neue Feld akzeptieren
   async updateProfile(userId: string, updates: {
     display_name?: string;
     bio?: string;
@@ -181,13 +179,11 @@ export class AuthService {
     role?: 'FAN' | 'CREATOR';
     welcome_message?: string;
     profile_hashtags?: string[];
+    interests?: string[]; // <-- NEU
     live_stream_tier_id?: string | null;
-    live_stream_requires_subscription?: boolean; // <-- NEU
-    is_live?: boolean; // <-- NEU (wird vom Stream-Modal gesetzt)
+    live_stream_requires_subscription?: boolean;
+    is_live?: boolean;
   }) {
-    // Stellen Sie sicher, dass Ihre DB-Typen (database.types.ts)
-    // diese neuen Spalten in `users.Update` enthalten.
-    // Wenn Sie `supabase gen types` ausführen, sollte dies automatisch geschehen.
     const dbUpdates: UserUpdate = { ...updates };
 
     const { data, error } = await supabase
@@ -240,11 +236,12 @@ export class AuthService {
       subscriptionPrice: userData.subscription_price,
       welcomeMessage: userData.welcome_message || '',
       profileHashtags: userData.profile_hashtags || [],
+      interests: userData.interests || [], // <-- NEU: Interessen mappen
       mux_stream_key: userData.mux_stream_key,
       mux_playback_id: userData.mux_playback_id,
       is_live: userData.is_live,
       live_stream_tier_id: userData.live_stream_tier_id,
-      live_stream_requires_subscription: userData.live_stream_requires_subscription, // <-- NEU
+      live_stream_requires_subscription: userData.live_stream_requires_subscription,
       stripe_account_id: userData.stripe_account_id,
       stripe_onboarding_complete: userData.stripe_onboarding_complete,
     };

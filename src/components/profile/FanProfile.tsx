@@ -1,3 +1,4 @@
+// src/components/profile/FanProfile.tsx
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -7,14 +8,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Switch } from '../ui/switch';
 import { useAuthStore } from '../../stores/authStore';
-import { subscriptionService, Subscription } from '../../services/subscriptionService';
+import { subscriptionService } from '../../services/subscriptionService';
 import { storageService } from '../../services/storageService';
-import { paymentService, PaymentTransaction, SavedPaymentMethod } from '../../services/paymentService'; // SavedPaymentMethod importieren
+import { paymentService, PaymentTransaction, SavedPaymentMethod } from '../../services/paymentService';
 import { useToast } from '../../hooks/use-toast';
-import { CameraIcon, ShieldIcon, CreditCardIcon, Loader2Icon, Trash2Icon, PlusIcon } from 'lucide-react';
-import AddPaymentMethodModal from '../fan/AddPaymentMethodModal'; // Modal importieren
-
-// ... (Interface ActiveSubscription bleibt gleich)
+import { CameraIcon, ShieldIcon, CreditCardIcon, Loader2Icon, Trash2Icon, PlusIcon, XIcon } from 'lucide-react';
+import AddPaymentMethodModal from '../fan/AddPaymentMethodModal';
 
 export default function FanProfile() {
   const { user, updateProfile, changePassword } = useAuthStore();
@@ -23,7 +22,6 @@ export default function FanProfile() {
 
   const [activeSubscriptions, setActiveSubscriptions] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
-  // Neuer State für Zahlungsmethoden
   const [paymentMethods, setPaymentMethods] = useState<SavedPaymentMethod[]>([]);
   const [showAddMethodModal, setShowAddMethodModal] = useState(false);
   const [isMethodsLoading, setIsMethodsLoading] = useState(false);
@@ -31,7 +29,6 @@ export default function FanProfile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ... (Andere States bleiben gleich: displayName, email, passwords etc.)
   const [displayName, setDisplayName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
   const [isAccountLoading, setIsAccountLoading] = useState(false);
@@ -42,11 +39,14 @@ export default function FanProfile() {
   const [isPasswordLoading, setIsPasswordLoading] = useState(false);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
 
+  // NEU: Interests State (getrennt von profileHashtags für Creators)
+  const [interests, setInterests] = useState<string[]>(user?.interests || []);
+  const [newInterest, setNewInterest] = useState('');
+
   const formatCurrency = (value: number) => {
     return `€${value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  // Funktion zum Laden der Zahlungsmethoden
   const fetchPaymentMethods = async () => {
     if (!user?.id) return;
     setIsMethodsLoading(true);
@@ -68,13 +68,11 @@ export default function FanProfile() {
         setLoading(true);
         setError(null);
 
-        // Parallel laden
         const [subs, history] = await Promise.all([
             subscriptionService.getUserSubscriptions(),
             paymentService.getUserPaymentHistory(user.id)
         ]);
 
-        // Typ-Anpassung für Frontend-Anzeige
         const mappedSubs = subs.map(s => ({
             id: s.id,
             creator: { name: s.creator?.name || 'Unbekannter Creator' },
@@ -85,7 +83,6 @@ export default function FanProfile() {
         setActiveSubscriptions(mappedSubs);
         setTransactions(history);
 
-        // Zahlungsmethoden separat laden (damit es nicht alles blockiert)
         fetchPaymentMethods();
 
       } catch (err) {
@@ -99,11 +96,12 @@ export default function FanProfile() {
     fetchData();
   }, [user?.id]);
 
-  // ... (useEffect für user sync und Handler handleAvatarChange, handleAccountUpdate, handlePasswordChange bleiben gleich) ...
   useEffect(() => {
     if (user) {
         setDisplayName(user.name || '');
         setEmail(user.email || '');
+        // Hier laden wir die Interessen, nicht die Creator-Tags
+        setInterests(user.interests || []);
     }
   }, [user]);
 
@@ -126,13 +124,46 @@ export default function FanProfile() {
       e.preventDefault();
       setIsAccountLoading(true);
       try {
-          await updateProfile({ display_name: displayName });
-          toast({ title: "Profil aktualisiert!" });
+          // Hashtags bereinigen
+          const cleanedInterests = interests
+            .map(t => t.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())
+            .filter(t => t.length > 0);
+
+          setInterests(cleanedInterests);
+
+          // Wir speichern hier explizit in 'interests'
+          await updateProfile({
+            display_name: displayName,
+            interests: cleanedInterests
+          });
+          toast({ title: "Profil aktualisiert!", description: "Deine Interessen wurden für den Feed gespeichert." });
       } catch (error: any) {
           toast({ title: "Update fehlgeschlagen", description: error.message, variant: "destructive" });
       } finally {
           setIsAccountLoading(false);
       }
+  };
+
+  // Handler für Interessen
+  const handleAddInterest = () => {
+    if (newInterest.trim() === "") return;
+    if (interests.length >= 10) {
+      toast({
+        title: "Limit erreicht",
+        description: "Du kannst maximal 10 Interessen hinzufügen.",
+        variant: "destructive"
+      });
+      return;
+    }
+    const cleanTag = newInterest.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+    if (cleanTag.length > 0 && !interests.includes(cleanTag)) {
+      setInterests(prev => [...prev, cleanTag]);
+      setNewInterest("");
+    }
+  };
+
+  const handleRemoveInterest = (tagToRemove: string) => {
+    setInterests(prev => prev.filter(tag => tag !== tagToRemove));
   };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
@@ -158,14 +189,13 @@ export default function FanProfile() {
       }
   };
 
-  // Handler zum Löschen einer Zahlungsmethode
   const handleDeletePaymentMethod = async (methodId: string) => {
       if(!confirm("Möchten Sie diese Zahlungsmethode wirklich entfernen?")) return;
 
       try {
           await paymentService.deletePaymentMethod(methodId);
           toast({ title: "Gelöscht", description: "Zahlungsmethode wurde entfernt." });
-          fetchPaymentMethods(); // Liste neu laden
+          fetchPaymentMethods();
       } catch (error: any) {
           toast({ title: "Fehler", description: "Konnte Methode nicht löschen.", variant: "destructive" });
       }
@@ -189,11 +219,10 @@ export default function FanProfile() {
           </TabsTrigger>
         </TabsList>
 
-        {/* ... TabsContent account, security, subscriptions (bleiben unverändert) ... */}
         <TabsContent value="account" className="mt-6">
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-foreground">Grundlegende Informationen</CardTitle>
+              <CardTitle className="text-foreground">Profil & Interessen</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleAccountUpdate} className="space-y-6">
@@ -246,13 +275,69 @@ export default function FanProfile() {
                     disabled
                     readOnly
                   />
-                   <p className="text-xs text-muted-foreground">E-Mail-Änderungen erfordern eine Bestätigung und sind hier nicht implementiert.</p>
                 </div>
+
+                {/* --- NEUER ABSCHNITT: INTERESSEN --- */}
+                <div className="space-y-4 border-t border-border pt-4">
+                  <div>
+                    <Label className="text-foreground">Deine Interessen</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Füge Themen hinzu, die dich interessieren (z.B. Fitness, Kunst).
+                      Wir nutzen diese, um deinen Feed zu personalisieren.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {interests.map((tag) => (
+                      <div key={tag} className="flex items-center gap-1 bg-secondary/20 text-secondary rounded-full pl-3 pr-1 py-1">
+                        <span className="text-sm">#{tag}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemoveInterest(tag)}
+                          className="h-6 w-6 text-secondary hover:text-destructive hover:bg-destructive/10 rounded-full"
+                        >
+                          <XIcon className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-grow">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">#</span>
+                      <Input
+                        id="new-interest"
+                        type="text"
+                        placeholder="Interesse hinzufügen..."
+                        value={newInterest}
+                        onChange={(e) => setNewInterest(e.target.value)}
+                        className="bg-background text-foreground border-border pl-7"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddInterest();
+                          }
+                        }}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="bg-background text-foreground border-border hover:bg-neutral font-normal"
+                      onClick={handleAddInterest}
+                    >
+                      <PlusIcon className="w-5 h-5" />
+                    </Button>
+                  </div>
+                </div>
+                {/* --- ENDE INTERESSEN --- */}
 
                 <Button
                     type="submit"
                     className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
-                    disabled={isAccountLoading || displayName === user?.name}
+                    disabled={isAccountLoading}
                 >
                   {isAccountLoading && <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />}
                   Änderungen speichern
@@ -272,7 +357,6 @@ export default function FanProfile() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handlePasswordChange} className="space-y-6">
-
                  <div className="space-y-2">
                   <Label htmlFor="new-password" className="text-foreground">Neues Passwort</Label>
                   <Input
@@ -284,7 +368,6 @@ export default function FanProfile() {
                     placeholder="Mindestens 6 Zeichen"
                   />
                 </div>
-
                  <div className="space-y-2">
                   <Label htmlFor="confirm-password" className="text-foreground">Neues Passwort bestätigen</Label>
                   <Input
@@ -295,7 +378,6 @@ export default function FanProfile() {
                     className="bg-background text-foreground border-border"
                   />
                 </div>
-
                 <div className="flex items-center justify-between py-4 border-t border-border">
                   <div>
                     <h3 className="text-foreground font-medium">Zwei-Faktor-Authentifizierung</h3>
@@ -307,7 +389,6 @@ export default function FanProfile() {
                     disabled
                   />
                 </div>
-
                 <Button
                     type="submit"
                     className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
@@ -354,7 +435,6 @@ export default function FanProfile() {
                             try {
                                 await subscriptionService.cancelSubscription(sub.id);
                                 toast({ title: "Abonnement gekündigt" });
-                                // Seite neu laden oder State updaten
                                 window.location.reload();
                             } catch (error: any) {
                                 toast({ title: "Fehler", description: error.message, variant: "destructive" });
@@ -371,7 +451,6 @@ export default function FanProfile() {
           </Card>
         </TabsContent>
 
-        {/* --- AKTUALISIERTER ZAHLUNGS-TAB --- */}
         <TabsContent value="payments" className="mt-6">
           <Card className="bg-card border-border">
             <CardHeader>
@@ -381,8 +460,6 @@ export default function FanProfile() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-
-              {/* Sektion: Gespeicherte Methoden */}
               <div>
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="text-foreground font-medium">Gespeicherte Zahlungsmethoden</h3>
@@ -426,7 +503,6 @@ export default function FanProfile() {
                 )}
               </div>
 
-              {/* Sektion: Historie */}
               <div className="border-t border-border pt-6">
                 <h3 className="text-foreground font-medium mb-4">Transaktionshistorie</h3>
                  {loading && <p className="text-muted-foreground">Lade Transaktionen...</p>}
@@ -451,13 +527,11 @@ export default function FanProfile() {
         </TabsContent>
       </Tabs>
 
-      {/* Modal für neue Zahlungsmethode */}
       <AddPaymentMethodModal
         isOpen={showAddMethodModal}
         onClose={() => setShowAddMethodModal(false)}
-        onSuccess={() => fetchPaymentMethods()} // Liste neu laden bei Erfolg
+        onSuccess={() => fetchPaymentMethods()}
       />
-
     </div>
   );
 }
