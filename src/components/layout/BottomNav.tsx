@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { HomeIcon, SearchIcon, PlusSquareIcon, MessageCircleIcon, BarChart3Icon, CompassIcon, FilmIcon, UserIcon } from 'lucide-react';
+import { HomeIcon, SearchIcon, PlusSquareIcon, MessageCircleIcon, BarChart3Icon, CompassIcon, FilmIcon, DollarSignIcon, TrendingUpIcon, UserIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useState, useEffect } from 'react';
 
@@ -53,6 +53,8 @@ export default function BottomNav({ isCreatorMode }: BottomNavProps) {
     { icon: FilmIcon, label: 'Vault', path: '/vault' },
     { icon: PlusSquareIcon, label: 'Erstellen', path: '/post/new' },
     { icon: MessageCircleIcon, label: 'Nachrichten', path: '/messages' },
+    { icon: TrendingUpIcon, label: 'Stats', path: '/statistics' }, // Hinzugefügt
+    { icon: DollarSignIcon, label: 'Geld', path: '/payouts' },
     { icon: UserIcon, label: 'Profil', path: '/profile' },
   ];
 

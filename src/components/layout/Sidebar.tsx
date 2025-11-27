@@ -2,7 +2,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { HomeIcon, SearchIcon, PlusSquareIcon, MessageCircleIcon, BarChart3Icon, CompassIcon, FilmIcon, DollarSignIcon, TrendingUpIcon, UserIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { useAppStore } from '../../stores/appStore';
 
 interface SidebarProps {
   isCreatorMode: boolean;
@@ -34,7 +33,10 @@ export default function Sidebar({ isCreatorMode }: SidebarProps) {
 
   return (
     <aside className="hidden md:flex fixed left-0 top-16 bottom-0 w-64 flex-col border-r border-border bg-card">
-      <nav className="flex-1 space-y-2 p-4">
+      {/* FIX: 'overflow-y-auto' hinzugefügt.
+          Damit können auch Nutzer mit kleineren Bildschirmen (Laptops/Tablets)
+          alle Menüpunkte im Creator-Modus erreichen, indem sie scrollen. */}
+      <nav className="flex-1 space-y-2 p-4 overflow-y-auto min-h-0">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
@@ -49,15 +51,14 @@ export default function Sidebar({ isCreatorMode }: SidebarProps) {
                   : 'text-foreground hover:bg-neutral hover:text-secondary'
               )}
             >
-              <Icon className="w-6 h-6" strokeWidth={1.5} />
+              <Icon className="w-6 h-6 flex-shrink-0" strokeWidth={1.5} />
               <span>{item.label}</span>
             </button>
           );
         })}
       </nav>
-      
-      {/* --- NEU: Footer mit Rechtstexten --- */}
-      <div className="p-4 border-t border-border mt-auto">
+
+      <div className="p-4 border-t border-border mt-auto flex-shrink-0">
         <div className="flex justify-center gap-4 text-xs text-muted-foreground">
             <button onClick={() => navigate('/impressum')} className="hover:text-foreground">Impressum</button>
             <button onClick={() => navigate('/datenschutz')} className="hover:text-foreground">Datenschutz</button>
@@ -66,8 +67,6 @@ export default function Sidebar({ isCreatorMode }: SidebarProps) {
             © 2024 OnlyYours
         </div>
       </div>
-      {/* --- ENDE --- */}
-      
     </aside>
   );
 }
