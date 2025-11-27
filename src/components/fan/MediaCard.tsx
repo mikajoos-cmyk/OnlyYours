@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { useFeedStore } from '../../stores/feedStore';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '../ui/badge';
+import { SecureMedia } from '../ui/SecureMedia';
 
 interface Post {
   id: string;
@@ -42,12 +43,12 @@ export default function MediaCard({ post }: MediaCardProps) {
 
   return (
     <div className="relative w-full h-screen">
-      <img
-        src={post.mediaUrl}
-        alt={post.caption}
-        className="w-full h-full object-cover"
-        loading="lazy"
-      />
+      <SecureMedia
+  path={post.mediaUrl}
+  type={post.mediaType}
+  alt={post.caption}
+  className="w-full h-full"
+/>
 
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" />
 

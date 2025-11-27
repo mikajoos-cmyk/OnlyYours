@@ -16,6 +16,7 @@ import { useToast } from '../../hooks/use-toast';
 import { cn } from '../../lib/utils';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import PpvModal from './PpvModal';
+import { SecureMedia } from '../ui/SecureMedia';
 
 interface GridPost {
   id: string;
@@ -437,29 +438,19 @@ export default function CreatorProfile() {
                   className="relative aspect-square rounded-lg overflow-hidden cursor-pointer group bg-card"
                   onClick={() => handlePostClick(index, post.hasAccess)}
                 >
-                  {post.type === 'video' ? (
-                    <video
-                      src={post.thumbnailUrl}
-                      muted
-                      loop
-                      playsInline
-                      autoPlay
-                      className={cn(
-                          "w-full h-full object-cover transition-transform duration-200 group-hover:scale-105",
-                          !post.hasAccess && "filter blur-2xl"
-                      )}
-                    />
-                  ) : (
-                    <img
-                      src={post.thumbnailUrl}
-                      alt={post.caption || ""}
-                      className={cn(
-                          "w-full h-full object-cover transition-transform duration-200 group-hover:scale-105",
-                          !post.hasAccess && "filter blur-2xl"
-                      )}
-                      loading="lazy"
-                    />
-                  )}
+                  <SecureMedia
+  path={post.thumbnailUrl}
+  type={post.type} // Hier nutzen wir den Typ, damit Videos im Grid ggf. loopen
+  alt={post.caption || ""}
+  className={cn(
+      "w-full h-full transition-transform duration-200 group-hover:scale-105",
+      !post.hasAccess && "filter blur-2xl"
+  )}
+  muted
+  loop
+  playsInline
+  autoPlay
+/>
                   {post.type === 'video' && (
                     <VideoIcon className="absolute top-2 right-2 w-5 h-5 text-foreground drop-shadow-lg" strokeWidth={2} />
                   )}

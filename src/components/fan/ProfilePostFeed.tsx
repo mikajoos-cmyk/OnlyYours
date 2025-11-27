@@ -4,6 +4,7 @@ import { Button } from '../ui/button';
 import { XIcon } from 'lucide-react';
 import MediaCard from './MediaCard'; // Importiere die MediaCard
 import CommentsSheet from './CommentsSheet';
+import { SecureMedia } from '../ui/SecureMedia';
 
 // Typdefinitionen (ggf. anpassen oder auslagern)
 interface Creator {

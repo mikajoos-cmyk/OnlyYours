@@ -14,6 +14,7 @@ import { postService } from '../../services/postService';
 import { tierService, Tier } from '../../services/tierService';
 import ReportModal from './ReportModal'; // <-- NEU
 import { useToast } from '../../hooks/use-toast'; // <-- Für Feedback
+import { SecureMedia } from '../ui/SecureMedia';
 
 export interface CreatorInfo {
   name: string;
@@ -233,11 +234,16 @@ export default function ProfilePostViewer({
 
         <motion.div key={currentIndex} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="h-full w-full relative">
             <div className="w-full h-full" onClick={() => handleMediaClick(hasAccess)}>
-              {currentPost.mediaType === 'video' ? (
-                <video src={currentPost.media} autoPlay muted loop playsInline className={cn("w-full h-full object-cover", !hasAccess && "filter blur-2xl")} />
-              ) : (
-                <img src={hasAccess ? currentPost.media : (currentPost.thumbnail_url || currentPost.media)} alt={currentPost.caption} className={cn("w-full h-full object-cover", !hasAccess && "filter blur-2xl")} />
-              )}
+              <SecureMedia
+  path={hasAccess ? currentPost.media : (currentPost.thumbnail_url || currentPost.media)}
+  type={currentPost.mediaType}
+  alt={currentPost.caption}
+  className={cn("w-full h-full", !hasAccess && "filter blur-2xl")}
+  autoPlay
+  muted
+  loop
+  playsInline
+/>
             </div>
 
             {!hasAccess && (

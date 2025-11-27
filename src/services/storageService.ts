@@ -17,7 +17,7 @@ export class StorageService {
     if (error) throw error;
     if (!data) throw new Error('Upload failed');
 
-    // WICHTIG: Wir geben nur den Pfad zurück, keine öffentliche URL mehr!
+    // Wir speichern nur den Pfad in der DB (z.B. "user_id/file.jpg")
     return data.path;
   }
 
@@ -30,14 +30,17 @@ export class StorageService {
     if (error) throw error;
   }
 
-  // NEU: Generiert einen signierten Link, der nur 1 Stunde gültig ist
+  // Generiert eine signierte URL, die 1 Stunde gültig ist
   async getSignedUrl(filePath: string): Promise<string | null> {
     if (!filePath) return null;
     const path = this.extractPathFromUrl(filePath);
 
+    // Blob-URLs (lokale Vorschau) direkt zurückgeben
+    if (path.startsWith('blob:')) return path;
+
     const { data, error } = await supabase.storage
       .from(this.bucketName)
-      .createSignedUrl(path, 3600);
+      .createSignedUrl(path, 3600); // 3600 Sekunden = 1 Stunde
 
     if (error) {
       console.error('Error creating signed URL:', error);
@@ -47,7 +50,8 @@ export class StorageService {
   }
 
   private extractPathFromUrl(url: string): string {
-    if (!url.startsWith('http')) return url;
+    if (!url) return '';
+    if (!url.startsWith('http')) return url; // Ist schon ein Pfad
     if (url.includes(`/${this.bucketName}/`)) {
         const urlParts = url.split(`/${this.bucketName}/`);
         return urlParts[urlParts.length - 1];

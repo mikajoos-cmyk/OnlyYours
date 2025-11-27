@@ -17,6 +17,7 @@ import SubscriptionModal from './SubscriptionModal';
 import TipModal from './TipModal';
 import ReportModal from './ReportModal';
 import type { Post as PostData } from '../../services/postService';
+import { SecureMedia } from '../ui/SecureMedia';
 
 export default function DiscoveryFeed() {
   const navigate = useNavigate();
@@ -261,28 +262,19 @@ export default function DiscoveryFeed() {
           className="h-full w-full relative bg-black"
         >
           <div className="w-full h-full" onClick={() => { if (hasAccess) return; }}>
-            {currentPost.mediaType === 'video' ? (
-              <video
-                src={currentPost.mediaUrl}
-                autoPlay
-                muted
-                loop
-                playsInline
-                className={cn(
-                  "w-full h-full object-cover",
-                  !hasAccess && "filter blur-2xl"
-                )}
-              />
-            ) : (
-              <img
-                src={hasAccess ? currentPost.mediaUrl : (currentPost.thumbnail_url || currentPost.mediaUrl)}
-                alt={currentPost.caption || ""}
-                className={cn(
-                  "w-full h-full object-cover",
-                  !hasAccess && "filter blur-2xl"
-                )}
-              />
-            )}
+            <SecureMedia
+  path={hasAccess ? currentPost.mediaUrl : (currentPost.thumbnail_url || currentPost.mediaUrl)}
+  type={currentPost.mediaType}
+  alt={currentPost.caption || ""}
+  className={cn(
+    "w-full h-full",
+    !hasAccess && "filter blur-2xl"
+  )}
+  autoPlay
+  muted
+  loop
+  playsInline
+/>
           </div>
 
           {!hasAccess && (

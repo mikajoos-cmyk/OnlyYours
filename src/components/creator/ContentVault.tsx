@@ -11,6 +11,7 @@ import { postService, Post as ServicePostData } from '../../services/postService
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../hooks/use-toast';
 import { cn } from '../../lib/utils';
+import { SecureMedia } from '../ui/SecureMedia';
 
 export default function ContentVault() {
   const { user } = useAuthStore();
@@ -212,22 +213,15 @@ export default function ContentVault() {
                            handlePostClick(index);
                         }}
                       >
-                        {post.mediaType === 'video' ? (
-                          <video
-                            src={post.mediaUrl}
-                            muted
-                            loop
-                            playsInline
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <img
-                            src={post.thumbnail_url || post.mediaUrl}
-                            alt=""
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                          />
-                        )}
+                        <SecureMedia
+  path={post.thumbnail_url || post.mediaUrl}
+  type={post.mediaType}
+  alt=""
+  className="w-full h-full object-cover"
+  muted
+  loop
+  playsInline
+/>
 
                         {post.mediaType === 'video' && (
                           <VideoIcon className="absolute top-2 right-2 w-5 h-5 text-white drop-shadow-lg" strokeWidth={2} />

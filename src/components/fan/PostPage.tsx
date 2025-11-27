@@ -16,6 +16,7 @@ import { tierService, Tier } from '../../services/tierService';
 import SubscriptionModal from './SubscriptionModal';
 import TipModal from './TipModal';
 import ReportModal from './ReportModal'; // <-- NEU
+import { SecureMedia } from '../ui/SecureMedia';
 
 type PostData = ServicePostData;
 
@@ -232,25 +233,19 @@ export default function PostPage() {
       <div className="w-full overflow-hidden relative h-[calc(100vh-144px)] md:h-[calc(100vh-64px)]">
         <div className="h-full w-full relative bg-black">
           <div className="w-full h-full">
-            {post.mediaType === 'video' ? (
-              <video
-                src={post.mediaUrl}
-                autoPlay muted loop playsInline
-                className={cn(
-                  "w-full h-full object-cover",
-                  !hasAccess && "filter blur-2xl"
-                )}
-              />
-            ) : (
-              <img
-                src={hasAccess ? post.mediaUrl : (post.thumbnail_url || post.mediaUrl)}
-                alt={post.caption || ""}
-                className={cn(
-                  "w-full h-full object-cover",
-                  !hasAccess && "filter blur-2xl"
-                )}
-              />
-            )}
+            <SecureMedia
+  path={hasAccess ? post.mediaUrl : (post.thumbnail_url || post.mediaUrl)}
+  type={post.mediaType}
+  alt={post.caption || ""}
+  className={cn(
+    "w-full h-full",
+    !hasAccess && "filter blur-2xl"
+  )}
+  autoPlay
+  muted
+  loop
+  playsInline
+/>
           </div>
 
           {!hasAccess && (

@@ -135,7 +135,15 @@ export default function Messages() {
               const newMessages = await messageService.getNewMessages(selectedChat.user.id, lastMessageTimestampRef.current);
 
               if (newMessages.length > 0) {
-                  setMessages(prevMessages => [...prevMessages, ...newMessages]);
+                  // FIX 1: Duplikate vermeiden beim Polling
+                  setMessages(prevMessages => {
+                      const existingIds = new Set(prevMessages.map(m => m.id));
+                      const uniqueNewMessages = newMessages.filter(m => !existingIds.has(m.id));
+
+                      if (uniqueNewMessages.length === 0) return prevMessages;
+                      return [...prevMessages, ...uniqueNewMessages];
+                  });
+
                   lastMessageTimestampRef.current = newMessages[newMessages.length - 1].createdAt;
                   setTimeout(scrollToBottom, 100);
 
@@ -217,7 +225,24 @@ export default function Messages() {
       try {
         const sentMessage = await messageService.sendMessage(selectedChat.user.id, messageToSend);
         lastMessageTimestampRef.current = sentMessage.created_at;
-        setMessages(prev => prev.map(msg => msg.id === optimisticMessage.id ? { ...optimisticMessage, id: sentMessage.id, createdAt: sentMessage.created_at } : msg));
+
+        // FIX 2: Race Condition behandeln
+        setMessages(prev => {
+            // Prüfen, ob die Nachricht in der Zwischenzeit durch Polling hinzugefügt wurde
+            const alreadyExists = prev.some(msg => msg.id === sentMessage.id);
+
+            if (alreadyExists) {
+                // Wenn sie schon da ist, entferne die optimistische (temp) Nachricht, um Duplikate zu vermeiden
+                return prev.filter(msg => msg.id !== optimisticMessage.id);
+            }
+
+            // Andernfalls: Update die optimistische Nachricht mit der echten ID
+            return prev.map(msg =>
+                msg.id === optimisticMessage.id
+                    ? { ...optimisticMessage, id: sentMessage.id, createdAt: sentMessage.created_at }
+                    : msg
+            );
+        });
 
       } catch (err) {
         console.error('Fehler beim Senden der Nachricht:', err);

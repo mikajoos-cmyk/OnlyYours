@@ -1,8 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
 
-type MessageInsert = Database['public']['Tables']['messages']['Insert'];
-
 export interface Message {
   id: string;
   senderId: string;
@@ -25,7 +23,7 @@ export interface Chat {
 
 export class MessageService {
 
-  // VERSCHLÜSSELT SENDEN
+  // VERSCHLÜSSELT SENDEN via RPC
   async sendMessage(receiverId: string, content: string): Promise<any> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
@@ -50,7 +48,7 @@ export class MessageService {
     };
   }
 
-  // Willkommensnachricht (Creator -> Fan)
+  // Willkommensnachricht (ebenfalls verschlüsselt via RPC)
   async sendWelcomeMessage(creatorId: string, fanId: string, content: string): Promise<void> {
     const { error } = await supabase.rpc('send_encrypted_message', {
         p_sender_id: creatorId,
@@ -60,13 +58,13 @@ export class MessageService {
     if (error) console.error("Fehler beim Senden der Willkommensnachricht:", error);
   }
 
-  // VERSCHLÜSSELT LESEN (Aus View 'decrypted_messages')
+  // ENTSCHLÜSSELT LESEN via View 'decrypted_messages'
   async getConversation(otherUserId: string, limit: number = 50, offset: number = 0): Promise<Message[]> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
     const { data: messages, error } = await supabase
-      .from('decrypted_messages') // Nutzt die View!
+      .from('decrypted_messages') // Nutzt den View!
       .select(`
         *,
         sender:users!sender_id ( id, display_name, avatar_url, is_verified ),
@@ -80,11 +78,11 @@ export class MessageService {
     return this.mapMessagesToFrontend(messages || []);
   }
 
+  // Chat-Liste via View (für entschlüsselte Vorschau 'lastMessage')
   async getChatList(): Promise<Chat[]> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Auch hier die View nutzen für 'lastMessage' Vorschau
     const { data: messages, error } = await supabase
       .from('decrypted_messages')
       .select(`
@@ -104,8 +102,9 @@ export class MessageService {
       const otherUser = isReceived ? message.sender : message.receiver;
 
       if (!chatsMap.has(otherUserId) && otherUser) {
+        // Ungelesene Nachrichten zählen (auf der echten Tabelle effizienter)
         const { count: unreadCount } = await supabase
-          .from('messages') // Zählen geht auf der Originaltabelle schneller
+          .from('messages')
           .select('id', { count: 'exact', head: true })
           .eq('sender_id', otherUserId)
           .eq('receiver_id', user.id)
@@ -124,13 +123,7 @@ export class MessageService {
     return Array.from(chatsMap.values()).sort((a, b) => new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime());
   }
 
-  async markConversationAsRead(otherUserId: string): Promise<void> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    await supabase.from('messages').update({ is_read: true }).eq('sender_id', otherUserId).eq('receiver_id', user.id).eq('is_read', false);
-  }
-
-  // Polling für neue Nachrichten
+  // Polling für neue Nachrichten (via View)
   async getNewMessages(otherUserId: string, sinceTimestamp: string): Promise<Message[]> {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
@@ -144,11 +137,18 @@ export class MessageService {
 
       if (error) throw error;
 
-      // Mark as read logic...
-      const newIds = (messages || []).filter(m => m.receiver_id === user.id && !m.is_read).map(m => m.id);
+      // Als gelesen markieren (auf echter Tabelle)
+      const newIds = (messages || []).filter((m: any) => m.receiver_id === user.id && !m.is_read).map((m: any) => m.id);
       if(newIds.length > 0) await supabase.from('messages').update({is_read: true}).in('id', newIds);
 
       return this.mapMessagesToFrontend(messages || []);
+  }
+
+  async markConversationAsRead(otherUserId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    // Update auf echter Tabelle
+    await supabase.from('messages').update({ is_read: true }).eq('sender_id', otherUserId).eq('receiver_id', user.id).eq('is_read', false);
   }
 
   private mapMessagesToFrontend(messages: any[]): Message[] {
@@ -164,4 +164,5 @@ export class MessageService {
      }));
  }
 }
+
 export const messageService = new MessageService();

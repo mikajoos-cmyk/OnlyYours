@@ -20,6 +20,7 @@ import { TimePicker } from '../ui/time-picker';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { tierService, Tier } from '../../services/tierService';
+import { SecureMedia } from '../ui/SecureMedia';
 
 export default function PostEditor() {
   const { user } = useAuthStore();
@@ -275,12 +276,13 @@ export default function PostEditor() {
             <CardContent>
               {filePreview ? (
                 <div className="w-full aspect-square rounded-lg overflow-hidden bg-background">
-                  {mediaType === 'IMAGE' && (
-                    <img src={filePreview} alt="Vorschau" className="w-full h-full object-cover" />
-                  )}
-                  {mediaType === 'VIDEO' && (
-                    <video src={filePreview} controls className="w-full h-full object-cover" />
-                  )}
+                  <SecureMedia
+  path={filePreview}
+  type={mediaType}
+  alt="Vorschau"
+  className="w-full h-full object-cover"
+  controls={mediaType === 'VIDEO'}
+/>
                 </div>
               ) : (
                 <div

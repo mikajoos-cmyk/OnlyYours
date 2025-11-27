@@ -1,4 +1,3 @@
-// src/services/authService.ts
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
 
@@ -67,12 +66,11 @@ export class AuthService {
     if (error) throw error;
   }
 
-  // --- NEU: OAuth Login (Apple/Google) ---
   async loginWithOAuth(provider: 'google' | 'apple') {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: provider,
       options: {
-        redirectTo: window.location.origin, // Kehrt nach Login zur App zurück
+        redirectTo: window.location.origin,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
@@ -82,7 +80,6 @@ export class AuthService {
     if (error) throw error;
     return data;
   }
-  // --- ENDE NEU ---
 
   async checkUsernameAvailability(username: string): Promise<boolean> {
     const { data, error } = await supabase
@@ -132,7 +129,7 @@ export class AuthService {
     const { data: { user: freshUser } } = await supabase.auth.getUser();
     if (!freshUser?.email_confirmed_at) return null;
 
-    // 1. Profildaten laden (ohne Earnings, da binär/verschlüsselt)
+    // 1. Profildaten laden (ohne Earnings, da binär/verschlüsselt in DB)
     const { data: userData, error } = await supabase
       .from('users')
       .select('*')
@@ -144,7 +141,7 @@ export class AuthService {
         return null;
     }
 
-    // 2. Einnahmen sicher entschlüsseln
+    // 2. Einnahmen sicher entschlüsseln via RPC
     let decryptedEarnings = 0;
     try {
         const { data: earnings } = await supabase.rpc('get_my_decrypted_earnings', {
@@ -158,7 +155,7 @@ export class AuthService {
     // 3. Zusammenfügen
     const safeUserData = {
         ...userData,
-        total_earnings: decryptedEarnings
+        total_earnings: decryptedEarnings // Überschreibt das Byte-Array mit der entschlüsselten Zahl
     };
 
     return this.mapUserRowToAuthUser(safeUserData, freshUser.email);
