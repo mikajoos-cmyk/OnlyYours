@@ -129,29 +129,39 @@ export class AuthService {
   async getCurrentUserFullProfile(): Promise<AuthUser | null> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return null;
+    const { data: { user: freshUser } } = await supabase.auth.getUser();
+    if (!freshUser?.email_confirmed_at) return null;
 
-    const { data: { user: freshUser }, error: userError } = await supabase.auth.getUser();
-    if (userError || !freshUser) return null;
-
-    // Bei OAuth ist email_confirmed_at oft gesetzt, bei Email-Login muss es geprüft werden
-    if (!freshUser.email_confirmed_at && freshUser.app_metadata.provider === 'email') {
-      return null;
-    }
-
+    // 1. Profildaten laden (ohne Earnings, da binär/verschlüsselt)
     const { data: userData, error } = await supabase
       .from('users')
       .select('*')
       .eq('id', freshUser.id)
-      .maybeSingle();
+      .single();
 
     if (error || !userData) {
-        // Fallback: Wenn User in Auth aber nicht in Public Table (kann bei OAuth First-Login passieren)
-        // Der Trigger in der DB sollte das eigentlich handeln, aber sicherheitshalber:
-        console.warn("User profile missing in public table.");
+        console.error("Error fetching profile:", error);
         return null;
     }
 
-    return this.mapUserRowToAuthUser(userData, freshUser.email);
+    // 2. Einnahmen sicher entschlüsseln
+    let decryptedEarnings = 0;
+    try {
+        const { data: earnings } = await supabase.rpc('get_my_decrypted_earnings', {
+            p_user_id: freshUser.id
+        });
+        decryptedEarnings = earnings || 0;
+    } catch (e) {
+        console.error("Error decrypting earnings:", e);
+    }
+
+    // 3. Zusammenfügen
+    const safeUserData = {
+        ...userData,
+        total_earnings: decryptedEarnings
+    };
+
+    return this.mapUserRowToAuthUser(safeUserData, freshUser.email);
   }
 
   async updateProfile(userId: string, updates: Partial<UserUpdate>) {

@@ -267,17 +267,18 @@ export default function CreatorProfile() {
     <>
       <div className="space-y-8">
         <Tabs defaultValue="branding" className="w-full">
-            <TabsList className="bg-card border border-border">
-              <TabsTrigger value="branding" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
+            {/* FIX: 'flex flex-wrap h-auto' hinzugefügt, damit Tabs umbrechen können */}
+            <TabsList className="bg-card border border-border flex flex-wrap h-auto">
+              <TabsTrigger value="branding" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">
                 Branding
               </TabsTrigger>
-              <TabsTrigger value="info" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
+              <TabsTrigger value="info" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">
                 Informationen
               </TabsTrigger>
-              <TabsTrigger value="monetization" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
+              <TabsTrigger value="monetization" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">
                 Monetarisierung
               </TabsTrigger>
-              <TabsTrigger value="communication" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
+              <TabsTrigger value="communication" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">
                 Kommunikation
               </TabsTrigger>
             </TabsList>
@@ -498,7 +499,7 @@ export default function CreatorProfile() {
               </Card>
             </TabsContent>
 
-            {/* --- MONETARISIERUNGS-TAB (BEREINIGT) --- */}
+            {/* --- MONETARISIERUNGS-TAB --- */}
             <TabsContent value="monetization" className="mt-6">
               <Card className="bg-card border-border">
                 <CardHeader>
@@ -508,9 +509,7 @@ export default function CreatorProfile() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {/* Der Live-Stream-Teil wurde entfernt */}
-
-                  {/* Abo-Stufen-Teil (bleibt) */}
+                  {/* Abo-Stufen-Teil */}
                   <div className="pt-6">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-foreground font-medium">
