@@ -1,7 +1,7 @@
 // src/components/fan/PostPage.tsx
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, LockIcon, UserCheckIcon, ArrowLeftIcon } from 'lucide-react';
+import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, LockIcon, UserCheckIcon, ArrowLeftIcon, FlagIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,6 +15,7 @@ import { useToast } from '../../hooks/use-toast';
 import { tierService, Tier } from '../../services/tierService';
 import SubscriptionModal from './SubscriptionModal';
 import TipModal from './TipModal';
+import ReportModal from './ReportModal'; // <-- NEU
 
 type PostData = ServicePostData;
 
@@ -35,6 +36,7 @@ export default function PostPage() {
   const [showPpvModal, setShowPpvModal] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showTipModal, setShowTipModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false); // <-- NEU
 
   useEffect(() => {
     if (!postId) {
@@ -149,11 +151,20 @@ export default function PostPage() {
       return;
     }
     if (creatorTiers.length === 0) {
-      toast({ title: "Fehler", description: "Dieser Creator bietet (noch) keine Abos an.", variant: "destructive" });
-      return;
+       toast({ title: "Fehler", description: "Dieser Creator bietet (noch) keine Abos an.", variant: "destructive" });
+       return;
     }
     setShowPpvModal(false);
     setShowSubscriptionModal(true);
+  };
+
+  const handleReportClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user) {
+        toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um Inhalte zu melden.", variant: "destructive" });
+        return;
+    }
+    setShowReportModal(true);
   };
 
   const handlePurchaseSuccess = (postId: string) => {
@@ -254,7 +265,7 @@ export default function PostPage() {
                 </Button>
               )}
               {canPpv && canSubscribe && (
-                <div className="relative w-full max-w-sm">
+                 <div className="relative w-full max-w-sm">
                   <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
                   <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">ODER</span></div>
                 </div>
@@ -263,10 +274,10 @@ export default function PostPage() {
                 <Button
                   variant={canPpv ? "outline" : "secondary"}
                   className={cn(
-                    "text-lg px-8 py-6 w-full max-w-sm",
-                    canPpv
-                      ? "bg-transparent border-secondary text-secondary hover:bg-secondary/10 hover:text-secondary"
-                      : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                      "text-lg px-8 py-6 w-full max-w-sm",
+                      canPpv
+                          ? "bg-transparent border-secondary text-secondary hover:bg-secondary/10 hover:text-secondary"
+                          : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
                   )}
                   onClick={handleSubscribeClick}
                 >
@@ -357,12 +368,23 @@ export default function PostPage() {
                 <DollarSignIcon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
               </div>
             </button>
+
+            {/* --- NEU: REPORT BUTTON --- */}
+            <button
+              onClick={handleReportClick}
+              className="flex flex-col items-center gap-1 opacity-60 hover:opacity-100 transition-opacity"
+            >
+               <div className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
+                 <FlagIcon className="w-4 h-4 text-foreground" strokeWidth={1.5} />
+               </div>
+            </button>
+            {/* --- ENDE --- */}
           </div>
 
           <div className="absolute bottom-4 left-4 right-20 z-10">
             <p className={cn(
-              "text-foreground drop-shadow-lg mb-2",
-              !hasAccess && "filter blur-sm select-none"
+                "text-foreground drop-shadow-lg mb-2",
+                !hasAccess && "filter blur-sm select-none"
             )}>
               {hasAccess ? post.caption : "Abonniere oder kaufe diesen Post, um die Beschreibung zu sehen."}
             </p>
@@ -388,14 +410,14 @@ export default function PostPage() {
       </AnimatePresence>
 
       {showPpvModal && (
-        <PpvModal
-          isOpen={showPpvModal}
-          onClose={() => setShowPpvModal(false)}
-          post={post}
-          onPaymentSuccess={handlePurchaseSuccess}
-          creatorTiers={creatorTiers}
-          onSubscribeClick={handleSubscribeClick}
-        />
+         <PpvModal
+            isOpen={showPpvModal}
+            onClose={() => setShowPpvModal(false)}
+            post={post}
+            onPaymentSuccess={handlePurchaseSuccess}
+            creatorTiers={creatorTiers}
+            onSubscribeClick={handleSubscribeClick}
+         />
       )}
 
       {showSubscriptionModal && creatorTiers.length > 0 && (
@@ -417,6 +439,15 @@ export default function PostPage() {
           onClose={() => setShowTipModal(false)}
           creator={{ id: post.creator.id, name: post.creator.name }}
           onTipSuccess={handleTipSuccess}
+        />
+      )}
+
+      {/* --- NEU: Report Modal --- */}
+      {post && showReportModal && (
+        <ReportModal
+            isOpen={showReportModal}
+            onClose={() => setShowReportModal(false)}
+            postId={post.id}
         />
       )}
     </>

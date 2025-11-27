@@ -1,3 +1,4 @@
+// src/components/layout/Sidebar.tsx
 import { useNavigate, useLocation } from 'react-router-dom';
 import { HomeIcon, SearchIcon, PlusSquareIcon, MessageCircleIcon, BarChart3Icon, CompassIcon, FilmIcon, DollarSignIcon, TrendingUpIcon, UserIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -54,6 +55,19 @@ export default function Sidebar({ isCreatorMode }: SidebarProps) {
           );
         })}
       </nav>
+      
+      {/* --- NEU: Footer mit Rechtstexten --- */}
+      <div className="p-4 border-t border-border mt-auto">
+        <div className="flex justify-center gap-4 text-xs text-muted-foreground">
+            <button onClick={() => navigate('/impressum')} className="hover:text-foreground">Impressum</button>
+            <button onClick={() => navigate('/datenschutz')} className="hover:text-foreground">Datenschutz</button>
+        </div>
+        <div className="text-center text-[10px] text-muted-foreground/50 mt-2">
+            © 2024 OnlyYours
+        </div>
+      </div>
+      {/* --- ENDE --- */}
+      
     </aside>
   );
 }

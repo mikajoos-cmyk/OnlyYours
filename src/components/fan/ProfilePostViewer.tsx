@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, LockIcon } from 'lucide-react';
+import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, XIcon, LockIcon, FlagIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -12,6 +12,8 @@ import PpvModal from './PpvModal';
 import type { Post as ServicePostData } from '../../services/postService';
 import { postService } from '../../services/postService';
 import { tierService, Tier } from '../../services/tierService';
+import ReportModal from './ReportModal'; // <-- NEU
+import { useToast } from '../../hooks/use-toast'; // <-- Für Feedback
 
 export interface CreatorInfo {
   name: string;
@@ -46,6 +48,7 @@ export default function ProfilePostViewer({
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { checkAccess, addPurchasedPost } = useSubscriptionStore();
+  const { toast } = useToast();
 
   const [posts, setPosts] = useState<PostData[]>(initialPosts);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
@@ -56,6 +59,7 @@ export default function ProfilePostViewer({
   const [showComments, setShowComments] = useState(false);
   const [selectedPostIdForComments, setSelectedPostIdForComments] = useState<string | null>(null);
   const [showPpvModal, setShowPpvModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false); // <-- NEU
 
   const [loadedCreatorTiers, setLoadedCreatorTiers] = useState<Tier[]>(initialCreatorTiers);
 
@@ -96,7 +100,7 @@ export default function ProfilePostViewer({
 
   const scrollThreshold = 50;
   const handleScroll = (e: React.WheelEvent) => {
-    if (isScrolling.current || Math.abs(e.deltaY) < scrollThreshold || posts.length <= 1 || showPpvModal || showComments) return;
+    if (isScrolling.current || Math.abs(e.deltaY) < scrollThreshold || posts.length <= 1 || showPpvModal || showComments || showReportModal) return;
     isScrolling.current = true;
     if (e.deltaY > 0 && currentIndex < posts.length - 1) {
       setCurrentIndex(currentIndex + 1);
@@ -107,7 +111,7 @@ export default function ProfilePostViewer({
   };
   const handleTouchStart = useRef({ y: 0 });
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (posts.length <= 1 || showPpvModal || showComments) return;
+    if (posts.length <= 1 || showPpvModal || showComments || showReportModal) return;
     const touch = e.touches[0];
     const deltaY = handleTouchStart.current.y - touch.clientY;
     if (Math.abs(deltaY) > 50 && !isScrolling.current) {
@@ -174,11 +178,14 @@ export default function ProfilePostViewer({
           ));
 
           // 2. Update im Parent (Profil)
-          if (onCommentAdded) {
-              onCommentAdded(currentPost.id);
+          if (onCommentAddedCallback) {
+              onCommentAddedCallback(currentPost.id);
           }
       }
   };
+
+  // Rename prop to match inside to avoid conflict
+  const onCommentAddedCallback = onCommentAdded;
 
   const handleMediaClick = (hasAccess: boolean) => {
     if (!hasAccess) {
@@ -190,6 +197,17 @@ export default function ProfilePostViewer({
     addPurchasedPost(postId);
     setShowPpvModal(false);
   };
+
+  // --- NEU: Report Handler ---
+  const handleReportClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!user) {
+          toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein.", variant: "destructive" });
+          return;
+      }
+      setShowReportModal(true);
+  };
+  // --- ENDE ---
 
   if (!currentPost) {
      return (
@@ -255,6 +273,14 @@ export default function ProfilePostViewer({
                     <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center"><MessageCircleIcon className="w-7 h-7 text-foreground" strokeWidth={1.5} /></div>
                     <span className="text-sm font-medium text-foreground drop-shadow-lg">{currentPost.comments}</span>
                 </button>
+
+                {/* --- NEU: Report Button --- */}
+                <button onClick={handleReportClick} className="flex flex-col items-center gap-1 opacity-60 hover:opacity-100">
+                   <div className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
+                     <FlagIcon className="w-4 h-4 text-foreground" strokeWidth={1.5} />
+                   </div>
+                </button>
+                {/* --- ENDE --- */}
            </div>
 
            <div className="absolute bottom-4 left-4 right-20 z-10">
@@ -284,6 +310,15 @@ export default function ProfilePostViewer({
             creatorTiers={loadedCreatorTiers}
             onSubscribeClick={() => { setShowPpvModal(false); onClose(); navigate(`/profile/${currentPost.creator.username}`); }}
          />
+      )}
+
+      {/* --- NEU: Report Modal --- */}
+      {currentPost && showReportModal && (
+        <ReportModal
+            isOpen={showReportModal}
+            onClose={() => setShowReportModal(false)}
+            postId={currentPost.id}
+        />
       )}
     </>
   );

@@ -1,6 +1,6 @@
 // src/components/fan/DiscoveryFeed.tsx
 import { useState, useRef, useEffect } from 'react';
-import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, LockIcon, UserCheckIcon } from 'lucide-react';
+import { HeartIcon, MessageCircleIcon, Share2Icon, DollarSignIcon, LockIcon, UserCheckIcon, FlagIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,6 +16,7 @@ import { useToast } from '../../hooks/use-toast';
 import { tierService, Tier } from '../../services/tierService';
 import SubscriptionModal from './SubscriptionModal';
 import TipModal from './TipModal';
+import ReportModal from './ReportModal'; // <-- NEU
 import type { Post as PostData } from '../../services/postService';
 
 export default function DiscoveryFeed() {
@@ -46,6 +47,10 @@ export default function DiscoveryFeed() {
 
   const [showTipModal, setShowTipModal] = useState(false);
   const [selectedCreatorForTip, setSelectedCreatorForTip] = useState<PostData['creator'] | null>(null);
+
+  // --- NEU: Report State ---
+  const [showReportModal, setShowReportModal] = useState(false);
+  // --- ENDE ---
 
   const [isViewerOpen, setIsViewerOpen] = useState(false);
 
@@ -81,16 +86,16 @@ export default function DiscoveryFeed() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (showPpvModal || showComments || isViewerOpen || showSubscriptionModal || showTipModal) return;
+      if (showPpvModal || showComments || isViewerOpen || showSubscriptionModal || showTipModal || showReportModal) return;
       if (e.key === 'ArrowDown') nextPost();
       else if (e.key === 'ArrowUp') previousPost();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nextPost, previousPost, showPpvModal, showComments, isViewerOpen, showSubscriptionModal, showTipModal]);
+  }, [nextPost, previousPost, showPpvModal, showComments, isViewerOpen, showSubscriptionModal, showTipModal, showReportModal]);
 
   const handleScroll = (e: React.WheelEvent) => {
-    if (isScrolling.current || Math.abs(e.deltaY) < 50 || showPpvModal || showComments || showSubscriptionModal || showTipModal) return;
+    if (isScrolling.current || Math.abs(e.deltaY) < 50 || showPpvModal || showComments || showSubscriptionModal || showTipModal || showReportModal) return;
     isScrolling.current = true;
     if (e.deltaY > 0) nextPost();
     else if (e.deltaY < 0) previousPost();
@@ -99,7 +104,7 @@ export default function DiscoveryFeed() {
 
   const handleTouchStart = useRef({ y: 0 });
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (showPpvModal || showComments || showSubscriptionModal || showTipModal) return;
+    if (showPpvModal || showComments || showSubscriptionModal || showTipModal || showReportModal) return;
     const touch = e.touches[0];
     const deltaY = handleTouchStart.current.y - touch.clientY;
     if (Math.abs(deltaY) > 50 && !isScrolling.current) {
@@ -141,8 +146,8 @@ export default function DiscoveryFeed() {
         });
       } catch (error) {
         if ((error as Error).name !== 'AbortError') {
-           navigator.clipboard.writeText(shareUrl);
-           toast({ title: 'Link kopiert!', description: 'Der Link wurde kopiert.' });
+          navigator.clipboard.writeText(shareUrl);
+          toast({ title: 'Link kopiert!', description: 'Der Link wurde kopiert.' });
         }
       }
     } else {
@@ -173,8 +178,8 @@ export default function DiscoveryFeed() {
       return;
     }
     if (creatorTiers.length === 0) {
-       toast({ title: "Fehler", description: "Dieser Creator bietet (noch) keine Abos an.", variant: "destructive" });
-       return;
+      toast({ title: "Fehler", description: "Dieser Creator bietet (noch) keine Abos an.", variant: "destructive" });
+      return;
     }
     setShowPpvModal(false);
     setShowSubscriptionModal(true);
@@ -191,10 +196,20 @@ export default function DiscoveryFeed() {
     loadSubscriptions();
   };
 
+  // --- NEU: Report Click ---
+  const handleReportClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user) {
+      toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um Inhalte zu melden.", variant: "destructive" });
+      return;
+    }
+    setShowReportModal(true);
+  };
+  // --- ENDE ---
+
   const handleTipSuccess = () => {
   };
 
-  // --- ÄNDERUNG: Container auf h-full setzen ---
   if (isLoading || isLoadingSubs) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -237,7 +252,6 @@ export default function DiscoveryFeed() {
     <>
       <div
         ref={containerRef}
-        // --- ÄNDERUNG: h-full statt calc() ---
         className="w-full overflow-hidden relative h-full"
         onWheel={handleScroll}
         onTouchStart={handleTouchStartCapture}
@@ -251,7 +265,7 @@ export default function DiscoveryFeed() {
           transition={{ duration: 0.3 }}
           className="h-full w-full relative bg-black"
         >
-          <div className="w-full h-full" onClick={() => { if(hasAccess) return; }}>
+          <div className="w-full h-full" onClick={() => { if (hasAccess) return; }}>
             {currentPost.mediaType === 'video' ? (
               <video
                 src={currentPost.mediaUrl}
@@ -290,7 +304,7 @@ export default function DiscoveryFeed() {
               )}
 
               {canPpv && canSubscribe && (
-                 <div className="relative w-full max-w-sm">
+                <div className="relative w-full max-w-sm">
                   <div className="absolute inset-0 flex items-center">
                     <span className="w-full border-t border-border" />
                   </div>
@@ -306,10 +320,10 @@ export default function DiscoveryFeed() {
                 <Button
                   variant={canPpv ? "outline" : "secondary"}
                   className={cn(
-                      "text-lg px-8 py-6 w-full max-w-sm",
-                      canPpv
-                          ? "bg-transparent border-secondary text-secondary hover:bg-secondary/10 hover:text-secondary"
-                          : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                    "text-lg px-8 py-6 w-full max-w-sm",
+                    canPpv
+                      ? "bg-transparent border-secondary text-secondary hover:bg-secondary/10 hover:text-secondary"
+                      : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
                   )}
                   onClick={handleSubscribeClick}
                 >
@@ -396,12 +410,24 @@ export default function DiscoveryFeed() {
                 <DollarSignIcon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
               </div>
             </button>
+
+            {/* --- NEU: REPORT BUTTON --- */}
+            <button
+              onClick={handleReportClick}
+              className="flex flex-col items-center gap-1 opacity-60 hover:opacity-100 transition-opacity"
+            >
+              <div className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
+                <FlagIcon className="w-4 h-4 text-foreground" strokeWidth={1.5} />
+              </div>
+            </button>
+            {/* --- ENDE --- */}
+
           </div>
 
           <div className="absolute bottom-4 left-4 right-20 z-10">
             <p className={cn(
-                "text-foreground drop-shadow-lg mb-2",
-                !hasAccess && "filter blur-sm select-none"
+              "text-foreground drop-shadow-lg mb-2",
+              !hasAccess && "filter blur-sm select-none"
             )}>
               {hasAccess ? currentPost.caption : "Inhalt gesperrt."}
             </p>
@@ -431,14 +457,14 @@ export default function DiscoveryFeed() {
       </AnimatePresence>
 
       {showPpvModal && currentPost && (
-         <PpvModal
-            isOpen={showPpvModal}
-            onClose={() => setShowPpvModal(false)}
-            post={currentPost}
-            onPaymentSuccess={handlePurchaseSuccess}
-            creatorTiers={creatorTiers}
-            onSubscribeClick={handleSubscribeClick}
-         />
+        <PpvModal
+          isOpen={showPpvModal}
+          onClose={() => setShowPpvModal(false)}
+          post={currentPost}
+          onPaymentSuccess={handlePurchaseSuccess}
+          creatorTiers={creatorTiers}
+          onSubscribeClick={handleSubscribeClick}
+        />
       )}
 
       {showSubscriptionModal && currentPost && creatorTiers.length > 0 && (
@@ -460,6 +486,15 @@ export default function DiscoveryFeed() {
           onClose={() => setShowTipModal(false)}
           creator={{ id: selectedCreatorForTip.id, name: selectedCreatorForTip.name }}
           onTipSuccess={handleTipSuccess}
+        />
+      )}
+
+      {/* --- NEU: Report Modal --- */}
+      {showReportModal && currentPost && (
+        <ReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          postId={currentPost.id}
         />
       )}
     </>

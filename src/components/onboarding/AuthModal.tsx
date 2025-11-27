@@ -189,7 +189,12 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
                   <>
                     <div className="space-y-2"><Label>Bestätigen</Label><div className="relative"><LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"/><Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="pl-10 bg-background border-border"/></div></div>
                     <div className="flex items-center space-x-2 pt-2"><Checkbox id="age" checked={ageVerified} onCheckedChange={(c) => setAgeVerified(c as boolean)} /><Label htmlFor="age">Über 18 Jahre alt</Label></div>
-                    <div className="flex items-center space-x-2"><Checkbox id="terms" checked={termsAgreed} onCheckedChange={(c) => setTermsAgreed(c as boolean)} /><Label htmlFor="terms">AGB & Datenschutz zustimmen</Label></div>
+                    <div className="flex items-start space-x-2">
+                        <Checkbox id="terms" checked={termsAgreed} onCheckedChange={(c) => setTermsAgreed(c as boolean)} className="mt-1" />
+                        <Label htmlFor="terms" className="leading-normal">
+                            Ich stimme den <a href="/agb" target="_blank" className="text-secondary hover:underline">AGB</a> und der <a href="/datenschutz" target="_blank" className="text-secondary hover:underline">Datenschutzerklärung</a> zu.
+                        </Label>
+                    </div>
                   </>
               )}
 
