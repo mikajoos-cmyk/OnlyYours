@@ -4,6 +4,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* --- PFOTENCARD LÖSUNG: 100dvh Support --- */
+/* Erzwingt, dass der Container exakt die sichtbare Höhe hat */
+@supports (height: 100dvh) {
+  .app-container {
+    height: 100dvh;
+  }
+}
+
 @layer base {
   :root {
     --color-background: 0 0% 0%;
@@ -36,30 +44,31 @@
     --font-sans: "Lato", sans-serif;
     --font-serif: "Playfair", serif;
     --radius: 0.75rem;
+
+    /* Safe Area Variable */
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
   }
 
-  /* ÄNDERUNG: Striktere Regeln für html/body/app gegen Scrollen */
-  html {
-    height: 100%;
-    overflow: hidden; /* Verhindert Scrollen auf Wurzelebene */
+  /* --- PFOTENCARD LÖSUNG: Reset --- */
+  html, body, #root {
+    min-height: 100%;
+    overflow-x: hidden;
+    /* Wir erlauben hier kein Scrollen auf Body-Ebene,
+       das Scrollen passiert im inneren Container */
+    overflow-y: hidden;
+    margin: 0;
+    padding: 0;
   }
 
   body {
-    height: 100%;
-    overflow: hidden;
-    position: fixed; /* "Fixiert" den Body, damit er nicht hinter der Tastatur scrollt */
-    width: 100%;
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
-    overscroll-behavior: none; /* Verhindert Pull-to-Refresh/Bounce */
   }
 
-  #app {
+  #root {
+    display: flex;
+    flex-direction: column;
     height: 100%;
-    width: 100%;
-    overflow: hidden;
-    /* Wir nutzen hier eine CSS Variable, die wir gleich via JS setzen */
-    height: var(--app-height, 100%);
   }
 
   * {
@@ -69,6 +78,18 @@
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-serif);
     @apply text-foreground;
+  }
+}
+
+@layer components {
+  /* --- PFOTENCARD LÖSUNG: Container Klasse --- */
+  .app-container {
+    display: flex;
+    flex-direction: column; /* Wichtig: Vertikales Layout für Only Yours */
+    min-height: 100dvh;     /* Fallback */
+    width: 100vw;
+    overflow: hidden;       /* Kein Scrollen am Container selbst */
+    position: relative;     /* Für absolute Positionierung von Kindern */
   }
 }
 
@@ -107,8 +128,16 @@
       scrollbar-width: none;
   }
 
-  /* Helper für Safe-Area auf iPhones (optional, falls benötigt) */
+  /* Safe Area Utilities */
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom);
+  }
+
+  .bottom-safe {
+    bottom: env(safe-area-inset-bottom);
   }
 }

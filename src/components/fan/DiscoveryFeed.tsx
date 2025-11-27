@@ -8,7 +8,6 @@ import CommentsSheet from './CommentsSheet';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { useFeedStore } from '../../stores/feedStore';
-import ProfilePostViewer from './ProfilePostViewer';
 import { useAuthStore } from '../../stores/authStore';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import PpvModal from './PpvModal';
@@ -16,7 +15,7 @@ import { useToast } from '../../hooks/use-toast';
 import { tierService, Tier } from '../../services/tierService';
 import SubscriptionModal from './SubscriptionModal';
 import TipModal from './TipModal';
-import ReportModal from './ReportModal'; // <-- NEU
+import ReportModal from './ReportModal';
 import type { Post as PostData } from '../../services/postService';
 
 export default function DiscoveryFeed() {
@@ -48,9 +47,7 @@ export default function DiscoveryFeed() {
   const [showTipModal, setShowTipModal] = useState(false);
   const [selectedCreatorForTip, setSelectedCreatorForTip] = useState<PostData['creator'] | null>(null);
 
-  // --- NEU: Report State ---
   const [showReportModal, setShowReportModal] = useState(false);
-  // --- ENDE ---
 
   const [isViewerOpen, setIsViewerOpen] = useState(false);
 
@@ -196,7 +193,6 @@ export default function DiscoveryFeed() {
     loadSubscriptions();
   };
 
-  // --- NEU: Report Click ---
   const handleReportClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user) {
@@ -205,7 +201,6 @@ export default function DiscoveryFeed() {
     }
     setShowReportModal(true);
   };
-  // --- ENDE ---
 
   const handleTipSuccess = () => {
   };
@@ -355,7 +350,8 @@ export default function DiscoveryFeed() {
             </div>
           </div>
 
-          <div className="absolute right-4 bottom-32 z-10 flex flex-col gap-6">
+          {/* FIX: Buttons höher positionieren (ca. 12rem / 192px von unten auf Mobile, 32 auf Desktop) */}
+          <div className="absolute right-4 bottom-[calc(12rem+env(safe-area-inset-bottom))] md:bottom-32 z-10 flex flex-col gap-6 transition-all">
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={() => hasAccess && handleLike(currentPost.id)}
@@ -411,7 +407,6 @@ export default function DiscoveryFeed() {
               </div>
             </button>
 
-            {/* --- NEU: REPORT BUTTON --- */}
             <button
               onClick={handleReportClick}
               className="flex flex-col items-center gap-1 opacity-60 hover:opacity-100 transition-opacity"
@@ -420,11 +415,11 @@ export default function DiscoveryFeed() {
                 <FlagIcon className="w-4 h-4 text-foreground" strokeWidth={1.5} />
               </div>
             </button>
-            {/* --- ENDE --- */}
 
           </div>
 
-          <div className="absolute bottom-4 left-4 right-20 z-10">
+          {/* FIX: Caption höher positionieren (ca. 5.5rem / 88px von unten auf Mobile, 4 auf Desktop) */}
+          <div className="absolute left-4 right-20 z-10 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-4 transition-all">
             <p className={cn(
               "text-foreground drop-shadow-lg mb-2",
               !hasAccess && "filter blur-sm select-none"
@@ -489,7 +484,6 @@ export default function DiscoveryFeed() {
         />
       )}
 
-      {/* --- NEU: Report Modal --- */}
       {showReportModal && currentPost && (
         <ReportModal
           isOpen={showReportModal}

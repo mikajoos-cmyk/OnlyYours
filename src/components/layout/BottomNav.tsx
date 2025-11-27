@@ -64,7 +64,8 @@ export default function BottomNav({ isCreatorMode }: BottomNavProps) {
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border md:hidden safe-area-pb">
+    // FIX: "pb-safe" statt "safe-area-pb" genutzt, damit Padding korrekt angewendet wird
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border md:hidden pb-safe">
       <div className="flex justify-around items-center h-16">
         {navItems.map((item) => {
           const Icon = item.icon;

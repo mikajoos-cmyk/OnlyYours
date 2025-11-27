@@ -1,4 +1,3 @@
-// src/components/profile/ProfilePage.tsx
 import { useState } from 'react';
 import FanProfile from './FanProfile';
 import CreatorProfile from './CreatorProfile';
@@ -19,16 +18,13 @@ import {
 } from '../ui/alert-dialog';
 import { LogOutIcon, Loader2Icon } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
-// --- NEUER IMPORT ---
 import { supabase } from '../../lib/supabase';
-// --- ENDE ---
 
 export default function ProfilePage() {
   const { currentRole, switchRole } = useAppStore();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // --- HINWEIS: updateProfile UND initialize (zum Neuladen) werden benötigt ---
   const { user, logout, updateProfile, initialize } = useAuthStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
@@ -52,28 +48,19 @@ export default function ProfilePage() {
   const handleBecomeCreator = async () => {
     setIsUpdatingRole(true);
     try {
-      // 1. Rolle in der DB auf 'CREATOR' setzen
       await updateProfile({ role: 'CREATOR' });
-
-      // 2. SUPABASE EDGE FUNCTION AUFRUFEN, UM MUX STREAM ZU ERSTELLEN
-      // (Wir rufen die Funktion auf, die wir in Schritt 4 erstellt haben)
-      const { data, error } = await supabase.functions.invoke('create-mux-stream');
+      const { error } = await supabase.functions.invoke('create-mux-stream');
 
       if (error) {
         throw new Error('Fehler beim Erstellen des Live-Stream-Kanals: ' + error.message);
       }
 
-      // 3. Feedback
       toast({
         title: "Willkommen, Creator!",
         description: "Dein Konto wurde umgestellt und dein Live-Stream ist bereit.",
       });
 
-      // 4. authStore neu laden, damit der user (useAuthStore) die neuen Mux-Keys enthält
-      // (initialize() löst onAuthStateChange aus)
       initialize();
-
-      // 5. App-Status (Ansicht) wechseln
       switchRole('creator');
       navigate('/dashboard');
       setIsModalOpen(false);
@@ -91,7 +78,6 @@ export default function ProfilePage() {
   };
 
   const handleLogout = async () => {
-    // ... (unverändert) ...
     try {
       await logout();
       window.location.reload();
@@ -102,7 +88,8 @@ export default function ProfilePage() {
 
   return (
     <>
-      <div className="min-h-screen">
+      {/* ÄNDERUNG: min-h-screen entfernt, da Parent bereits scrollt */}
+      <div className="w-full">
         <div className="max-w-4xl mx-auto px-4 py-8">
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl font-serif text-foreground">
