@@ -18,8 +18,8 @@ export interface AuthUser {
   bannerUrl?: string | null;
   subscriptionPrice?: number;
   welcomeMessage?: string;
-  profileHashtags?: string[] | null; // Creator-Tags
-  interests?: string[] | null;       // NEU: Fan-Interessen
+  profileHashtags?: string[] | null;
+  interests?: string[] | null;
   mux_stream_key?: string | null;
   mux_playback_id?: string | null;
   is_live?: boolean;
@@ -46,27 +46,20 @@ export class AuthService {
     });
     if (authError) throw authError;
     if (!authData.user) throw new Error('Registration failed');
-    console.log("[authService] register SUCCEEDED. User needs to verify email.");
     return authData;
   }
 
   async verifyOtp(email: string, token: string) {
-    console.log("[authService] verifyOtp CALLED");
     const { data, error } = await supabase.auth.verifyOtp({
       email,
       token,
       type: 'email',
     });
-    if (error) {
-       console.error("[authService] verifyOtp FAILED:", error);
-       throw error;
-    }
-    console.log("[authService] verifyOtp SUCCEEDED.");
+    if (error) throw error;
     return data;
   }
 
   async resendOtp(email: string) {
-    console.log("[authService] resendOtp CALLED");
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email: email,
@@ -74,36 +67,42 @@ export class AuthService {
     if (error) throw error;
   }
 
+  // --- NEU: OAuth Login (Apple/Google) ---
+  async loginWithOAuth(provider: 'google' | 'apple') {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: provider,
+      options: {
+        redirectTo: window.location.origin, // Kehrt nach Login zur App zurück
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+    if (error) throw error;
+    return data;
+  }
+  // --- ENDE NEU ---
+
   async checkUsernameAvailability(username: string): Promise<boolean> {
-    console.log(`[authService] checkUsernameAvailability: ${username}`);
     const { data, error } = await supabase
       .from('users')
       .select('username')
       .eq('username', username.toLowerCase())
       .maybeSingle();
-    if (error) {
-      console.error("Error checking username:", error);
-      return false;
-    }
-    console.log(`[authService] Username available: ${!data}`);
+    if (error) return false;
     return !data;
   }
 
   async checkEmailAvailability(email: string): Promise<boolean> {
-    console.log(`[authService] checkEmailAvailability: ${email}`);
     const { data, error } = await supabase.rpc('check_email_exists', {
       email_to_check: email.toLowerCase(),
     });
-    if (error) {
-      console.error('Error checking email availability:', error);
-      return false;
-    }
-    console.log(`[authService] Email available: ${!data}`);
+    if (error) return false;
     return !data;
   }
 
   async login(email: string, password: string): Promise<AuthUser> {
-    console.log("[authService] login CALLED");
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -112,18 +111,13 @@ export class AuthService {
     if (!authData.user) throw new Error('Login failed');
 
     const userProfile = await this.getCurrentUserFullProfile();
-
     if (!userProfile) {
-      console.error("[authService] login FAILED: User profile not found or email not confirmed after login.");
-      throw new Error('E-Mail-Adresse noch nicht bestätigt. Bitte prüfen Sie Ihr Postfach.');
+      throw new Error('E-Mail-Adresse noch nicht bestätigt oder Profil fehlt.');
     }
-
-    console.log("[authService] login SUCCEEDED and profile fetched.");
     return userProfile;
   }
 
   async logout() {
-    console.log("[authService] logout CALLED");
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   }
@@ -133,62 +127,37 @@ export class AuthService {
   }
 
   async getCurrentUserFullProfile(): Promise<AuthUser | null> {
-    console.log("[authService] getCurrentUserFullProfile CALLED");
-
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) {
-      console.log("[authService] No session found. Returning null.");
-      return null;
-    }
+    if (!session?.user) return null;
 
     const { data: { user: freshUser }, error: userError } = await supabase.auth.getUser();
+    if (userError || !freshUser) return null;
 
-    if (userError || !freshUser) {
-       console.warn("[authService] Error fetching fresh user (auth.getUser):", userError);
-       return null;
-    }
-
-    console.log(`[authService] Fresh user email_confirmed_at: ${freshUser.email_confirmed_at}`);
-    if (!freshUser.email_confirmed_at) {
-      console.warn("[authService] User email NOT confirmed. Returning null.");
+    // Bei OAuth ist email_confirmed_at oft gesetzt, bei Email-Login muss es geprüft werden
+    if (!freshUser.email_confirmed_at && freshUser.app_metadata.provider === 'email') {
       return null;
     }
 
-    console.log("[authService] User email IS confirmed. Fetching public.users profile.");
     const { data: userData, error } = await supabase
       .from('users')
       .select('*')
       .eq('id', freshUser.id)
-      .single();
+      .maybeSingle();
 
     if (error || !userData) {
-        console.error("[authService] Error fetching public.users profile:", error);
+        // Fallback: Wenn User in Auth aber nicht in Public Table (kann bei OAuth First-Login passieren)
+        // Der Trigger in der DB sollte das eigentlich handeln, aber sicherheitshalber:
+        console.warn("User profile missing in public table.");
         return null;
     }
 
-    console.log("[authService] Successfully fetched full profile.");
     return this.mapUserRowToAuthUser(userData, freshUser.email);
   }
 
-  async updateProfile(userId: string, updates: {
-    display_name?: string;
-    bio?: string;
-    avatar_url?: string;
-    banner_url?: string;
-    subscription_price?: number;
-    role?: 'FAN' | 'CREATOR';
-    welcome_message?: string;
-    profile_hashtags?: string[];
-    interests?: string[]; // <-- NEU
-    live_stream_tier_id?: string | null;
-    live_stream_requires_subscription?: boolean;
-    is_live?: boolean;
-  }) {
-    const dbUpdates: UserUpdate = { ...updates };
-
+  async updateProfile(userId: string, updates: Partial<UserUpdate>) {
     const { data, error } = await supabase
       .from('users')
-      .update(dbUpdates)
+      .update(updates)
       .eq('id', userId)
       .select()
       .single();
@@ -206,14 +175,11 @@ export class AuthService {
 
   onAuthStateChange(callback: (user: AuthUser | null) => void) {
     return supabase.auth.onAuthStateChange((_event, session) => {
-      console.log(`[authService] onAuthStateChange FIRED. Event: ${_event}, Session: ${!!session}`);
       (async () => {
         if (session?.user) {
-          console.log("[authService] Session found, checking full profile (incl. email verification)...");
           const user = await this.getCurrentUserFullProfile();
           callback(user);
         } else {
-          console.log("[authService] No session. Calling callback(null).");
           callback(null);
         }
       })();
@@ -236,7 +202,7 @@ export class AuthService {
       subscriptionPrice: userData.subscription_price,
       welcomeMessage: userData.welcome_message || '',
       profileHashtags: userData.profile_hashtags || [],
-      interests: userData.interests || [], // <-- NEU: Interessen mappen
+      interests: userData.interests || [],
       mux_stream_key: userData.mux_stream_key,
       mux_playback_id: userData.mux_playback_id,
       is_live: userData.is_live,

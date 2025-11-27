@@ -1,7 +1,6 @@
-// src/components/onboarding/AuthModal.tsx
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { MailIcon, LockIcon, ChromeIcon, AppleIcon, UserIcon, KeyRoundIcon, Loader2Icon, CheckIcon, XIcon, ArrowLeftIcon } from 'lucide-react';
+import { MailIcon, LockIcon, ChromeIcon, UserIcon, KeyRoundIcon, Loader2Icon, ArrowLeftIcon } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -9,7 +8,7 @@ import { Checkbox } from '../ui/checkbox';
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../hooks/use-toast';
 import { cn } from '../../lib/utils';
-import { supabase } from '../../lib/supabase'; // Zugriff für Reset
+import { supabase } from '../../lib/supabase';
 
 interface AuthModalProps {
   onComplete: () => void;
@@ -28,7 +27,7 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [step, setStep] = useState<'auth' | 'verify' | 'forgot'>('auth');
 
-  const { login, register, verifyOtp, resendOtp, checkUsernameAvailability, checkEmailAvailability } = useAuthStore();
+  const { login, register, loginWithOAuth, verifyOtp, checkUsernameAvailability, checkEmailAvailability } = useAuthStore();
   const { toast } = useToast();
 
   const [username, setUsername] = useState('');
@@ -45,9 +44,7 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
 
   const [verificationCode, setVerificationCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isResending, setIsResending] = useState(false);
 
-  // Username Check (bleibt gleich)
   useEffect(() => {
     if (isLogin || !username) { setUsernameStatus('idle'); setUsernameError(null); return; }
     if (debounceUsernameTimer.current) clearTimeout(debounceUsernameTimer.current);
@@ -64,7 +61,6 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
     return () => { if (debounceUsernameTimer.current) clearTimeout(debounceUsernameTimer.current); };
   }, [username, isLogin, checkUsernameAvailability]);
 
-  // Email Check (bleibt gleich)
   useEffect(() => {
     if (isLogin || !email) { setEmailStatus('idle'); setEmailError(null); return; }
     if (debounceEmailTimer.current) clearTimeout(debounceEmailTimer.current);
@@ -114,6 +110,16 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
     setIsLoading(false);
   };
 
+  const handleSocialLogin = async (provider: 'google' | 'apple') => {
+    setIsLoading(true);
+    try {
+      await loginWithOAuth(provider);
+    } catch (error: any) {
+      toast({ title: "Login fehlgeschlagen", description: error.message, variant: "destructive" });
+      setIsLoading(false);
+    }
+  };
+
   const handleVerificationSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!verificationCode) return;
@@ -130,7 +136,6 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
       }
   };
 
-  // --- NEU: Passwort Reset Handler ---
   const handleForgotPassword = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!email || !validateEmail(email)) {
@@ -186,23 +191,38 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
               </div>
 
               {!isLogin && (
-                  <>
-                    <div className="space-y-2"><Label>Bestätigen</Label><div className="relative"><LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"/><Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="pl-10 bg-background border-border"/></div></div>
-                    <div className="flex items-center space-x-2 pt-2"><Checkbox id="age" checked={ageVerified} onCheckedChange={(c) => setAgeVerified(c as boolean)} /><Label htmlFor="age">Über 18 Jahre alt</Label></div>
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                        <Label>Bestätigen</Label>
+                        <div className="relative"><LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"/><Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="pl-10 bg-background border-border"/></div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <Checkbox id="age" checked={ageVerified} onCheckedChange={(c) => setAgeVerified(c as boolean)} />
+                        <Label htmlFor="age" className="text-sm cursor-pointer">Ich bestätige, dass ich über 18 Jahre alt bin.</Label>
+                    </div>
                     <div className="flex items-start space-x-2">
                         <Checkbox id="terms" checked={termsAgreed} onCheckedChange={(c) => setTermsAgreed(c as boolean)} className="mt-1" />
-                        <Label htmlFor="terms" className="leading-normal">
-                            Ich stimme den <a href="/agb" target="_blank" className="text-secondary hover:underline">AGB</a> und der <a href="/datenschutz" target="_blank" className="text-secondary hover:underline">Datenschutzerklärung</a> zu.
+                        <Label htmlFor="terms" className="text-sm leading-normal cursor-pointer">
+                            Ich stimme den <a href="/impressum" target="_blank" className="text-secondary hover:underline">AGB</a> und der <a href="/datenschutz" target="_blank" className="text-secondary hover:underline">Datenschutzerklärung</a> zu.
                         </Label>
                     </div>
-                  </>
+                  </div>
               )}
 
-              <Button type="submit" className="w-full bg-secondary text-secondary-foreground" disabled={isLoading}>{isLoading ? <Loader2Icon className="animate-spin"/> : (isLogin ? 'Anmelden' : 'Registrieren')}</Button>
+              <Button type="submit" className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90" disabled={isLoading}>{isLoading ? <Loader2Icon className="animate-spin"/> : (isLogin ? 'Anmelden' : 'Registrieren')}</Button>
             </form>
 
-            <div className="relative"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border"/></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">Oder</span></div></div>
-            <div className="grid grid-cols-2 gap-4"><Button variant="outline"><ChromeIcon className="mr-2 w-5 h-5"/>Google</Button><Button variant="outline"><AppleIcon className="mr-2 w-5 h-5"/>Apple</Button></div>
+            <div className="relative"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border"/></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">Oder fortfahren mit</span></div></div>
+
+            {/* --- GEÄNDERT: Nur Google Button --- */}
+            <div className="grid grid-cols-1 gap-4">
+                <Button type="button" variant="outline" onClick={() => handleSocialLogin('google')} className="bg-background text-foreground border-border hover:bg-neutral py-6">
+                    <ChromeIcon className="mr-2 w-5 h-5"/>
+                    Mit Google fortfahren
+                </Button>
+            </div>
+            {/* --------------------------------- */}
+
             <div className="text-center"><button type="button" onClick={() => setIsLogin(!isLogin)} className="text-sm text-secondary hover:underline">{isLogin ? 'Registrieren' : 'Anmelden'}</button></div>
           </>
         )}
@@ -217,7 +237,6 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
             </>
         )}
 
-        {/* FORGOT PASSWORD STEP */}
         {step === 'forgot' && (
             <>
                 <div className="text-center space-y-2">

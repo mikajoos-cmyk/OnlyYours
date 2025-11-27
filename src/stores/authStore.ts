@@ -12,22 +12,11 @@ interface AuthState {
   isLoading: boolean;
   initialize: () => () => void;
   login: (email: string, password: string) => Promise<void>;
+  loginWithOAuth: (provider: 'google' | 'apple') => Promise<void>; // <-- NEU
   register: (username: string, email: string, password: string, role?: 'fan' | 'creator') => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: AppUser) => void;
-  updateProfile: (updates: {
-    display_name?: string;
-    bio?: string;
-    avatar_url?: string;
-    banner_url?: string;
-    subscription_price?: number;
-    role?: 'FAN' | 'CREATOR';
-    welcome_message?: string;
-    profile_hashtags?: string[]; // <-- Von CreatorProfile
-    live_stream_tier_id?: string | null; // <-- Von StreamConfigModal
-    live_stream_requires_subscription?: boolean; // <-- Von StreamConfigModal
-    is_live?: boolean; // <-- Von StreamConfigModal
-  }) => Promise<void>;
+  updateProfile: (updates: any) => Promise<void>;
   changePassword: (newPassword: string) => Promise<void>;
   checkUsernameAvailability: (username: string) => Promise<boolean>;
   checkEmailAvailability: (email: string) => Promise<boolean>;
@@ -45,15 +34,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: () => {
     if (initializationEnsured && authListenerSubscription) {
-      console.log("[authStore] Auth listener already initialized. Skipping.");
-      return () => { /* No-op */ };
+      return () => { };
     }
      if (!authListenerSubscription) {
-        console.log("[authStore] Initializing auth listener...");
-
         const authSubscription = authService.onAuthStateChange(async (userFullProfile: AppUser | null) => {
-          console.log("[authStore] Auth state change received:", userFullProfile);
-
           if (userFullProfile) {
             set({
               isAuthenticated: true,
@@ -61,7 +45,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               isLoading: false
             });
             useAppStore.getState().completeOnboarding();
-            console.log("[authStore] User is Authenticated. Onboarding marked complete.");
           } else {
             set({
               isAuthenticated: false,
@@ -69,22 +52,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               isLoading: false
             });
             useAppStore.getState().resetOnboarding();
-            console.log("[authStore] User is NOT Authenticated. Onboarding reset.");
           }
-
           initializationEnsured = true;
         });
-
         authListenerSubscription = authSubscription.data.subscription;
      }
 
     return () => {
-      console.log("[authStore] Running unsubscribe function returned by initialize...");
       if (authListenerSubscription) {
         authListenerSubscription.unsubscribe();
         authListenerSubscription = null;
         initializationEnsured = false;
-        console.log("Auth listener unsubscribed.");
       }
     };
   },
@@ -98,6 +76,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error;
     }
   },
+
+  // --- NEU: OAuth Handler ---
+  loginWithOAuth: async (provider: 'google' | 'apple') => {
+    try {
+      await authService.loginWithOAuth(provider);
+      // Hinweis: Da OAuth einen Redirect auslöst, wird der Code hiernach oft nicht mehr ausgeführt,
+      // bis der User zurückkehrt (handled by onAuthStateChange).
+    } catch (error) {
+      console.error('OAuth Login failed:', error);
+      throw error;
+    }
+  },
+  // --- ENDE NEU ---
+
   register: async (username: string, email: string, password: string, role: 'fan' | 'creator' = 'fan') => {
     try {
       await authService.register(username, email, password, role);
@@ -108,7 +100,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   logout: async () => {
     try {
-       console.log("Calling authService.logout...");
       await authService.logout();
       set({ isAuthenticated: false, user: null });
     } catch (error) {
@@ -125,8 +116,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!currentUser) throw new Error('Not authenticated');
     try {
       await authService.updateProfile(currentUser.id, updates);
-
-      // Profil neu laden, um alle Änderungen (inkl. der neuen Stream-Settings) zu übernehmen
       const updatedUser = await authService.getCurrentUserFullProfile();
       if (updatedUser) {
         set({ user: updatedUser });
