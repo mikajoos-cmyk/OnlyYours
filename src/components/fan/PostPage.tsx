@@ -149,8 +149,8 @@ export default function PostPage() {
       return;
     }
     if (creatorTiers.length === 0) {
-       toast({ title: "Fehler", description: "Dieser Creator bietet (noch) keine Abos an.", variant: "destructive" });
-       return;
+      toast({ title: "Fehler", description: "Dieser Creator bietet (noch) keine Abos an.", variant: "destructive" });
+      return;
     }
     setShowPpvModal(false);
     setShowSubscriptionModal(true);
@@ -254,7 +254,7 @@ export default function PostPage() {
                 </Button>
               )}
               {canPpv && canSubscribe && (
-                 <div className="relative w-full max-w-sm">
+                <div className="relative w-full max-w-sm">
                   <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
                   <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">ODER</span></div>
                 </div>
@@ -263,10 +263,10 @@ export default function PostPage() {
                 <Button
                   variant={canPpv ? "outline" : "secondary"}
                   className={cn(
-                      "text-lg px-8 py-6 w-full max-w-sm",
-                      canPpv
-                          ? "bg-transparent border-secondary text-secondary hover:bg-secondary/10 hover:text-secondary"
-                          : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                    "text-lg px-8 py-6 w-full max-w-sm",
+                    canPpv
+                      ? "bg-transparent border-secondary text-secondary hover:bg-secondary/10 hover:text-secondary"
+                      : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
                   )}
                   onClick={handleSubscribeClick}
                 >
@@ -361,8 +361,8 @@ export default function PostPage() {
 
           <div className="absolute bottom-4 left-4 right-20 z-10">
             <p className={cn(
-                "text-foreground drop-shadow-lg mb-2",
-                !hasAccess && "filter blur-sm select-none"
+              "text-foreground drop-shadow-lg mb-2",
+              !hasAccess && "filter blur-sm select-none"
             )}>
               {hasAccess ? post.caption : "Abonniere oder kaufe diesen Post, um die Beschreibung zu sehen."}
             </p>
@@ -388,14 +388,14 @@ export default function PostPage() {
       </AnimatePresence>
 
       {showPpvModal && (
-         <PpvModal
-            isOpen={showPpvModal}
-            onClose={() => setShowPpvModal(false)}
-            post={post}
-            onPaymentSuccess={handlePurchaseSuccess}
-            creatorTiers={creatorTiers}
-            onSubscribeClick={handleSubscribeClick}
-         />
+        <PpvModal
+          isOpen={showPpvModal}
+          onClose={() => setShowPpvModal(false)}
+          post={post}
+          onPaymentSuccess={handlePurchaseSuccess}
+          creatorTiers={creatorTiers}
+          onSubscribeClick={handleSubscribeClick}
+        />
       )}
 
       {showSubscriptionModal && creatorTiers.length > 0 && (

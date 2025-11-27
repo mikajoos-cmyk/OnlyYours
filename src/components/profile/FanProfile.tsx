@@ -1,6 +1,6 @@
 // src/components/profile/FanProfile.tsx
 import { useState, useEffect, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -12,12 +12,14 @@ import { subscriptionService } from '../../services/subscriptionService';
 import { storageService } from '../../services/storageService';
 import { paymentService, PaymentTransaction, SavedPaymentMethod } from '../../services/paymentService';
 import { useToast } from '../../hooks/use-toast';
-import { CameraIcon, ShieldIcon, CreditCardIcon, Loader2Icon, Trash2Icon, PlusIcon, XIcon } from 'lucide-react';
+import { CameraIcon, ShieldIcon, CreditCardIcon, Loader2Icon, Trash2Icon, PlusIcon, XIcon, SettingsIcon } from 'lucide-react';
 import AddPaymentMethodModal from '../fan/AddPaymentMethodModal';
+import { useNavigate } from 'react-router-dom';
 
 export default function FanProfile() {
-  const { user, updateProfile, changePassword } = useAuthStore();
+  const { user, updateProfile, changePassword, logout } = useAuthStore();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeSubscriptions, setActiveSubscriptions] = useState<any[]>([]);
@@ -25,10 +27,8 @@ export default function FanProfile() {
   const [paymentMethods, setPaymentMethods] = useState<SavedPaymentMethod[]>([]);
   const [showAddMethodModal, setShowAddMethodModal] = useState(false);
   const [isMethodsLoading, setIsMethodsLoading] = useState(false);
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [displayName, setDisplayName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
   const [isAccountLoading, setIsAccountLoading] = useState(false);
@@ -38,8 +38,6 @@ export default function FanProfile() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isPasswordLoading, setIsPasswordLoading] = useState(false);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-
-  // NEU: Interests State (getrennt von profileHashtags für Creators)
   const [interests, setInterests] = useState<string[]>(user?.interests || []);
   const [newInterest, setNewInterest] = useState('');
 
@@ -63,16 +61,12 @@ export default function FanProfile() {
   useEffect(() => {
     const fetchData = async () => {
       if (!user?.id) return;
-
+      setLoading(true);
       try {
-        setLoading(true);
-        setError(null);
-
         const [subs, history] = await Promise.all([
             subscriptionService.getUserSubscriptions(),
             paymentService.getUserPaymentHistory(user.id)
         ]);
-
         const mappedSubs = subs.map(s => ({
             id: s.id,
             creator: { name: s.creator?.name || 'Unbekannter Creator' },
@@ -82,17 +76,13 @@ export default function FanProfile() {
         }));
         setActiveSubscriptions(mappedSubs);
         setTransactions(history);
-
         fetchPaymentMethods();
-
       } catch (err) {
-        setError('Fehler beim Laden der Daten.');
         console.error(err);
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, [user?.id]);
 
@@ -100,7 +90,6 @@ export default function FanProfile() {
     if (user) {
         setDisplayName(user.name || '');
         setEmail(user.email || '');
-        // Hier laden wir die Interessen, nicht die Creator-Tags
         setInterests(user.interests || []);
     }
   }, [user]);
@@ -124,19 +113,12 @@ export default function FanProfile() {
       e.preventDefault();
       setIsAccountLoading(true);
       try {
-          // Hashtags bereinigen
           const cleanedInterests = interests
             .map(t => t.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())
             .filter(t => t.length > 0);
-
           setInterests(cleanedInterests);
-
-          // Wir speichern hier explizit in 'interests'
-          await updateProfile({
-            display_name: displayName,
-            interests: cleanedInterests
-          });
-          toast({ title: "Profil aktualisiert!", description: "Deine Interessen wurden für den Feed gespeichert." });
+          await updateProfile({ display_name: displayName, interests: cleanedInterests });
+          toast({ title: "Profil aktualisiert!" });
       } catch (error: any) {
           toast({ title: "Update fehlgeschlagen", description: error.message, variant: "destructive" });
       } finally {
@@ -144,15 +126,10 @@ export default function FanProfile() {
       }
   };
 
-  // Handler für Interessen
   const handleAddInterest = () => {
     if (newInterest.trim() === "") return;
     if (interests.length >= 10) {
-      toast({
-        title: "Limit erreicht",
-        description: "Du kannst maximal 10 Interessen hinzufügen.",
-        variant: "destructive"
-      });
+      toast({ title: "Limit erreicht", variant: "destructive" });
       return;
     }
     const cleanTag = newInterest.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
@@ -169,369 +146,176 @@ export default function FanProfile() {
   const handlePasswordChange = async (e: React.FormEvent) => {
       e.preventDefault();
       if (newPassword !== confirmPassword) {
-          toast({ title: "Fehler", description: "Die neuen Passwörter stimmen nicht überein.", variant: "destructive" });
-          return;
-      }
-      if (newPassword.length < 6) {
-          toast({ title: "Fehler", description: "Das Passwort muss mindestens 6 Zeichen lang sein.", variant: "destructive" });
+          toast({ title: "Fehler", description: "Passwörter stimmen nicht überein.", variant: "destructive" });
           return;
       }
       setIsPasswordLoading(true);
       try {
           await changePassword(newPassword);
-          toast({ title: "Passwort erfolgreich geändert!" });
-          setNewPassword('');
-          setConfirmPassword('');
+          toast({ title: "Passwort geändert!" });
+          setNewPassword(''); setConfirmPassword('');
       } catch (error: any) {
-           toast({ title: "Passwortänderung fehlgeschlagen", description: error.message, variant: "destructive" });
+           toast({ title: "Fehler", description: error.message, variant: "destructive" });
       } finally {
           setIsPasswordLoading(false);
       }
   };
 
   const handleDeletePaymentMethod = async (methodId: string) => {
-      if(!confirm("Möchten Sie diese Zahlungsmethode wirklich entfernen?")) return;
-
+      if(!confirm("Möchten Sie diese Karte wirklich entfernen?")) return;
       try {
           await paymentService.deletePaymentMethod(methodId);
-          toast({ title: "Gelöscht", description: "Zahlungsmethode wurde entfernt." });
+          toast({ title: "Gelöscht", description: "Zahlungsmethode entfernt." });
           fetchPaymentMethods();
       } catch (error: any) {
           toast({ title: "Fehler", description: "Konnte Methode nicht löschen.", variant: "destructive" });
       }
   };
 
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm("ACHTUNG: Diese Aktion kann nicht rückgängig gemacht werden. Ihr Konto und alle Daten werden dauerhaft gelöscht. Fortfahren?");
+    if(!confirmed) return;
+
+    try {
+        // Hier würdest du eine Funktion aufrufen wie `await authService.deleteAccount();`
+        // Da Supabase Client keine direkte User-Löschung erlaubt (nur Admin),
+        // müsste dies über eine Edge Function geschehen.
+        toast({ title: "Information", description: "Bitte kontaktieren Sie den Support (support@onlyyours.app) zur Löschung.", variant: "default" });
+    } catch(e) {
+        toast({ title: "Fehler", description: "Konto konnte nicht gelöscht werden.", variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-8">
       <Tabs defaultValue="account" className="w-full">
-        <TabsList className="bg-card border border-border">
-          <TabsTrigger value="account" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
-            Konto
-          </TabsTrigger>
-          <TabsTrigger value="security" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
-            Sicherheit
-          </TabsTrigger>
-          <TabsTrigger value="subscriptions" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
-            Abonnements
-          </TabsTrigger>
-          <TabsTrigger value="payments" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
-            Zahlungen
-          </TabsTrigger>
+        <TabsList className="bg-card border border-border flex flex-wrap h-auto">
+          <TabsTrigger value="account" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">Konto</TabsTrigger>
+          <TabsTrigger value="security" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">Sicherheit</TabsTrigger>
+          <TabsTrigger value="subscriptions" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">Abos</TabsTrigger>
+          <TabsTrigger value="payments" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">Zahlungen</TabsTrigger>
+          <TabsTrigger value="settings" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">Einstellungen</TabsTrigger>
         </TabsList>
 
+        {/* ACCOUNT TAB */}
         <TabsContent value="account" className="mt-6">
           <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-foreground">Profil & Interessen</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-foreground">Profil & Interessen</CardTitle></CardHeader>
             <CardContent>
               <form onSubmit={handleAccountUpdate} className="space-y-6">
-                <div className="flex items-center gap-6">
+                <div className="flex flex-col md:flex-row items-center gap-6">
                   <Avatar className="w-24 h-24">
-                    <AvatarImage src={user?.avatar} alt={user?.name} />
-                    <AvatarFallback className="bg-secondary text-secondary-foreground text-2xl">
-                      {user?.name?.charAt(0)}
-                    </AvatarFallback>
+                    <AvatarImage src={user?.avatar} />
+                    <AvatarFallback className="bg-secondary text-secondary-foreground text-2xl">{user?.name?.charAt(0)}</AvatarFallback>
                   </Avatar>
-                  <Button
-                    type="button"
-                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isAvatarLoading}
-                  >
-                    {isAvatarLoading ? (
-                        <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />
-                    ) : (
-                        <CameraIcon className="w-5 h-5 mr-2" strokeWidth={1.5} />
-                    )}
-                    Profilbild ändern
+                  <Button type="button" className="bg-secondary text-secondary-foreground hover:bg-secondary/90" onClick={() => fileInputRef.current?.click()} disabled={isAvatarLoading}>
+                    {isAvatarLoading ? <Loader2Icon className="animate-spin mr-2" /> : <CameraIcon className="mr-2" />} Bild ändern
                   </Button>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleAvatarChange}
-                    accept="image/png, image/jpeg"
-                    className="hidden"
-                  />
+                  <input type="file" ref={fileInputRef} onChange={handleAvatarChange} accept="image/png, image/jpeg" className="hidden" />
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="username" className="text-foreground">Anzeigename</Label>
-                  <Input
-                    id="username"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    className="bg-background text-foreground border-border"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-foreground">E-Mail-Adresse</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    className="bg-neutral text-muted-foreground border-border"
-                    disabled
-                    readOnly
-                  />
-                </div>
-
-                {/* --- NEUER ABSCHNITT: INTERESSEN --- */}
+                <div className="grid gap-2"><Label>Anzeigename</Label><Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="bg-background border-border" /></div>
+                <div className="grid gap-2"><Label>E-Mail</Label><Input value={email} className="bg-neutral text-muted-foreground" disabled readOnly /></div>
                 <div className="space-y-4 border-t border-border pt-4">
-                  <div>
-                    <Label className="text-foreground">Deine Interessen</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Füge Themen hinzu, die dich interessieren (z.B. Fitness, Kunst).
-                      Wir nutzen diese, um deinen Feed zu personalisieren.
-                    </p>
-                  </div>
-
+                  <Label>Interessen</Label>
                   <div className="flex flex-wrap gap-2">
-                    {interests.map((tag) => (
-                      <div key={tag} className="flex items-center gap-1 bg-secondary/20 text-secondary rounded-full pl-3 pr-1 py-1">
-                        <span className="text-sm">#{tag}</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleRemoveInterest(tag)}
-                          className="h-6 w-6 text-secondary hover:text-destructive hover:bg-destructive/10 rounded-full"
-                        >
-                          <XIcon className="h-3 w-3" />
-                        </Button>
-                      </div>
+                    {interests.map(tag => (
+                      <div key={tag} className="flex items-center gap-1 bg-secondary/20 text-secondary rounded-full px-3 py-1 text-sm">#{tag}<XIcon className="w-3 h-3 cursor-pointer" onClick={() => handleRemoveInterest(tag)} /></div>
                     ))}
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-grow">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">#</span>
-                      <Input
-                        id="new-interest"
-                        type="text"
-                        placeholder="Interesse hinzufügen..."
-                        value={newInterest}
-                        onChange={(e) => setNewInterest(e.target.value)}
-                        className="bg-background text-foreground border-border pl-7"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleAddInterest();
-                          }
-                        }}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="bg-background text-foreground border-border hover:bg-neutral font-normal"
-                      onClick={handleAddInterest}
-                    >
-                      <PlusIcon className="w-5 h-5" />
-                    </Button>
-                  </div>
+                  <div className="flex gap-2"><Input placeholder="Neues Interesse..." value={newInterest} onChange={e => setNewInterest(e.target.value)} className="bg-background border-border" /><Button type="button" onClick={handleAddInterest} variant="outline"><PlusIcon className="w-4 h-4" /></Button></div>
                 </div>
-                {/* --- ENDE INTERESSEN --- */}
-
-                <Button
-                    type="submit"
-                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
-                    disabled={isAccountLoading}
-                >
-                  {isAccountLoading && <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />}
-                  Änderungen speichern
-                </Button>
+                <Button type="submit" className="bg-secondary text-secondary-foreground" disabled={isAccountLoading}>{isAccountLoading ? <Loader2Icon className="animate-spin mr-2" /> : "Speichern"}</Button>
               </form>
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* SECURITY TAB */}
         <TabsContent value="security" className="mt-6">
           <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-foreground flex items-center gap-2">
-                <ShieldIcon className="w-5 h-5" strokeWidth={1.5} />
-                Sicherheit & Privatsphäre
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-foreground">Sicherheit</CardTitle></CardHeader>
             <CardContent>
-              <form onSubmit={handlePasswordChange} className="space-y-6">
-                 <div className="space-y-2">
-                  <Label htmlFor="new-password" className="text-foreground">Neues Passwort</Label>
-                  <Input
-                    id="new-password"
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="bg-background text-foreground border-border"
-                    placeholder="Mindestens 6 Zeichen"
-                  />
-                </div>
-                 <div className="space-y-2">
-                  <Label htmlFor="confirm-password" className="text-foreground">Neues Passwort bestätigen</Label>
-                  <Input
-                    id="confirm-password"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="bg-background text-foreground border-border"
-                  />
-                </div>
-                <div className="flex items-center justify-between py-4 border-t border-border">
-                  <div>
-                    <h3 className="text-foreground font-medium">Zwei-Faktor-Authentifizierung</h3>
-                    <p className="text-sm text-muted-foreground">Zusätzliche Sicherheit (derzeit nicht verfügbar)</p>
-                  </div>
-                  <Switch
-                    checked={twoFactorEnabled}
-                    onCheckedChange={setTwoFactorEnabled}
-                    disabled
-                  />
-                </div>
-                <Button
-                    type="submit"
-                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
-                    disabled={isPasswordLoading || !newPassword || !confirmPassword}
-                >
-                   {isPasswordLoading && <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />}
-                  Passwort ändern
-                </Button>
+              <form onSubmit={handlePasswordChange} className="space-y-4">
+                <div className="grid gap-2"><Label>Neues Passwort</Label><Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="bg-background border-border" /></div>
+                <div className="grid gap-2"><Label>Bestätigen</Label><Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="bg-background border-border" /></div>
+                <Button type="submit" className="bg-secondary text-secondary-foreground" disabled={isPasswordLoading}>{isPasswordLoading ? <Loader2Icon className="animate-spin mr-2" /> : "Passwort ändern"}</Button>
               </form>
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* SUBSCRIPTIONS TAB */}
         <TabsContent value="subscriptions" className="mt-6">
           <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-foreground">Aktive Abonnements</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-foreground">Meine Abonnements</CardTitle></CardHeader>
             <CardContent>
-               {loading && <p className="text-muted-foreground">Lade Abonnements...</p>}
-               {!loading && activeSubscriptions.length === 0 && <p className="text-muted-foreground">Keine aktiven Abonnements.</p>}
-              <div className="space-y-4">
+                <div className="space-y-4">
                 {!loading && activeSubscriptions.map((sub) => (
-                  <div
-                    key={sub.id}
-                    className="flex items-center justify-between py-4 border-b border-border last:border-0"
-                  >
-                    <div>
-                      <h3 className="text-foreground font-medium">{sub.creator.name}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {sub.status === 'CANCELED' ?
-                            `Gekündigt, läuft ab am: ${sub.endDate ? new Date(sub.endDate).toLocaleDateString('de-DE') : 'N/A'}` :
-                            `Nächste Abrechnung: ${sub.endDate ? new Date(sub.endDate).toLocaleDateString('de-DE') : 'N/A'}`
-                        }
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-secondary font-medium">{formatCurrency(sub.price)}/Monat</span>
-                      <Button
-                        variant="outline"
-                        className="bg-background text-foreground border-border hover:bg-neutral font-normal"
-                        disabled={sub.status === 'CANCELED'}
-                        onClick={async () => {
-                            try {
-                                await subscriptionService.cancelSubscription(sub.id);
-                                toast({ title: "Abonnement gekündigt" });
-                                window.location.reload();
-                            } catch (error: any) {
-                                toast({ title: "Fehler", description: error.message, variant: "destructive" });
-                            }
-                        }}
-                      >
-                        {sub.status === 'CANCELED' ? 'Gekündigt' : 'Kündigen'}
-                      </Button>
-                    </div>
+                  <div key={sub.id} className="flex justify-between items-center border-b border-border py-4">
+                    <div><h3 className="font-medium">{sub.creator.name}</h3><p className="text-sm text-muted-foreground">{sub.status === 'CANCELED' ? 'Gekündigt' : 'Aktiv'}</p></div>
+                    <div className="flex items-center gap-4"><span className="text-secondary">{formatCurrency(sub.price)}</span><Button variant="outline" onClick={async () => { await subscriptionService.cancelSubscription(sub.id); toast({title: "Gekündigt"}); window.location.reload(); }}>Kündigen</Button></div>
                   </div>
                 ))}
-              </div>
+                </div>
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* PAYMENTS TAB */}
         <TabsContent value="payments" className="mt-6">
           <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-foreground flex items-center gap-2">
-                <CreditCardIcon className="w-5 h-5" strokeWidth={1.5} />
-                Zahlungsmethoden & Historie
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-foreground flex items-center gap-2"><CreditCardIcon className="w-5 h-5"/> Zahlungsmethoden</CardTitle></CardHeader>
             <CardContent className="space-y-6">
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-foreground font-medium">Gespeicherte Zahlungsmethoden</h3>
-                    <Button
-                        onClick={() => setShowAddMethodModal(true)}
-                        className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
-                    >
-                        <PlusIcon className="w-4 h-4 mr-2" />
-                        Hinzufügen
-                    </Button>
-                </div>
-
-                {isMethodsLoading ? (
-                    <p className="text-sm text-muted-foreground">Lade Karten...</p>
-                ) : paymentMethods.length === 0 ? (
-                    <p className="text-sm text-muted-foreground italic">Keine Zahlungsmethoden gespeichert.</p>
-                ) : (
-                    <div className="space-y-3">
-                        {paymentMethods.map((method) => (
-                            <div key={method.id} className="flex items-center justify-between p-3 bg-background border border-border rounded-lg">
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-neutral p-2 rounded">
-                                        <CreditCardIcon className="w-5 h-5 text-foreground" />
-                                    </div>
-                                    <div>
-                                        <p className="text-foreground font-medium capitalize">{method.brand} •••• {method.last4}</p>
-                                        <p className="text-xs text-muted-foreground">Läuft ab {method.expMonth}/{method.expYear}</p>
-                                    </div>
-                                </div>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleDeletePaymentMethod(method.id)}
-                                    className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                >
-                                    <Trash2Icon className="w-4 h-4" />
-                                </Button>
-                            </div>
-                        ))}
-                    </div>
-                )}
-              </div>
-
-              <div className="border-t border-border pt-6">
-                <h3 className="text-foreground font-medium mb-4">Transaktionshistorie</h3>
-                 {loading && <p className="text-muted-foreground">Lade Transaktionen...</p>}
-                 {!loading && transactions.length === 0 && <p className="text-muted-foreground">Keine Transaktionen vorhanden.</p>}
+                <div className="flex justify-between"><h3 className="font-medium">Gespeicherte Karten</h3><Button onClick={() => setShowAddMethodModal(true)} className="bg-secondary text-secondary-foreground"><PlusIcon className="w-4 h-4 mr-2"/> Neu</Button></div>
                 <div className="space-y-3">
-                  {!loading && transactions.map((transaction) => (
-                    <div
-                      key={transaction.id}
-                      className="flex items-center justify-between py-3 border-b border-border last:border-0"
-                    >
-                      <div>
-                        <p className="text-foreground">{transaction.description}</p>
-                        <p className="text-sm text-muted-foreground">{new Date(transaction.created_at).toLocaleDateString('de-DE')}</p>
-                      </div>
-                      <span className="text-foreground font-medium">-{formatCurrency(transaction.amount)}</span>
-                    </div>
-                  ))}
+                    {paymentMethods.map(m => (
+                        <div key={m.id} className="flex justify-between items-center p-3 border border-border rounded"><div className="flex gap-3"><CreditCardIcon/><p className="capitalize">{m.brand} •••• {m.last4}</p></div><Button variant="ghost" size="icon" onClick={() => handleDeletePaymentMethod(m.id)}><Trash2Icon className="w-4 h-4"/></Button></div>
+                    ))}
                 </div>
-              </div>
+                <div className="border-t border-border pt-6"><h3 className="font-medium mb-4">Historie</h3>
+                    <div className="space-y-3">{transactions.map(t => (<div key={t.id} className="flex justify-between border-b border-border py-2"><div><p>{t.description}</p><p className="text-xs text-muted-foreground">{new Date(t.created_at).toLocaleDateString()}</p></div><span>-{formatCurrency(t.amount)}</span></div>))}</div>
+                </div>
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* SETTINGS TAB */}
+        <TabsContent value="settings" className="mt-6">
+            <Card className="bg-card border-border">
+                <CardHeader>
+                    <CardTitle className="text-foreground">Allgemeine Einstellungen</CardTitle>
+                    <CardDescription>Verwalten Sie Benachrichtigungen und Kontoeinstellungen.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                            <Label className="text-base">E-Mail Benachrichtigungen</Label>
+                            <p className="text-sm text-muted-foreground">Erhalten Sie Updates zu neuen Beiträgen.</p>
+                        </div>
+                        <Switch checked={true} disabled />
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                            <Label className="text-base">Push Benachrichtigungen</Label>
+                            <p className="text-sm text-muted-foreground">Benachrichtigungen im Browser.</p>
+                        </div>
+                        <Switch checked={false} disabled />
+                    </div>
+
+                    <div className="border-t border-destructive/20 pt-6 mt-6">
+                        <h3 className="text-destructive font-medium mb-2 flex items-center gap-2"><SettingsIcon className="w-4 h-4"/> Gefahrenzone</h3>
+                        <p className="text-sm text-muted-foreground mb-4">Das Löschen des Kontos ist endgültig und kann nicht widerrufen werden.</p>
+                        <Button variant="destructive" onClick={handleDeleteAccount} className="w-full md:w-auto">
+                            Konto löschen
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </TabsContent>
+
       </Tabs>
 
-      <AddPaymentMethodModal
-        isOpen={showAddMethodModal}
-        onClose={() => setShowAddMethodModal(false)}
-        onSuccess={() => fetchPaymentMethods()}
-      />
+      <AddPaymentMethodModal isOpen={showAddMethodModal} onClose={() => setShowAddMethodModal(false)} onSuccess={() => fetchPaymentMethods()} />
     </div>
   );
 }

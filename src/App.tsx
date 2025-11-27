@@ -21,6 +21,9 @@ import ProfilePage from './components/profile/ProfilePage';
 import { Toaster } from './components/ui/toaster';
 import PostPage from './components/fan/PostPage';
 import LiveStreamWrapper from './components/creator/LiveStreamWrapper';
+// --- NEUE IMPORTS ---
+import Impressum from './components/legal/Impressum';
+import Datenschutz from './components/legal/Datenschutz';
 
 function App() {
   const { isAuthenticated, isLoading, initialize, user } = useAuthStore();
@@ -29,7 +32,6 @@ function App() {
   const { startPolling, stopPolling } = useNotificationStore.getState();
 
   useEffect(() => {
-    // ... (unverändert)
     const unsubscribeAuth = initialize();
     return () => {
       unsubscribeAuth();
@@ -37,7 +39,6 @@ function App() {
   }, [initialize]);
 
   useEffect(() => {
-    // ... (unverändert)
     if (isAuthenticated && user) {
       loadSubscriptions();
       startPolling(user.id);
@@ -49,7 +50,6 @@ function App() {
 
 
   if (isLoading) {
-    // ... (unverändert)
     return (
       <div className="flex justify-center items-center min-h-screen bg-background">
         <p className="text-foreground">Laden...</p>
@@ -60,22 +60,27 @@ function App() {
   const showOnboarding = !isAuthenticated || !hasCompletedOnboarding;
 
   if (showOnboarding) {
-    // ... (unverändert)
+    // Zugriff auf Rechtstexte auch ohne Login ermöglichen
     return (
-      <>
-        <OnboardingFlow />
-        <Toaster />
-      </>
+      <Router>
+        <Routes>
+          <Route path="/impressum" element={<Impressum />} />
+          <Route path="/datenschutz" element={<Datenschutz />} />
+          <Route path="*" element={
+            <>
+              <OnboardingFlow />
+              <Toaster />
+            </>
+          } />
+        </Routes>
+      </Router>
     );
   }
 
-  // --- KORREKTUR: Routing-Struktur VEREINFACHT ---
   return (
     <Router>
-      {/* AppShell ist jetzt der oberste Container NACH dem Onboarding */}
       <AppShell>
         <Routes>
-          {/* Alle normalen Routen */}
           <Route path="/" element={<Navigate to="/discover" replace />} />
           <Route path="/discover" element={<DiscoveryFeed />} />
           <Route path="/profile/:username" element={<CreatorProfile />} />
@@ -90,18 +95,19 @@ function App() {
           <Route path="/payouts" element={<Payouts />} />
           <Route path="/post/:postId" element={<PostPage />} />
 
-          {/* Live-Stream-Routen sind jetzt HIER DRIN */}
           <Route path="/live" element={<LiveStreamWrapper />} />
           <Route path="/live/:username" element={<LiveStreamWrapper />} />
 
-          {/* Fallback */}
+          {/* Rechtliche Routen */}
+          <Route path="/impressum" element={<Impressum />} />
+          <Route path="/datenschutz" element={<Datenschutz />} />
+
           <Route path="*" element={<Navigate to="/discover" replace />} />
         </Routes>
       </AppShell>
       <Toaster />
     </Router>
   );
-  // --- ENDE KORREKTUR ---
 }
 
 export default App;

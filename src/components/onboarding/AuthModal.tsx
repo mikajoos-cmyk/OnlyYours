@@ -1,7 +1,7 @@
 // src/components/onboarding/AuthModal.tsx
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { MailIcon, LockIcon, ChromeIcon, AppleIcon, UserIcon, KeyRoundIcon, Loader2Icon, CheckIcon, XIcon } from 'lucide-react';
+import { MailIcon, LockIcon, ChromeIcon, AppleIcon, UserIcon, KeyRoundIcon, Loader2Icon, CheckIcon, XIcon, ArrowLeftIcon } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -9,6 +9,7 @@ import { Checkbox } from '../ui/checkbox';
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../hooks/use-toast';
 import { cn } from '../../lib/utils';
+import { supabase } from '../../lib/supabase'; // Zugriff für Reset
 
 interface AuthModalProps {
   onComplete: () => void;
@@ -16,7 +17,6 @@ interface AuthModalProps {
 
 type ValidationStatus = 'idle' | 'checking' | 'available' | 'taken';
 
-// Helper für E-Mail-Validierung (einfach)
 const validateEmail = (email: string) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 };
@@ -26,6 +26,7 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
   const [password, setPassword] = useState('');
   const [ageVerified, setAgeVerified] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
+  const [step, setStep] = useState<'auth' | 'verify' | 'forgot'>('auth');
 
   const { login, register, verifyOtp, resendOtp, checkUsernameAvailability, checkEmailAvailability } = useAuthStore();
   const { toast } = useToast();
@@ -36,443 +37,203 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
 
   const [usernameStatus, setUsernameStatus] = useState<ValidationStatus>('idle');
   const [usernameError, setUsernameError] = useState<string | null>(null);
-
   const [emailStatus, setEmailStatus] = useState<ValidationStatus>('idle');
   const [emailError, setEmailError] = useState<string | null>(null);
 
   const debounceUsernameTimer = useRef<NodeJS.Timeout | null>(null);
   const debounceEmailTimer = useRef<NodeJS.Timeout | null>(null);
 
-  const [step, setStep] = useState<'auth' | 'verify'>('auth');
   const [verificationCode, setVerificationCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
 
-  // Debounced-Effekt für Username-Validierung
+  // Username Check (bleibt gleich)
   useEffect(() => {
-    if (isLogin || !username) {
-      setUsernameStatus('idle');
-      setUsernameError(null);
-      return;
-    }
-    if (debounceUsernameTimer.current) {
-      clearTimeout(debounceUsernameTimer.current);
-    }
-    if (username.length < 3) {
-      setUsernameStatus('taken');
-      setUsernameError('Muss mindestens 3 Zeichen lang sein.');
-      return;
-    }
-    if (!/^[a-z0-9_]+$/.test(username)) {
-      setUsernameStatus('taken');
-      setUsernameError('Nur Kleinbuchstaben, Zahlen und _ erlaubt.');
-      return;
-    }
-    setUsernameError(null);
-    setUsernameStatus('checking');
+    if (isLogin || !username) { setUsernameStatus('idle'); setUsernameError(null); return; }
+    if (debounceUsernameTimer.current) clearTimeout(debounceUsernameTimer.current);
+    if (username.length < 3) { setUsernameStatus('taken'); setUsernameError('Min. 3 Zeichen'); return; }
+    if (!/^[a-z0-9_]+$/.test(username)) { setUsernameStatus('taken'); setUsernameError('Nur Kleinbuchstaben, Zahlen und _'); return; }
+    setUsernameError(null); setUsernameStatus('checking');
     debounceUsernameTimer.current = setTimeout(async () => {
       try {
         const isAvailable = await checkUsernameAvailability(username);
-        if (isAvailable) {
-          setUsernameStatus('available');
-          setUsernameError(null);
-        } else {
-          setUsernameStatus('taken');
-          setUsernameError('Benutzername ist bereits vergeben.');
-        }
-      } catch (error) {
-        setUsernameStatus('taken');
-        setUsernameError('Fehler bei der Prüfung.');
-      }
+        if(isAvailable) { setUsernameStatus('available'); setUsernameError(null); }
+        else { setUsernameStatus('taken'); setUsernameError('Vergeben'); }
+      } catch (e) { setUsernameStatus('taken'); setUsernameError('Fehler'); }
     }, 500);
-    return () => {
-      if (debounceUsernameTimer.current) {
-        clearTimeout(debounceUsernameTimer.current);
-      }
-    };
+    return () => { if (debounceUsernameTimer.current) clearTimeout(debounceUsernameTimer.current); };
   }, [username, isLogin, checkUsernameAvailability]);
 
-  // Debounced-Effekt für E-Mail-Validierung
+  // Email Check (bleibt gleich)
   useEffect(() => {
-    if (isLogin || !email) {
-      setEmailStatus('idle');
-      setEmailError(null);
-      return;
-    }
-    if (debounceEmailTimer.current) {
-      clearTimeout(debounceEmailTimer.current);
-    }
-    if (!validateEmail(email)) {
-      setEmailStatus('idle');
-      setEmailError('Bitte geben Sie eine gültige E-Mail ein.');
-      return;
-    }
-    setEmailError(null);
-    setEmailStatus('checking');
+    if (isLogin || !email) { setEmailStatus('idle'); setEmailError(null); return; }
+    if (debounceEmailTimer.current) clearTimeout(debounceEmailTimer.current);
+    if (!validateEmail(email)) { setEmailStatus('idle'); setEmailError('Ungültig'); return; }
+    setEmailError(null); setEmailStatus('checking');
     debounceEmailTimer.current = setTimeout(async () => {
       try {
         const isAvailable = await checkEmailAvailability(email);
-        if (isAvailable) {
-          setEmailStatus('available');
-          setEmailError(null);
-        } else {
-          setEmailStatus('taken');
-          setEmailError('Diese E-Mail-Adresse ist bereits registriert.');
-        }
-      } catch (error) {
-        setEmailStatus('taken');
-        setEmailError('Fehler bei der E-Mail-Prüfung.');
-      }
+        if(isAvailable) { setEmailStatus('available'); setEmailError(null); }
+        else { setEmailStatus('taken'); setEmailError('Bereits registriert'); }
+      } catch (e) { setEmailStatus('taken'); setEmailError('Fehler'); }
     }, 500);
-    return () => {
-      if (debounceEmailTimer.current) {
-        clearTimeout(debounceEmailTimer.current);
-      }
-    };
+    return () => { if (debounceEmailTimer.current) clearTimeout(debounceEmailTimer.current); };
   }, [email, isLogin, checkEmailAvailability]);
 
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("[AuthModal] handleAuthSubmit CALLED. isLogin:", isLogin);
     setIsLoading(true);
 
-    if (!ageVerified) {
-      toast({
-        title: 'Altersverifizierung erforderlich',
-        description: 'Bitte bestätigen Sie, dass Sie über 18 Jahre alt sind.',
-        variant: 'destructive',
-      });
-      setIsLoading(false);
-      return;
+    if (!ageVerified && !isLogin) {
+        toast({ title: 'Altersverifizierung erforderlich', description: 'Bitte bestätigen Sie Ihr Alter.', variant: 'destructive' });
+        setIsLoading(false);
+        return;
     }
 
     if (isLogin) {
-      // --- Login-Logik ---
       try {
-        console.log("[AuthModal] Awaiting login...");
         await login(email, password);
-        console.log("[AuthModal] Login SUCCEEDED (oder onAuthStateChange übernimmt).");
-        // onComplete() wird jetzt durch den authStore-Listener aufgerufen
       } catch (error: any) {
-        console.error("[AuthModal] Login FAILED:", error);
-        toast({
-          title: 'Anmeldung fehlgeschlagen',
-          description: error.message || 'Bitte überprüfen Sie Ihre E-Mail und Ihr Passwort.',
-          variant: 'destructive',
-        });
+        toast({ title: 'Anmeldung fehlgeschlagen', description: error.message, variant: 'destructive' });
       }
     } else {
-      // --- Registrierungs-Logik ---
-      if (usernameStatus !== 'available') {
-         toast({ title: 'Registrierung fehlgeschlagen', description: usernameError || 'Bitte wählen Sie einen gültigen Benutzernamen.', variant: 'destructive'});
-         setIsLoading(false);
-         return;
-      }
-      if (emailStatus !== 'available') {
-         toast({ title: 'Registrierung fehlgeschlagen', description: emailError || 'Bitte verwenden Sie eine andere E-Mail-Adresse.', variant: 'destructive'});
-         setIsLoading(false);
-         return;
-      }
-      if (password !== confirmPassword) {
-        toast({ title: 'Registrierung fehlgeschlagen', description: 'Die Passwörter stimmen nicht überein.', variant: 'destructive'});
-        setIsLoading(false);
-        return;
-      }
-      if (!termsAgreed) {
-        toast({ title: 'Registrierung fehlgeschlagen', description: 'Bitte stimmen Sie den Nutzungsbedingungen zu.', variant: 'destructive'});
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        console.log("[AuthModal] Awaiting register...");
-        await register(username, email, password, 'fan');
-        console.log("[AuthModal] Register SUCCEEDED.");
-
-        // --- KORREKTUR: Toast-Nachricht für den nächsten Schritt ---
-        toast({
-          title: 'Postfach prüfen!',
-          description: 'Bitte überprüfen Sie Ihre E-Mails und geben Sie den Code ein.',
-        });
-        // --- ENDE KORREKTUR ---
-
-        setStep('verify');
-      } catch (error: any) {
-         console.error("[AuthModal] Register FAILED:", error);
-         let description = 'Ein unbekannter Fehler ist aufgetreten.';
-         if (error.message?.includes('Database error saving new user') || error.message?.includes('duplicate key value violates unique constraint "users_username_key"')) {
-             description = 'Dieser Benutzername ist bereits vergeben.';
-             setUsernameStatus('taken');
-             setUsernameError('Benutzername ist bereits vergeben.');
-         } else if (error.message?.includes('User already registered')) {
-            description = 'Diese E-Mail-Adresse ist bereits registriert.';
-            setEmailStatus('taken');
-            setEmailError('Diese E-Mail-Adresse ist bereits registriert.');
-         }
-         toast({
-          title: 'Registrierung fehlgeschlagen',
-          description: description,
-          variant: 'destructive',
-        });
-      }
+        if (usernameStatus !== 'available' || emailStatus !== 'available' || password !== confirmPassword || !termsAgreed) {
+            toast({ title: 'Prüfen Sie Ihre Eingaben', variant: 'destructive'});
+            setIsLoading(false);
+            return;
+        }
+        try {
+            await register(username, email, password, 'fan');
+            toast({ title: 'Code gesendet', description: 'Bitte E-Mails prüfen.' });
+            setStep('verify');
+        } catch (e: any) {
+            toast({ title: 'Fehler', description: e.message, variant: 'destructive' });
+        }
     }
     setIsLoading(false);
   };
 
-  /**
-   * (AKTUALISIERT)
-   */
   const handleVerificationSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
-      console.log("[AuthModal] handleVerificationSubmit CALLED.");
-      if (!verificationCode || verificationCode.length < 6) {
-           toast({ title: 'Fehler', description: 'Bitte geben Sie einen 6-stelligen Code ein.', variant: 'destructive'});
-           return;
-      }
-
+      if (!verificationCode) return;
       setIsLoading(true);
       try {
-          // 1. OTP bei Supabase verifizieren
-          console.log("[AuthModal] Awaiting verifyOtp...");
           await verifyOtp(email, verificationCode);
-          console.log("[AuthModal] verifyOtp SUCCEEDED.");
-
-          // --- KORREKTUR: Toast-Nachricht HIERHER verschoben ---
-          toast({
-              title: 'Registrierung erfolgreich!',
-              description: 'Ihr Konto ist jetzt aktiv. Sie werden angemeldet...',
-          });
-          // --- ENDE KORREKTUR ---
-
-          // 2. Melden Sie den Benutzer explizit an
-          console.log("[AuthModal] Awaiting login (post-verification)...");
+          toast({ title: 'Erfolg!', description: 'Angemeldet.' });
           await login(email, password);
-          console.log("[AuthModal] login SUCCEEDED (post-verification).");
-
-          // 3. onComplete() aufrufen.
-          // Der authStore-Listener (im Hintergrund) wird durch login() getriggert
-          // und `completeOnboarding()` im appStore aufrufen.
-          // Dieses onComplete() hier beendet nur den *Flow* in OnboardingFlow.tsx
-          console.log("[AuthModal] Calling onComplete() to finish OnboardingFlow.");
           onComplete();
-
-      } catch (error: any) {
-          console.error("[AuthModal] Verification error:", error);
-          toast({
-              title: 'Verifizierung fehlgeschlagen',
-              description: 'Der eingegebene Code ist ungültig oder abgelaufen.',
-              variant: 'destructive',
-          });
-          setIsLoading(false); // Nur im Fehlerfall Loading stoppen
+      } catch (e: any) {
+          toast({ title: 'Fehler', description: 'Ungültiger Code.', variant: 'destructive' });
+      } finally {
+          setIsLoading(false);
       }
   };
 
-  const handleResendCode = async () => {
-      console.log("[AuthModal] handleResendCode CALLED.");
-      if (isResending) return;
-
-      setIsResending(true);
+  // --- NEU: Passwort Reset Handler ---
+  const handleForgotPassword = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!email || !validateEmail(email)) {
+          toast({ title: "Fehler", description: "Bitte gültige E-Mail eingeben.", variant: "destructive" });
+          return;
+      }
+      setIsLoading(true);
       try {
-          await resendOtp(email);
-          toast({
-              title: 'Code erneut gesendet',
-              description: 'Bitte überprüfen Sie Ihr Postfach (und Spam-Ordner).'
+          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+              redirectTo: window.location.origin + '/profile?reset=true',
           });
-          setTimeout(() => setIsResending(false), 60000); // 60s Cooldown
-      } catch (error: any) {
-          toast({ title: 'Fehler', description: 'Code konnte nicht erneut gesendet werden.', variant: 'destructive' });
-          setIsResending(false);
+          if (error) throw error;
+          toast({ title: "E-Mail gesendet", description: "Prüfen Sie Ihr Postfach für den Reset-Link." });
+          setStep('auth');
+      } catch (e: any) {
+          toast({ title: "Fehler", description: e.message, variant: "destructive" });
+      } finally {
+          setIsLoading(false);
       }
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="flex items-center justify-center min-h-screen px-4"
-    >
-      <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.2 }}
-        className="w-full max-w-md bg-card rounded-lg p-8 space-y-6"
-      >
-        {step === 'auth' ? (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center justify-center min-h-screen px-4">
+      <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="w-full max-w-md bg-card rounded-lg p-8 space-y-6">
+
+        {step === 'auth' && (
           <>
             <div className="text-center space-y-2">
-              <h2 className="text-3xl font-serif text-foreground">
-                {isLogin ? 'Willkommen zurück' : 'Konto erstellen'}
-              </h2>
-              <p className="text-muted-foreground text-sm">
-                {isLogin
-                  ? 'Melden Sie sich an, um fortzufahren'
-                  : 'Erstellen Sie Ihr exklusives Konto'}
-              </p>
+              <h2 className="text-3xl font-serif text-foreground">{isLogin ? 'Willkommen zurück' : 'Konto erstellen'}</h2>
+              <p className="text-muted-foreground text-sm">{isLogin ? 'Melden Sie sich an' : 'Erstellen Sie Ihr Konto'}</p>
             </div>
 
             <form onSubmit={handleAuthSubmit} className="space-y-4">
               {!isLogin && (
-                <div className="space-y-2">
-                  <Label htmlFor="username" className="text-foreground">Benutzername</Label>
-                  <div className="relative">
-                    <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      id="username"
-                      type="text"
-                      placeholder="ihr_benutzername"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className={cn(
-                        "pl-10 bg-background text-foreground border-border",
-                        usernameStatus === 'taken' && "border-destructive focus-visible:ring-destructive",
-                        usernameStatus === 'available' && "border-success focus-visible:ring-success"
-                      )}
-                      required={!isLogin}
-                      aria-invalid={usernameStatus === 'taken'}
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5">
-                      {usernameStatus === 'checking' && <Loader2Icon className="animate-spin text-muted-foreground" />}
-                      {usernameStatus === 'available' && <CheckIcon className="text-success" />}
-                      {usernameStatus === 'taken' && <XIcon className="text-destructive" />}
-                    </div>
+                  <div className="space-y-2">
+                    <Label>Benutzername</Label>
+                    <div className="relative"><UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"/><Input value={username} onChange={e => setUsername(e.target.value)} className="pl-10 bg-background border-border"/></div>
+                    {usernameError && <p className="text-xs text-destructive">{usernameError}</p>}
                   </div>
-                  {usernameError && (
-                    <p className="text-xs text-destructive">{usernameError}</p>
-                  )}
-                </div>
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-foreground">E-Mail</Label>
-                <div className="relative">
-                  <MailIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="ihre@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className={cn(
-                      "pl-10 bg-background text-foreground border-border",
-                      !isLogin && emailStatus === 'taken' && "border-destructive focus-visible:ring-destructive",
-                      !isLogin && emailStatus === 'available' && "border-success focus-visible:ring-success"
-                    )}
-                    required
-                    aria-invalid={!isLogin && emailStatus === 'taken'}
-                  />
-                  {!isLogin && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5">
-                      {emailStatus === 'checking' && <Loader2Icon className="animate-spin text-muted-foreground" />}
-                      {emailStatus === 'available' && <CheckIcon className="text-success" />}
-                      {emailStatus === 'taken' && <XIcon className="text-destructive" />}
-                    </div>
-                  )}
-                </div>
-                {!isLogin && emailError && (
-                  <p className="text-xs text-destructive">{emailError}</p>
-                )}
+                <Label>E-Mail</Label>
+                <div className="relative"><MailIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"/><Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="pl-10 bg-background border-border"/></div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-foreground">Passwort</Label>
-                <div className="relative">
-                  <LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-10 bg-background text-foreground border-border" required />
+                <div className="flex justify-between">
+                    <Label>Passwort</Label>
+                    {isLogin && <span className="text-xs text-secondary cursor-pointer hover:underline" onClick={() => setStep('forgot')}>Vergessen?</span>}
                 </div>
+                <div className="relative"><LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"/><Input type="password" value={password} onChange={e => setPassword(e.target.value)} className="pl-10 bg-background border-border"/></div>
               </div>
 
               {!isLogin && (
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword" className="text-foreground">Passwort bestätigen</Label>
-                  <div className="relative">
-                    <LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input id="confirmPassword" type="password" placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="pl-10 bg-background text-foreground border-border" required={!isLogin} />
-                  </div>
-                </div>
+                  <>
+                    <div className="space-y-2"><Label>Bestätigen</Label><div className="relative"><LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"/><Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="pl-10 bg-background border-border"/></div></div>
+                    <div className="flex items-center space-x-2 pt-2"><Checkbox id="age" checked={ageVerified} onCheckedChange={(c) => setAgeVerified(c as boolean)} /><Label htmlFor="age">Über 18 Jahre alt</Label></div>
+                    <div className="flex items-center space-x-2"><Checkbox id="terms" checked={termsAgreed} onCheckedChange={(c) => setTermsAgreed(c as boolean)} /><Label htmlFor="terms">AGB & Datenschutz zustimmen</Label></div>
+                  </>
               )}
 
-              <div className="flex items-center space-x-2 pt-2">
-                <Checkbox id="age" checked={ageVerified} onCheckedChange={(checked) => setAgeVerified(checked as boolean)} />
-                <Label htmlFor="age" className="text-sm text-foreground cursor-pointer">Ich bestätige, dass ich über 18 Jahre alt bin</Label>
-              </div>
-
-              {!isLogin && (
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="terms" checked={termsAgreed} onCheckedChange={(checked) => setTermsAgreed(checked as boolean)} />
-                  <Label htmlFor="terms" className="text-sm text-foreground cursor-pointer">Ich stimme den <a href="/terms" target="_blank" className="text-secondary hover:underline">Nutzungsbedingungen</a> zu</Label>
-                </div>
-              )}
-
-              <Button type="submit" className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal" disabled={isLoading}>
-                {isLoading ? <Loader2Icon className="w-5 h-5 animate-spin" /> : (isLogin ? 'Anmelden' : 'Registrieren')}
-              </Button>
+              <Button type="submit" className="w-full bg-secondary text-secondary-foreground" disabled={isLoading}>{isLoading ? <Loader2Icon className="animate-spin"/> : (isLogin ? 'Anmelden' : 'Registrieren')}</Button>
             </form>
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
-              <div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">Oder fortfahren mit</span></div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Button type="button" variant="outline" className="bg-background text-foreground border-border hover:bg-neutral"><ChromeIcon className="mr-2 w-5 h-5" />Google</Button>
-              <Button type="button" variant="outline" className="bg-background text-foreground border-border hover:bg-neutral"><AppleIcon className="mr-2 w-5 h-5" />Apple</Button>
-            </div>
-
-            <div className="text-center">
-              <button type="button" onClick={() => setIsLogin(!isLogin)} className="text-sm text-secondary hover:text-secondary/80 transition-colors">
-                {isLogin ? 'Noch kein Konto? Registrieren' : 'Bereits registriert? Anmelden'}
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="text-center space-y-2">
-              <h2 className="text-3xl font-serif text-foreground">
-                E-Mail bestätigen
-              </h2>
-              <p className="text-muted-foreground text-sm">
-                Wir haben einen 6-stelligen Code an {email} gesendet. Bitte geben Sie ihn unten ein.
-              </p>
-            </div>
-
-            <form onSubmit={handleVerificationSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="verificationCode" className="text-foreground">
-                  Verifizierungscode
-                </Label>
-                <div className="relative">
-                   <KeyRoundIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                   <Input
-                      id="verificationCode"
-                      type="text"
-                      placeholder="XXXXXX"
-                      value={verificationCode}
-                      onChange={(e) => setVerificationCode(e.target.value)}
-                      className="pl-10 bg-background text-foreground border-border tracking-[0.3em] text-center"
-                      maxLength={6}
-                      required
-                   />
-                </div>
-              </div>
-
-               <Button type="submit" className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal" disabled={isLoading}>
-                 {isLoading ? <Loader2Icon className="w-5 h-5 animate-spin" /> : 'Bestätigen'}
-               </Button>
-            </form>
-
-            <div className="text-center text-sm">
-                <button
-                  type="button"
-                  onClick={handleResendCode}
-                  className="text-secondary hover:text-secondary/80 transition-colors disabled:opacity-50"
-                  disabled={isResending}
-                >
-                    {isResending ? 'Code gesendet (bitte 60s warten)' : 'Code erneut senden'}
-                </button>
-            </div>
+            <div className="relative"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border"/></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">Oder</span></div></div>
+            <div className="grid grid-cols-2 gap-4"><Button variant="outline"><ChromeIcon className="mr-2 w-5 h-5"/>Google</Button><Button variant="outline"><AppleIcon className="mr-2 w-5 h-5"/>Apple</Button></div>
+            <div className="text-center"><button type="button" onClick={() => setIsLogin(!isLogin)} className="text-sm text-secondary hover:underline">{isLogin ? 'Registrieren' : 'Anmelden'}</button></div>
           </>
         )}
+
+        {step === 'verify' && (
+            <>
+             <div className="text-center space-y-2"><h2 className="text-3xl font-serif">Code eingeben</h2><p className="text-muted-foreground text-sm">Code an {email} gesendet.</p></div>
+             <form onSubmit={handleVerificationSubmit} className="space-y-4">
+                <div className="relative"><KeyRoundIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"/><Input value={verificationCode} onChange={e => setVerificationCode(e.target.value)} className="pl-10 bg-background border-border tracking-[0.5em] text-center" maxLength={6}/></div>
+                <Button type="submit" className="w-full bg-secondary text-secondary-foreground" disabled={isLoading}>{isLoading ? <Loader2Icon className="animate-spin"/> : 'Bestätigen'}</Button>
+             </form>
+            </>
+        )}
+
+        {/* FORGOT PASSWORD STEP */}
+        {step === 'forgot' && (
+            <>
+                <div className="text-center space-y-2">
+                    <h2 className="text-3xl font-serif text-foreground">Passwort zurücksetzen</h2>
+                    <p className="text-muted-foreground text-sm">Wir senden Ihnen einen Link zum Zurücksetzen.</p>
+                </div>
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>E-Mail</Label>
+                        <div className="relative"><MailIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"/><Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="pl-10 bg-background border-border"/></div>
+                    </div>
+                    <Button type="submit" className="w-full bg-secondary text-secondary-foreground" disabled={isLoading}>{isLoading ? <Loader2Icon className="animate-spin"/> : 'Link senden'}</Button>
+                </form>
+                <div className="text-center">
+                    <button type="button" onClick={() => setStep('auth')} className="text-sm text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 mx-auto">
+                        <ArrowLeftIcon className="w-3 h-3"/> Zurück zum Login
+                    </button>
+                </div>
+            </>
+        )}
+
       </motion.div>
     </motion.div>
   );
