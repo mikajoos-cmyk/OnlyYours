@@ -25,6 +25,7 @@ export type Database = {
           created_at: string
           updated_at: string
           interests: string[] | null
+          country: string | null
         }
         Insert: {
           id: string
@@ -33,7 +34,7 @@ export type Database = {
           bio?: string
           avatar_url?: string | null
           banner_url?: string | null
-          role?: 'FAN' | 'CREATOR'
+          role?: 'FAN' | 'CREATOR' | 'ADMIN'
           is_verified?: boolean
           subscription_price?: number
           followers_count?: number
@@ -41,6 +42,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
           interests?: string[] | null
+          country?: string | null
         }
         Update: {
           id?: string
@@ -49,7 +51,7 @@ export type Database = {
           bio?: string
           avatar_url?: string | null
           banner_url?: string | null
-          role?: 'FAN' | 'CREATOR'
+          role?: 'FAN' | 'CREATOR' | 'ADMIN'
           is_verified?: boolean
           subscription_price?: number
           followers_count?: number
@@ -57,6 +59,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
           interests?: string[] | null
+          country?: string | null
         }
       }
       subscription_tiers: {
@@ -360,6 +363,35 @@ export type Database = {
           payout_method?: string | null
           requested_at?: string
           completed_at?: string | null
+        }
+      }
+      content_reports: {
+        Row: {
+          id: string
+          reporter_id: string | null
+          post_id: string | null
+          reason: string
+          description: string | null
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          reporter_id?: string | null
+          post_id?: string | null
+          reason: string
+          description?: string | null
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          reporter_id?: string | null
+          post_id?: string | null
+          reason?: string
+          description?: string | null
+          status?: string
+          created_at?: string
         }
       }
     }

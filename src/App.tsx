@@ -1,4 +1,3 @@
-// src/App.tsx
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useAuthStore } from './stores/authStore';
@@ -21,9 +20,9 @@ import ProfilePage from './components/profile/ProfilePage';
 import { Toaster } from './components/ui/toaster';
 import PostPage from './components/fan/PostPage';
 import LiveStreamWrapper from './components/creator/LiveStreamWrapper';
-// --- NEUE IMPORTS ---
 import Impressum from './components/legal/Impressum';
 import Datenschutz from './components/legal/Datenschutz';
+import AdminDashboard from './pages/AdminDashboard';
 
 function App() {
   const { isAuthenticated, isLoading, initialize, user } = useAuthStore();
@@ -101,6 +100,9 @@ function App() {
           {/* Rechtliche Routen */}
           <Route path="/impressum" element={<Impressum />} />
           <Route path="/datenschutz" element={<Datenschutz />} />
+
+          {/* Admin Route */}
+          <Route path="/admin" element={<AdminDashboard />} />
 
           <Route path="*" element={<Navigate to="/discover" replace />} />
         </Routes>

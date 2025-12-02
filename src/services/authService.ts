@@ -8,7 +8,7 @@ export interface AuthUser {
   name: string;
   email: string;
   avatar: string;
-  role: 'fan' | 'creator';
+  role: 'fan' | 'creator' | 'admin';
   isVerified?: boolean;
   followersCount: number;
   totalEarnings: number;
@@ -30,7 +30,7 @@ export interface AuthUser {
 
 export class AuthService {
 
-  async register(username: string, email: string, password: string, role: 'fan' | 'creator' = 'creator') {
+  async register(username: string, email: string, password: string, country: string, role: 'fan' | 'creator' = 'creator') {
     console.log("[authService] register CALLED");
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
@@ -40,6 +40,7 @@ export class AuthService {
           username: username.toLowerCase(),
           display_name: username,
           role: role.toUpperCase(),
+          country: country,
         },
       },
     });
@@ -137,25 +138,25 @@ export class AuthService {
       .single();
 
     if (error || !userData) {
-        console.error("Error fetching profile:", error);
-        return null;
+      console.error("Error fetching profile:", error);
+      return null;
     }
 
     // 2. Einnahmen sicher entschlüsseln via RPC
     let decryptedEarnings = 0;
     try {
-        const { data: earnings } = await supabase.rpc('get_my_decrypted_earnings', {
-            p_user_id: freshUser.id
-        });
-        decryptedEarnings = earnings || 0;
+      const { data: earnings } = await supabase.rpc('get_my_decrypted_earnings', {
+        p_user_id: freshUser.id
+      });
+      decryptedEarnings = earnings || 0;
     } catch (e) {
-        console.error("Error decrypting earnings:", e);
+      console.error("Error decrypting earnings:", e);
     }
 
     // 3. Zusammenfügen
     const safeUserData = {
-        ...userData,
-        total_earnings: decryptedEarnings // Überschreibt das Byte-Array mit der entschlüsselten Zahl
+      ...userData,
+      total_earnings: decryptedEarnings // Überschreibt das Byte-Array mit der entschlüsselten Zahl
     };
 
     return this.mapUserRowToAuthUser(safeUserData, freshUser.email);
@@ -199,7 +200,7 @@ export class AuthService {
       name: userData.display_name,
       email: email || '',
       avatar: userData.avatar_url || 'https://placehold.co/100x100',
-      role: userData.role.toLowerCase() as 'fan' | 'creator',
+      role: userData.role.toLowerCase() as 'fan' | 'creator' | 'admin',
       isVerified: userData.is_verified,
       followersCount: userData.followers_count || 0,
       totalEarnings: userData.total_earnings || 0,

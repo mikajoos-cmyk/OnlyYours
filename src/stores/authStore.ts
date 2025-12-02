@@ -4,7 +4,7 @@ import { authService, AuthUser } from '../services/authService';
 import { Subscription } from '@supabase/supabase-js';
 import { useAppStore } from './appStore';
 
-interface AppUser extends AuthUser {}
+interface AppUser extends AuthUser { }
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -13,7 +13,7 @@ interface AuthState {
   initialize: () => () => void;
   login: (email: string, password: string) => Promise<void>;
   loginWithOAuth: (provider: 'google' | 'apple') => Promise<void>; // <-- NEU
-  register: (username: string, email: string, password: string, role?: 'fan' | 'creator') => Promise<void>;
+  register: (username: string, email: string, password: string, country: string, role?: 'fan' | 'creator') => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: AppUser) => void;
   updateProfile: (updates: any) => Promise<void>;
@@ -36,27 +36,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (initializationEnsured && authListenerSubscription) {
       return () => { };
     }
-     if (!authListenerSubscription) {
-        const authSubscription = authService.onAuthStateChange(async (userFullProfile: AppUser | null) => {
-          if (userFullProfile) {
-            set({
-              isAuthenticated: true,
-              user: userFullProfile,
-              isLoading: false
-            });
-            useAppStore.getState().completeOnboarding();
-          } else {
-            set({
-              isAuthenticated: false,
-              user: null,
-              isLoading: false
-            });
-            useAppStore.getState().resetOnboarding();
-          }
-          initializationEnsured = true;
-        });
-        authListenerSubscription = authSubscription.data.subscription;
-     }
+    if (!authListenerSubscription) {
+      const authSubscription = authService.onAuthStateChange(async (userFullProfile: AppUser | null) => {
+        if (userFullProfile) {
+          set({
+            isAuthenticated: true,
+            user: userFullProfile,
+            isLoading: false
+          });
+          useAppStore.getState().completeOnboarding();
+        } else {
+          set({
+            isAuthenticated: false,
+            user: null,
+            isLoading: false
+          });
+          useAppStore.getState().resetOnboarding();
+        }
+        initializationEnsured = true;
+      });
+      authListenerSubscription = authSubscription.data.subscription;
+    }
 
     return () => {
       if (authListenerSubscription) {
@@ -90,9 +90,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   // --- ENDE NEU ---
 
-  register: async (username: string, email: string, password: string, role: 'fan' | 'creator' = 'fan') => {
+  register: async (username: string, email: string, password: string, country: string, role: 'fan' | 'creator' = 'fan') => {
     try {
-      await authService.register(username, email, password, role);
+      await authService.register(username, email, password, country, role);
     } catch (error) {
       console.error('Registration failed:', error);
       throw error;
@@ -130,8 +130,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       await authService.changePassword(newPassword);
     } catch (error) {
-       console.error('Password change failed:', error);
-       throw error;
+      console.error('Password change failed:', error);
+      throw error;
     }
   },
 
