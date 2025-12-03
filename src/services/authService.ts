@@ -30,7 +30,8 @@ export interface AuthUser {
 
 export class AuthService {
 
-  async register(username: string, email: string, password: string, country: string, role: 'fan' | 'creator' = 'creator') {
+  // UPDATE: birthdate Parameter hinzugefügt
+  async register(username: string, email: string, password: string, country: string, birthdate: string, role: 'fan' | 'creator' = 'creator') {
     console.log("[authService] register CALLED");
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
@@ -41,6 +42,7 @@ export class AuthService {
           display_name: username,
           role: role.toUpperCase(),
           country: country,
+          birthdate: birthdate, // Wird an Supabase Metadaten übergeben
         },
       },
     });
@@ -130,7 +132,6 @@ export class AuthService {
     const { data: { user: freshUser } } = await supabase.auth.getUser();
     if (!freshUser?.email_confirmed_at) return null;
 
-    // 1. Profildaten laden (ohne Earnings, da binär/verschlüsselt in DB)
     const { data: userData, error } = await supabase
       .from('users')
       .select('*')
@@ -142,7 +143,6 @@ export class AuthService {
       return null;
     }
 
-    // 2. Einnahmen sicher entschlüsseln via RPC
     let decryptedEarnings = 0;
     try {
       const { data: earnings } = await supabase.rpc('get_my_decrypted_earnings', {
@@ -153,10 +153,9 @@ export class AuthService {
       console.error("Error decrypting earnings:", e);
     }
 
-    // 3. Zusammenfügen
     const safeUserData = {
       ...userData,
-      total_earnings: decryptedEarnings // Überschreibt das Byte-Array mit der entschlüsselten Zahl
+      total_earnings: decryptedEarnings
     };
 
     return this.mapUserRowToAuthUser(safeUserData, freshUser.email);

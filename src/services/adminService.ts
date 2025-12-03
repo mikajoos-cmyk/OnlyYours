@@ -18,8 +18,9 @@ export interface AdminUser {
     email: string;
     role: 'FAN' | 'CREATOR' | 'ADMIN';
     country: string | null;
+    birthdate: string | null; // <-- NEU
     created_at: string;
-    updated_at: string; // <-- NEU
+    updated_at: string;
     total_earnings: number;
     total_spent: number;
 }

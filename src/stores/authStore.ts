@@ -12,8 +12,9 @@ interface AuthState {
   isLoading: boolean;
   initialize: () => () => void;
   login: (email: string, password: string) => Promise<void>;
-  loginWithOAuth: (provider: 'google' | 'apple') => Promise<void>; // <-- NEU
-  register: (username: string, email: string, password: string, country: string, role?: 'fan' | 'creator') => Promise<void>;
+  loginWithOAuth: (provider: 'google' | 'apple') => Promise<void>;
+  // UPDATE: birthdate Parameter hinzugefügt
+  register: (username: string, email: string, password: string, country: string, birthdate: string, role?: 'fan' | 'creator') => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: AppUser) => void;
   updateProfile: (updates: any) => Promise<void>;
@@ -77,27 +78,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  // --- NEU: OAuth Handler ---
   loginWithOAuth: async (provider: 'google' | 'apple') => {
     try {
       await authService.loginWithOAuth(provider);
-      // Hinweis: Da OAuth einen Redirect auslöst, wird der Code hiernach oft nicht mehr ausgeführt,
-      // bis der User zurückkehrt (handled by onAuthStateChange).
     } catch (error) {
       console.error('OAuth Login failed:', error);
       throw error;
     }
   },
-  // --- ENDE NEU ---
 
-  register: async (username: string, email: string, password: string, country: string, role: 'fan' | 'creator' = 'fan') => {
+  // UPDATE: birthdate Parameter hinzugefügt
+  register: async (username: string, email: string, password: string, country: string, birthdate: string, role: 'fan' | 'creator' = 'fan') => {
     try {
-      await authService.register(username, email, password, country, role);
+      await authService.register(username, email, password, country, birthdate, role);
     } catch (error) {
       console.error('Registration failed:', error);
       throw error;
     }
   },
+
   logout: async () => {
     try {
       await authService.logout();
