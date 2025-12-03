@@ -1,10 +1,11 @@
+// src/components/admin/ReportedContentList.tsx
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import type { Database } from '../../lib/database.types';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Loader2Icon, Trash2Icon, CheckCircleIcon, ExternalLinkIcon, AlertTriangleIcon } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
+import { adminService } from '../../services/adminService';
 
 interface Report {
     report_id: string;
@@ -23,6 +24,7 @@ export default function ReportedContentList() {
     const [isLoading, setIsLoading] = useState(true);
     const { toast } = useToast();
 
+    // Reports laden (via RPC, da adminService.getReports() im Interface nicht explizit definiert war)
     const fetchReports = async () => {
         setIsLoading(true);
         try {
@@ -45,17 +47,12 @@ export default function ReportedContentList() {
         if (!confirm("Möchtest du diesen Beitrag wirklich unwiderruflich löschen?")) return;
 
         try {
-            // 1. Delete post
-            const { error: deleteError } = await supabase.from('posts').delete().eq('id', postId);
-            if (deleteError) throw deleteError;
-
-            // 2. Update report status (optional, but good for history if we didn't cascade delete report)
-            // Since we have ON DELETE CASCADE on reports -> post_id, the report might be gone already.
-            // But if we want to keep the report, we should have set ON DELETE SET NULL.
-            // Assuming CASCADE for now, so we just update UI.
+            await adminService.deletePost(postId);
 
             toast({ title: "Gelöscht", description: "Beitrag wurde entfernt." });
-            setReports(prev => prev.filter(r => r.post_id !== postId)); // Remove all reports for this post
+
+            // Lokales Update: Entferne alle Reports, die sich auf diesen Post beziehen
+            setReports(prev => prev.filter(r => r.post_id !== postId));
         } catch (err: any) {
             toast({ title: "Fehler", description: err.message, variant: "destructive" });
         }
@@ -63,14 +60,11 @@ export default function ReportedContentList() {
 
     const handleDismissReport = async (reportId: string) => {
         try {
-            const { error } = await supabase
-                .from('content_reports')
-                .update({ status: 'DISMISSED' })
-                .eq('id', reportId);
-
-            if (error) throw error;
+            await adminService.dismissReport(reportId);
 
             toast({ title: "Ignoriert", description: "Meldung wurde als erledigt markiert." });
+
+            // Lokales Update
             setReports(prev => prev.filter(r => r.report_id !== reportId));
         } catch (err: any) {
             toast({ title: "Fehler", description: err.message, variant: "destructive" });
@@ -108,28 +102,33 @@ export default function ReportedContentList() {
                             </div>
                         </CardHeader>
                         <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4">
+                            {/* Medien-Vorschau */}
                             <div className="aspect-square bg-neutral rounded-md overflow-hidden relative group">
                                 {report.post_media_url ? (
                                     report.post_media_url.includes('.mp4') || report.post_media_url.includes('.mov') ? (
-                                        <video src={report.post_media_url} className="w-full h-full object-cover" />
+                                        <video src={report.post_media_url} className="w-full h-full object-cover" controls />
                                     ) : (
                                         <img src={report.post_media_url} alt="Reported content" className="w-full h-full object-cover" />
                                     )
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">Kein Medium</div>
                                 )}
+
+                                {/* Link zum Post (nur wenn noch existent) */}
                                 <a href={`/post/${report.post_id}`} target="_blank" rel="noreferrer" className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white font-medium">
                                     <ExternalLinkIcon className="w-5 h-5 mr-2" /> Öffnen
                                 </a>
                             </div>
-                            <div className="space-y-2">
+
+                            {/* Details */}
+                            <div className="space-y-4">
                                 <div>
-                                    <span className="text-xs font-bold uppercase text-muted-foreground">Beschreibung des Melders</span>
-                                    <p className="text-sm text-foreground bg-neutral/20 p-2 rounded mt-1">{report.description || 'Keine Beschreibung'}</p>
+                                    <span className="text-xs font-bold uppercase text-muted-foreground block mb-1">Beschreibung des Melders</span>
+                                    <p className="text-sm text-foreground bg-neutral/20 p-3 rounded">{report.description || 'Keine Beschreibung angegeben.'}</p>
                                 </div>
                                 <div>
-                                    <span className="text-xs font-bold uppercase text-muted-foreground">Beitragstext</span>
-                                    <p className="text-sm text-muted-foreground mt-1 line-clamp-3">{report.post_caption || 'Keine Caption'}</p>
+                                    <span className="text-xs font-bold uppercase text-muted-foreground block mb-1">Beitragstext</span>
+                                    <p className="text-sm text-muted-foreground line-clamp-3 italic">"{report.post_caption || 'Keine Caption'}"</p>
                                 </div>
                             </div>
                         </CardContent>

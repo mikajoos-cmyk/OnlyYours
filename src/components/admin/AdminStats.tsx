@@ -1,96 +1,110 @@
+// src/components/admin/AdminStats.tsx
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { supabase } from '../../lib/supabase';
-import { Loader2Icon, DollarSignIcon, UsersIcon, ActivityIcon, GlobeIcon } from 'lucide-react';
-
-interface AdminStatsData {
-    total_revenue: number;
-    total_users: number;
-    active_users: number;
-    country_stats: { country: string; count: number }[];
-}
+import { adminService, AdminDashboardStats } from '../../services/adminService';
+import { Loader2Icon, DollarSignIcon, UsersIcon, ActivityIcon, TrendingUpIcon } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function AdminStats() {
-    const [stats, setStats] = useState<AdminStatsData | null>(null);
+    const [stats, setStats] = useState<AdminDashboardStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const fetchStats = async () => {
+        const load = async () => {
             try {
-                const { data, error } = await supabase.rpc('get_admin_stats');
-                if (error) throw error;
-                setStats(data as AdminStatsData);
-            } catch (err: any) {
-                console.error("Error fetching admin stats:", err);
-                setError(err.message);
+                const data = await adminService.getStats();
+                setStats(data);
+            } catch (e) {
+                console.error(e);
             } finally {
                 setIsLoading(false);
             }
         };
-
-        fetchStats();
+        load();
     }, []);
 
-    if (isLoading) return <div className="flex justify-center p-8"><Loader2Icon className="animate-spin w-8 h-8 text-secondary" /></div>;
-    if (error) return <div className="text-destructive p-4">Fehler beim Laden der Statistiken: {error}</div>;
-    if (!stats) return null;
+    if (isLoading) return <div className="flex justify-center p-12"><Loader2Icon className="animate-spin" /></div>;
+    if (!stats) return <div>Keine Daten.</div>;
+
+    const formatCurrency = (val: number) => `€${val.toLocaleString()}`;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-8">
+            {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="bg-card border-border">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">Gesamtumsatz</CardTitle>
-                        <DollarSignIcon className="h-4 w-4 text-secondary" />
+                        <DollarSignIcon className="h-4 w-4 text-success" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-foreground">
-                            {new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(stats.total_revenue)}
-                        </div>
+                        <div className="text-2xl font-bold">{formatCurrency(stats.total_revenue)}</div>
                     </CardContent>
                 </Card>
-
                 <Card className="bg-card border-border">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground">Registrierte Nutzer</CardTitle>
                         <UsersIcon className="h-4 w-4 text-secondary" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-foreground">{stats.total_users}</div>
+                        <div className="text-2xl font-bold">{stats.total_users}</div>
                     </CardContent>
                 </Card>
-
                 <Card className="bg-card border-border">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Aktive Nutzer (30 Tage)</CardTitle>
-                        <ActivityIcon className="h-4 w-4 text-secondary" />
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Aktive Nutzer (30d)</CardTitle>
+                        <ActivityIcon className="h-4 w-4 text-blue-500" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-foreground">{stats.active_users}</div>
+                        <div className="text-2xl font-bold">{stats.active_users}</div>
                     </CardContent>
                 </Card>
             </div>
 
-            <Card className="bg-card border-border">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><GlobeIcon className="w-5 h-5" /> Nutzer nach Ländern</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-2">
-                        {stats.country_stats.length === 0 ? (
-                            <p className="text-muted-foreground text-sm">Keine Daten verfügbar.</p>
-                        ) : (
-                            stats.country_stats.map((item) => (
-                                <div key={item.country} className="flex items-center justify-between border-b border-border/50 last:border-0 py-2">
-                                    <span className="font-medium text-foreground">{item.country === 'OTHER' ? 'Andere' : item.country}</span>
-                                    <span className="text-muted-foreground">{item.count} Nutzer</span>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
+            {/* Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="bg-card border-border">
+                    <CardHeader><CardTitle className="text-base">Umsatzentwicklung (30 Tage)</CardTitle></CardHeader>
+                    <CardContent className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={stats.revenue_chart}>
+                                <defs>
+                                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="hsl(var(--color-success))" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="hsl(var(--color-success))" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--color-border))" vertical={false} />
+                                <XAxis dataKey="date" tickFormatter={(v) => new Date(v).getDate().toString()} stroke="hsl(var(--color-muted-foreground))" />
+                                <YAxis stroke="hsl(var(--color-muted-foreground))" />
+                                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--color-card))', borderColor: 'hsl(var(--color-border))' }} />
+                                <Area type="monotone" dataKey="value" stroke="hsl(var(--color-success))" fillOpacity={1} fill="url(#colorRevenue)" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-card border-border">
+                    <CardHeader><CardTitle className="text-base">Nutzerwachstum (30 Tage)</CardTitle></CardHeader>
+                    <CardContent className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={stats.user_chart}>
+                                <defs>
+                                    <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="hsl(var(--color-secondary))" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="hsl(var(--color-secondary))" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--color-border))" vertical={false} />
+                                <XAxis dataKey="date" tickFormatter={(v) => new Date(v).getDate().toString()} stroke="hsl(var(--color-muted-foreground))" />
+                                <YAxis stroke="hsl(var(--color-muted-foreground))" />
+                                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--color-card))', borderColor: 'hsl(var(--color-border))' }} />
+                                <Area type="monotone" dataKey="value" stroke="hsl(var(--color-secondary))" fillOpacity={1} fill="url(#colorUsers)" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            </div>
         </div>
     );
 }
