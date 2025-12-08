@@ -18,7 +18,8 @@ export interface AdminUser {
     email: string;
     role: 'FAN' | 'CREATOR' | 'ADMIN';
     country: string | null;
-    birthdate: string | null; // <-- NEU
+    birthdate: string | null;
+    is_banned: boolean; // <-- NEU
     created_at: string;
     updated_at: string;
     total_earnings: number;
@@ -48,7 +49,7 @@ export class AdminService {
             filter_role: options.role || 'ALL',
             filter_country: options.country || 'ALL',
             sort_by: options.sortBy || 'created_at',
-            sort_desc: options.sortDesc !== false // Default true
+            sort_desc: options.sortDesc !== false
         });
 
         if (error) throw error;
@@ -66,6 +67,15 @@ export class AdminService {
             // @ts-ignore
             .update({ status: 'DISMISSED' })
             .eq('id', reportId);
+        if (error) throw error;
+    }
+
+    // NEU: Ban Toggle
+    async toggleUserBan(userId: string, banStatus: boolean) {
+        const { error } = await supabase.rpc('toggle_user_ban', {
+            user_id_input: userId,
+            ban_status: banStatus
+        });
         if (error) throw error;
     }
 }

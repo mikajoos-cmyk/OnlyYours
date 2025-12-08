@@ -1,4 +1,3 @@
-// src/stores/authStore.ts
 import { create } from 'zustand';
 import { authService, AuthUser } from '../services/authService';
 import { Subscription } from '@supabase/supabase-js';
@@ -13,7 +12,6 @@ interface AuthState {
   initialize: () => () => void;
   login: (email: string, password: string) => Promise<void>;
   loginWithOAuth: (provider: 'google' | 'apple') => Promise<void>;
-  // UPDATE: birthdate Parameter hinzugefügt
   register: (username: string, email: string, password: string, country: string, birthdate: string, role?: 'fan' | 'creator') => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: AppUser) => void;
@@ -40,6 +38,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!authListenerSubscription) {
       const authSubscription = authService.onAuthStateChange(async (userFullProfile: AppUser | null) => {
         if (userFullProfile) {
+          // NEU: Wenn der User gebannt ist, sofort wieder ausloggen
+          if (userFullProfile.is_banned) {
+            console.warn("User is banned. Logging out.");
+            await authService.logout();
+            set({ isAuthenticated: false, user: null, isLoading: false });
+            useAppStore.getState().resetOnboarding();
+            return;
+          }
+
           set({
             isAuthenticated: true,
             user: userFullProfile,
@@ -87,7 +94,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  // UPDATE: birthdate Parameter hinzugefügt
   register: async (username: string, email: string, password: string, country: string, birthdate: string, role: 'fan' | 'creator' = 'fan') => {
     try {
       await authService.register(username, email, password, country, birthdate, role);

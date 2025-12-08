@@ -30,16 +30,23 @@ export default function ProfilePage() {
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
 
   const handleRoleSwitchClick = () => {
+    // Wenn man im Creator-Modus ist -> zum Fan-Modus wechseln
     if (currentRole === 'creator') {
       switchRole('fan');
       navigate('/discover');
       return;
     }
+
+    // Wenn man im Fan-Modus ist -> zum Creator-Modus wechseln
     if (currentRole === 'fan') {
-      if (user?.role?.toUpperCase() === 'CREATOR') {
+      const userRole = user?.role?.toUpperCase();
+
+      // FIX: Auch ADMINS dürfen in den Creator-Modus, ohne dass das Modal kommt
+      if (userRole === 'CREATOR' || userRole === 'ADMIN') {
         switchRole('creator');
         navigate('/dashboard');
       } else {
+        // Nur echte "Fans" müssen das Upgrade machen
         setIsModalOpen(true);
       }
     }
@@ -88,7 +95,6 @@ export default function ProfilePage() {
 
   return (
     <>
-      {/* ÄNDERUNG: min-h-screen entfernt, da Parent bereits scrollt */}
       <div className="w-full">
         <div className="max-w-4xl mx-auto px-4 py-8">
           <div className="flex items-center justify-between mb-8">

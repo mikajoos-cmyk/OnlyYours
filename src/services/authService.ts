@@ -26,11 +26,11 @@ export interface AuthUser {
   live_stream_requires_subscription?: boolean;
   stripe_account_id?: string;
   stripe_onboarding_complete?: boolean;
+  is_banned?: boolean;
 }
 
 export class AuthService {
 
-  // UPDATE: birthdate Parameter hinzugefügt
   async register(username: string, email: string, password: string, country: string, birthdate: string, role: 'fan' | 'creator' = 'creator') {
     console.log("[authService] register CALLED");
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -42,7 +42,7 @@ export class AuthService {
           display_name: username,
           role: role.toUpperCase(),
           country: country,
-          birthdate: birthdate, // Wird an Supabase Metadaten übergeben
+          birthdate: birthdate,
         },
       },
     });
@@ -111,6 +111,14 @@ export class AuthService {
     if (!authData.user) throw new Error('Login failed');
 
     const userProfile = await this.getCurrentUserFullProfile();
+
+    // KORREKTUR: Jetzt prüfen wir den Ban hier explizit
+    // @ts-ignore
+    if (userProfile && userProfile.is_banned) {
+      await this.logout();
+      throw new Error('Ihr Konto wurde gesperrt. Bitte kontaktieren Sie den Support.');
+    }
+
     if (!userProfile) {
       throw new Error('E-Mail-Adresse noch nicht bestätigt oder Profil fehlt.');
     }
@@ -142,6 +150,9 @@ export class AuthService {
       console.error("Error fetching profile:", error);
       return null;
     }
+
+    // KORREKTUR: Wir geben den User auch zurück, wenn er gebannt ist,
+    // damit die aufrufende Funktion (login oder store) entscheiden kann, was zu tun ist.
 
     let decryptedEarnings = 0;
     try {
@@ -217,6 +228,8 @@ export class AuthService {
       live_stream_requires_subscription: userData.live_stream_requires_subscription,
       stripe_account_id: userData.stripe_account_id,
       stripe_onboarding_complete: userData.stripe_onboarding_complete,
+      // @ts-ignore
+      is_banned: userData.is_banned
     };
   }
 }
