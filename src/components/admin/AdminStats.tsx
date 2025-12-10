@@ -51,6 +51,15 @@ export default function AdminStats() {
         return { revenue, users };
     }, [stats, chartMode]);
 
+    const periodStats = useMemo(() => {
+        if (!stats) return { revenue: 0, newUsers: 0, profit: 0 };
+        const revenue = stats.revenue_chart.reduce((acc, item) => acc + item.value, 0);
+        const newUsers = stats.user_chart.reduce((acc, item) => acc + item.value, 0);
+        // Approx 1.5% Stripe Fees + 20% App Share => Profit = Revenue * (0.20 - 0.015)
+        const profit = revenue * (0.20 - 0.015);
+        return { revenue, newUsers, profit };
+    }, [stats]);
+
     if (isLoading) return <div className="flex justify-center p-12"><Loader2Icon className="animate-spin" /></div>;
     if (!stats) return <div>Keine Daten.</div>;
 
@@ -86,28 +95,38 @@ export default function AdminStats() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card className="bg-card border-border">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Gesamtumsatz (All-Time)</CardTitle>
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Umsatz ({timeRange})</CardTitle>
                         <DollarSignIcon className="h-4 w-4 text-success" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{formatCurrency(stats.total_revenue)}</div>
+                        <div className="text-2xl font-bold">{formatCurrency(periodStats.revenue)}</div>
                     </CardContent>
                 </Card>
                 <Card className="bg-card border-border">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Registrierte Nutzer</CardTitle>
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Gewinn (Netto)</CardTitle>
+                        <DollarSignIcon className="h-4 w-4 text-amber-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{formatCurrency(periodStats.profit)}</div>
+                    </CardContent>
+                </Card>
+                <Card className="bg-card border-border">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Neue Nutzer</CardTitle>
                         <UsersIcon className="h-4 w-4 text-secondary" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{stats.total_users}</div>
+                        <div className="text-2xl font-bold">{periodStats.newUsers}</div>
                     </CardContent>
                 </Card>
                 <Card className="bg-card border-border">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Aktive Nutzer (30d)</CardTitle>
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Aktive Nutzer</CardTitle>
                         <ActivityIcon className="h-4 w-4 text-blue-500" />
                     </CardHeader>
                     <CardContent>
@@ -169,7 +188,37 @@ export default function AdminStats() {
                 </Card>
             </div>
 
+            {/* Profit Chart */}
+            <Card className="bg-card border-border">
+                <CardHeader><CardTitle className="text-base flex items-center gap-2"><DollarSignIcon className="w-4 h-4" /> Nettogewinn (App Share 20% - Stripe 1.5%)</CardTitle></CardHeader>
+                <CardContent className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={chartData.revenue.map(item => ({
+                            ...item,
+                            profit: (item.value * 0.20) - (item.value * 0.015) // 20% App Share - 1.5% Stripe Costs
+                        }))}>
+                            <defs>
+                                <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--color-border))" vertical={false} />
+                            <XAxis dataKey="date" tickFormatter={(v) => new Date(v).getDate().toString()} stroke="hsl(var(--color-muted-foreground))" fontSize={12} />
+                            <YAxis stroke="hsl(var(--color-muted-foreground))" fontSize={12} tickFormatter={(v) => `${v.toFixed(0)}€`} />
+                            <Tooltip
+                                contentStyle={{ backgroundColor: 'hsl(var(--color-card))', borderColor: 'hsl(var(--color-border))' }}
+                                formatter={(value: number) => [formatCurrency(value), chartMode === 'daily' ? 'Gewinn' : 'Kumulierter Gewinn']}
+                                labelFormatter={(label) => new Date(label).toLocaleDateString()}
+                            />
+                            <Area type="monotone" dataKey="profit" stroke="#f59e0b" fillOpacity={1} fill="url(#colorProfit)" />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </CardContent>
+            </Card>
+
             {/* Charts Row 2 - Länderverteilung */}
+
             <Card className="bg-card border-border">
                 <CardHeader><CardTitle className="text-base flex items-center gap-2"><PieChartIcon className="w-4 h-4" /> Nutzer nach Ländern (Top 10)</CardTitle></CardHeader>
                 <CardContent className="h-[300px]">
@@ -191,6 +240,6 @@ export default function AdminStats() {
                     </ResponsiveContainer>
                 </CardContent>
             </Card>
-        </div>
+        </div >
     );
 }

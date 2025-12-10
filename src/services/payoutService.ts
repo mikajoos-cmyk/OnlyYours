@@ -30,6 +30,7 @@ export class PayoutService {
    * Verwendet die RPC-Funktion 'get_payout_summary'.
    */
   async getPayoutSummary(creatorId: string): Promise<PayoutSummary> {
+    // @ts-ignore
     const { data, error } = await supabase
       .rpc('get_payout_summary', { creator_id_input: creatorId })
       .single();
@@ -52,11 +53,15 @@ export class PayoutService {
       year: 'numeric'
     });
 
+    // 80% Creator Share logic
+    const CREATOR_SHARE = 0.8;
+    const pData = data as any;
+
     return {
-      availableBalance: data.available_balance || 0,
-      currentMonthEarnings: data.current_month_earnings || 0,
-      lastMonthComparison: data.last_month_comparison_percent || 0,
-      totalYearEarnings: data.total_year_earnings || 0,
+      availableBalance: (pData.available_balance || 0) * CREATOR_SHARE,
+      currentMonthEarnings: (pData.current_month_earnings || 0) * CREATOR_SHARE,
+      lastMonthComparison: pData.last_month_comparison_percent || 0, // Percent comparison stays relative, so no change needed
+      totalYearEarnings: (pData.total_year_earnings || 0) * CREATOR_SHARE,
       nextPayoutDate: nextPayoutDate
     };
   }
@@ -85,23 +90,23 @@ export class PayoutService {
    * Verwendet die RPC-Funktion 'request_payout'.
    */
   async requestPayout(creatorId: string, amount: number): Promise<PayoutRow> {
-     const { data, error } = await supabase
+    const { data, error } = await supabase
       .rpc('request_payout', {
         creator_id_input: creatorId,
         amount_input: amount
       })
       .single();
 
-     if (error) {
-        console.error('Error requesting payout:', error);
-        throw error;
-     }
+    if (error) {
+      console.error('Error requesting payout:', error);
+      throw error;
+    }
 
-     if (!data) {
-        throw new Error('Payout request failed.');
-     }
+    if (!data) {
+      throw new Error('Payout request failed.');
+    }
 
-     return data;
+    return data;
   }
 
   // Interne Mapping-Funktion

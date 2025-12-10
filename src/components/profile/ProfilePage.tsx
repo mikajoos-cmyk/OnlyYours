@@ -16,8 +16,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../ui/alert-dialog';
-import { LogOutIcon, Loader2Icon } from 'lucide-react';
-import { Card, CardContent } from '../ui/card';
+import { Loader2Icon } from 'lucide-react';
+
 import { supabase } from '../../lib/supabase';
 
 export default function ProfilePage() {
@@ -25,7 +25,7 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const { user, logout, updateProfile, initialize } = useAuthStore();
+  const { user, updateProfile, initialize } = useAuthStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
 
@@ -84,14 +84,7 @@ export default function ProfilePage() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      window.location.reload();
-    } catch (error) {
-      console.error("Logout failed in ProfilePage:", error);
-    }
-  };
+
 
   return (
     <>
@@ -112,22 +105,7 @@ export default function ProfilePage() {
 
           {currentRole === 'creator' ? <CreatorProfile /> : <FanProfile />}
 
-          <Card className="bg-card border-border mt-8">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <h3 className="text-foreground font-medium">Konto abmelden</h3>
-                <p className="text-sm text-muted-foreground">Sie werden zum Anmeldebildschirm weitergeleitet.</p>
-              </div>
-              <Button
-                variant="destructive"
-                className="font-normal"
-                onClick={handleLogout}
-              >
-                <LogOutIcon className="w-5 h-5 mr-2" strokeWidth={1.5} />
-                Abmelden
-              </Button>
-            </CardContent>
-          </Card>
+
 
         </div>
       </div>
