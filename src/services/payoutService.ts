@@ -53,15 +53,15 @@ export class PayoutService {
       year: 'numeric'
     });
 
-    // 80% Creator Share logic
-    const CREATOR_SHARE = 0.8;
     const pData = data as any;
 
+    // ÄNDERUNG: Keine Frontend-Berechnung mehr nötig, da die DB-Funktion
+    // jetzt bereits die Netto-Werte (80% Share) zurückgibt.
     return {
-      availableBalance: (pData.available_balance || 0) * CREATOR_SHARE,
-      currentMonthEarnings: (pData.current_month_earnings || 0) * CREATOR_SHARE,
-      lastMonthComparison: pData.last_month_comparison_percent || 0, // Percent comparison stays relative, so no change needed
-      totalYearEarnings: (pData.total_year_earnings || 0) * CREATOR_SHARE,
+      availableBalance: pData.available_balance || 0,
+      currentMonthEarnings: pData.current_month_earnings || 0,
+      lastMonthComparison: pData.last_month_comparison_percent || 0,
+      totalYearEarnings: pData.total_year_earnings || 0,
       nextPayoutDate: nextPayoutDate
     };
   }

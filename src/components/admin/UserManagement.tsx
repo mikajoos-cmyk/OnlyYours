@@ -1,3 +1,4 @@
+// src/components/admin/UserManagement.tsx
 import { useState, useEffect, useMemo } from 'react';
 import { adminService, AdminUser } from '../../services/adminService';
 import { Input } from '../ui/input';
@@ -22,7 +23,6 @@ import {
 } from '../ui/alert-dialog';
 import { useToast } from '../../hooks/use-toast';
 
-// Helper: Alter berechnen
 const calculateAge = (birthdate: string | null) => {
     if (!birthdate) return -1;
     const birthDateObj = new Date(birthdate);
@@ -35,7 +35,6 @@ const calculateAge = (birthdate: string | null) => {
     return age;
 };
 
-// Helper: Altersgruppen bestimmen
 const getAgeGroup = (age: number) => {
     if (age === -1) return 'Unbekannt';
     if (age < 18) return 'Unter 18 (Prüfen)';
@@ -46,19 +45,27 @@ const getAgeGroup = (age: number) => {
     return '55+';
 };
 
+// --- NEUE FUNKTION: Prüft Aktivität basierend auf last_seen ---
+const isUserActive = (lastSeen: string | null) => {
+    if (!lastSeen) return false;
+    const date = new Date(lastSeen);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    return date > thirtyDaysAgo;
+};
+// -------------------------------------------------------------
+
 export default function UserManagement() {
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const { toast } = useToast();
 
-    // Filter & Ansicht
     const [search, setSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('ALL');
     const [groupBy, setGroupBy] = useState<'none' | 'country' | 'age'>('none');
 
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
-    // Ban Dialog State
     const [banDialogOpen, setBanDialogOpen] = useState(false);
     const [userToBan, setUserToBan] = useState<AdminUser | null>(null);
     const [isProcessingBan, setIsProcessingBan] = useState(false);
@@ -98,7 +105,6 @@ export default function UserManagement() {
             const newStatus = !userToBan.is_banned;
             await adminService.toggleUserBan(userToBan.id, newStatus);
 
-            // Lokales Update der Liste
             setUsers(prev => prev.map(u => u.id === userToBan.id ? { ...u, is_banned: newStatus } : u));
 
             toast({
@@ -114,7 +120,6 @@ export default function UserManagement() {
         }
     };
 
-    // Gruppierungs-Logik
     const groupedUsers = useMemo(() => {
         if (groupBy === 'none') {
             return { 'Alle Benutzer': users };
@@ -147,14 +152,6 @@ export default function UserManagement() {
     };
 
     const formatCurrency = (val: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(val);
-    const isUserActive = (dateString: string) => {
-        const date = new Date(dateString);
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        return date > thirtyDaysAgo;
-    };
-
-    // --- Komponenten ---
 
     const TableHeader = () => (
         <thead className="bg-background text-muted-foreground border-b border-border">
@@ -172,8 +169,14 @@ export default function UserManagement() {
     );
 
     const UserRow = ({ user }: { user: AdminUser }) => {
-        const active = isUserActive(user.updated_at);
+        // --- AKTUALISIERT: Nutzt jetzt last_seen ---
+        const active = isUserActive(user.last_seen);
         const age = calculateAge(user.birthdate);
+
+        const statusText = active ? 'Aktiv' : 'Inaktiv';
+
+        // Optional: Falls du sehen willst, WANN sie zuletzt da waren, als Tooltip
+        const lastSeenDate = user.last_seen ? new Date(user.last_seen).toLocaleString() : 'Nie';
 
         return (
             <tr className={cn("border-b border-border/50 last:border-0 transition-colors", user.is_banned ? "bg-destructive/10 hover:bg-destructive/20" : "hover:bg-neutral/20")}>
@@ -190,10 +193,10 @@ export default function UserManagement() {
                     </div>
                 </td>
                 <td className="p-3">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5" title={`Zuletzt gesehen: ${lastSeenDate}`}>
                         <div className={cn("w-2 h-2 rounded-full", active ? "bg-success" : "bg-muted-foreground/30")} />
                         <span className={cn("text-xs", active ? "text-foreground" : "text-muted-foreground")}>
-                            {active ? 'Aktiv' : 'Inaktiv'}
+                            {statusText}
                         </span>
                     </div>
                 </td>

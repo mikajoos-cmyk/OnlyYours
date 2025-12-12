@@ -18,10 +18,8 @@ export interface UserProfile {
   mux_stream_key: string | null;
   mux_playback_id: string | null;
   is_live: boolean;
-  // --- KORREKTUR: Diese Felder müssen im Interface vorhanden sein ---
   live_stream_tier_id: string | null;
   live_stream_requires_subscription: boolean | null;
-  // --- ENDE ---
 }
 
 export class UserService {
@@ -32,12 +30,11 @@ export class UserService {
 
     const { data: { user: currentUser } } = await supabase.auth.getUser();
 
-    // --- KORREKTUR: Die SELECT-Anweisung muss die neuen Spalten enthalten ---
     const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription';
 
     const { data, error } = await supabase
       .from('users')
-      .select(publicSelect) // <-- Korrigiert
+      .select(publicSelect)
       .eq('username', normalizedUsername)
       .maybeSingle();
 
@@ -50,11 +47,10 @@ export class UserService {
         return null;
     }
 
-    // Wenn der gesuchte User der eingeloggte User ist, den privaten Stream-Key laden
     if (currentUser && currentUser.id === data.id) {
         const { data: privateData, error: privateError } = await supabase
             .from('users')
-            .select('mux_stream_key') // Holt *nur* den Stream-Key dank RLS-Policy
+            .select('mux_stream_key')
             .eq('id', currentUser.id)
             .single();
 
@@ -62,7 +58,6 @@ export class UserService {
           console.warn("Konnte Stream-Key für eigenen Benutzer nicht laden", privateError.message);
         }
 
-        // Kombiniere öffentliche und private Daten
         return this.mapToUserProfile({ ...data, ...privateData });
     }
 
@@ -70,11 +65,9 @@ export class UserService {
   }
 
   async getUserById(userId: string): Promise<UserProfile | null> {
-    // --- KORREKTUR: SELECT * ist hier in Ordnung (da es keine öffentliche Suche ist),
-    // aber explizit ist besser, falls RLS nicht greift.
     const { data, error } = await supabase
       .from('users')
-      .select('*') // Lädt alle Spalten für die ID
+      .select('*')
       .eq('id', userId)
       .maybeSingle();
 
@@ -88,12 +81,11 @@ export class UserService {
     const cleanedQuery = query.toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
     if (!cleanedQuery) return [];
 
-    // --- KORREKTUR: Auch hier die neuen Spalten hinzufügen ---
     const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription';
 
     let queryBuilder = supabase
       .from('users')
-      .select(publicSelect) // <-- Korrigiert
+      .select(publicSelect)
       .eq('role', 'CREATOR')
       .or(
         `username.ilike.%${cleanedQuery}%,` +
@@ -114,12 +106,11 @@ export class UserService {
   }
 
   async getLiveCreators(limit: number = 50) {
-    // --- KORREKTUR: Auch hier die neuen Spalten hinzufügen ---
     const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription';
 
     const { data, error } = await supabase
       .from('users')
-      .select(publicSelect) // <-- Korrigiert
+      .select(publicSelect)
       .eq('role', 'CREATOR')
       .eq('is_live', true)
       .order('followers_count', { ascending: false })
@@ -133,14 +124,12 @@ export class UserService {
     return (data || []).map(user => this.mapToUserProfile(user));
   }
 
-
   async getTopCreators(limit: number = 20) {
-    // --- KORREKTUR: Auch hier die neuen Spalten hinzufügen ---
     const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription';
 
     const { data, error } = await supabase
       .from('users')
-      .select(publicSelect) // <-- Korrigiert
+      .select(publicSelect)
       .eq('role', 'CREATOR')
       .order('followers_count', { ascending: false })
       .limit(limit);
@@ -150,12 +139,27 @@ export class UserService {
     return (data || []).map(user => this.mapToUserProfile(user));
   }
 
+  // --- NEUE METHODE ---
+  async updateLastSeen() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // Wir aktualisieren nur public.users
+    // Fire & Forget, wir warten nicht auf das Ergebnis
+    supabase
+      .from('users')
+      .update({ last_seen: new Date().toISOString() })
+      .eq('id', user.id)
+      .then(({ error }) => {
+        if (error) console.error("Failed to update last_seen:", error);
+      });
+  }
+  // --------------------
+
   async updateUserStats(userId: string, stats: {
     totalEarnings?: number;
   }) {
-    // Diese Funktion scheint unvollständig oder veraltet zu sein,
-    // da `total_earnings` jetzt durch Trigger aktualisiert wird.
-    // Wir lassen sie vorerst unverändert.
+    // Veraltet, Trigger übernimmt das
   }
 
   private mapToUserProfile(data: any): UserProfile {
@@ -176,10 +180,8 @@ export class UserService {
       mux_stream_key: data.mux_stream_key || null,
       mux_playback_id: data.mux_playback_id || null,
       is_live: data.is_live || false,
-      // --- KORREKTUR: Felder mappen ---
       live_stream_tier_id: data.live_stream_tier_id || null,
-      live_stream_requires_subscription: data.live_stream_requires_subscription === null ? true : data.live_stream_requires_subscription, // Default zu true (sicher)
-      // --- ENDE ---
+      live_stream_requires_subscription: data.live_stream_requires_subscription === null ? true : data.live_stream_requires_subscription,
     };
   }
 }

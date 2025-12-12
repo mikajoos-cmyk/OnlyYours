@@ -1,9 +1,11 @@
+// src/App.tsx
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useAuthStore } from './stores/authStore';
 import { useAppStore } from './stores/appStore';
 import { useSubscriptionStore } from './stores/subscriptionStore';
 import { useNotificationStore } from './stores/notificationStore';
+import { userService } from './services/userService'; // <-- Importiert
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
 import AppShell from './components/layout/AppShell';
 import DiscoveryFeed from './components/fan/DiscoveryFeed';
@@ -41,6 +43,11 @@ function App() {
     if (isAuthenticated && user) {
       loadSubscriptions();
       startPolling(user.id);
+      
+      // --- NEU: Aktivitätsstatus aktualisieren ---
+      userService.updateLastSeen();
+      // -------------------------------------------
+      
     } else {
       clearSubscriptions();
       stopPolling();
