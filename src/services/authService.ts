@@ -32,23 +32,69 @@ export interface AuthUser {
 export class AuthService {
 
   async register(username: string, email: string, password: string, country: string, birthdate: string, role: 'fan' | 'creator' = 'creator') {
-    console.log("[authService] register CALLED");
+    // 1. Username bereinigen
+    const cleanUsername = username.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
+
+    // 2. Sicherheitsprüfung
+    if (cleanUsername.length < 3) {
+      throw new Error("Benutzername muss mindestens 3 Zeichen lang sein (nur Buchstaben, Zahlen, _).");
+    }
+
+    // 3. Registrierung bei Supabase Auth
+    // Wir senden 'full_name', da der Trigger dies erwartet (siehe SQL COALESCE)
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
-          username: username.toLowerCase(),
-          display_name: username,
+          username: cleanUsername,
+          full_name: username, // WICHTIG für den Trigger
           role: role.toUpperCase(),
           country: country,
           birthdate: birthdate,
         },
       },
     });
+
     if (authError) throw authError;
-    if (!authData.user) throw new Error('Registration failed');
+    if (!authData.user) throw new Error('Registration failed - no user returned');
+
     return authData;
+  }
+
+  // Korrigierte Prüfung mit RPC
+  async checkUsernameAvailability(username: string): Promise<boolean> {
+    const cleanUsername = username.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
+    if (!cleanUsername || cleanUsername.length < 3) return false;
+
+    try {
+      // Ruft die SQL Funktion auf. Wenn Fehler (z.B. Funktion fehlt), nehmen wir an es ist belegt (false).
+      const { data: exists, error } = await supabase.rpc('check_username_exists', {
+        username_to_check: cleanUsername
+      });
+
+      if (error) {
+        console.warn("RPC check_username_exists failed:", error);
+        return false;
+      }
+
+      // RPC gibt TRUE zurück wenn der Name existiert -> also ist er NICHT verfügbar.
+      return !exists;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async checkEmailAvailability(email: string): Promise<boolean> {
+    try {
+      const { data: exists, error } = await supabase.rpc('check_email_exists', {
+        email_to_check: email.toLowerCase().trim(),
+      });
+      if (error) return false;
+      return !exists;
+    } catch (e) {
+      return false;
+    }
   }
 
   async verifyOtp(email: string, token: string) {
@@ -84,24 +130,6 @@ export class AuthService {
     return data;
   }
 
-  async checkUsernameAvailability(username: string): Promise<boolean> {
-    const { data, error } = await supabase
-      .from('users')
-      .select('username')
-      .eq('username', username.toLowerCase())
-      .maybeSingle();
-    if (error) return false;
-    return !data;
-  }
-
-  async checkEmailAvailability(email: string): Promise<boolean> {
-    const { data, error } = await supabase.rpc('check_email_exists', {
-      email_to_check: email.toLowerCase(),
-    });
-    if (error) return false;
-    return !data;
-  }
-
   async login(email: string, password: string): Promise<AuthUser> {
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
@@ -110,9 +138,18 @@ export class AuthService {
     if (authError) throw authError;
     if (!authData.user) throw new Error('Login failed');
 
-    const userProfile = await this.getCurrentUserFullProfile();
+    // Warten bis Profil da ist (Trigger kann ms dauern)
+    let retries = 3;
+    let userProfile = null;
 
-    // KORREKTUR: Jetzt prüfen wir den Ban hier explizit
+    while (retries > 0 && !userProfile) {
+      userProfile = await this.getCurrentUserFullProfile();
+      if (!userProfile) {
+        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms warten
+        retries--;
+      }
+    }
+
     // @ts-ignore
     if (userProfile && userProfile.is_banned) {
       await this.logout();
@@ -120,7 +157,8 @@ export class AuthService {
     }
 
     if (!userProfile) {
-      throw new Error('E-Mail-Adresse noch nicht bestätigt oder Profil fehlt.');
+      // Fallback: Manchmal ist Auth schneller als DB
+      throw new Error('Login erfolgreich, aber Profil wird noch erstellt. Bitte gleich nochmal versuchen.');
     }
     return userProfile;
   }
@@ -137,8 +175,9 @@ export class AuthService {
   async getCurrentUserFullProfile(): Promise<AuthUser | null> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return null;
-    const { data: { user: freshUser } } = await supabase.auth.getUser();
-    if (!freshUser?.email_confirmed_at) return null;
+
+    // Auth User holen
+    const freshUser = session.user;
 
     const { data: userData, error } = await supabase
       .from('users')
@@ -147,12 +186,8 @@ export class AuthService {
       .single();
 
     if (error || !userData) {
-      console.error("Error fetching profile:", error);
       return null;
     }
-
-    // KORREKTUR: Wir geben den User auch zurück, wenn er gebannt ist,
-    // damit die aufrufende Funktion (login oder store) entscheiden kann, was zu tun ist.
 
     let decryptedEarnings = 0;
     try {
@@ -161,7 +196,7 @@ export class AuthService {
       });
       decryptedEarnings = earnings || 0;
     } catch (e) {
-      console.error("Error decrypting earnings:", e);
+      // Earnings ignorieren bei Fehler
     }
 
     const safeUserData = {

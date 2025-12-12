@@ -1,6 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { MailIcon, LockIcon, ChromeIcon, UserIcon, Loader2Icon, ArrowLeftIcon, CalendarIcon } from 'lucide-react';
+import {
+  MailIcon,
+  LockIcon,
+  ChromeIcon,
+  UserIcon,
+  Loader2Icon,
+  ArrowLeftIcon,
+  CalendarIcon,
+  CheckCircleIcon,
+  XCircleIcon
+} from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -73,33 +83,57 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
       setUsernameError(null);
       return;
     }
+
+    // 1. Berechnung des "echten" Usernames (wie er im Backend ankommt)
+    // Entfernt Leerzeichen und Sonderzeichen
+    const cleanUsername = username.toLowerCase().replace(/[^a-z0-9_]/g, '');
+
+    // 2. Prüfung auf Länge DES BEREINIGTEN NAMENS
+    if (cleanUsername.length < 3) {
+      setUsernameStatus('taken');
+      // Differenzierte Fehlermeldung
+      if (username.length >= 3) {
+        setUsernameError('Ungültige Zeichen (nur a-z, 0-9, _)');
+      } else {
+        setUsernameError('Mindestens 3 Zeichen');
+      }
+      return;
+    }
+
+    // 3. Verfügbarkeitsprüfung (Debounced)
     setUsernameStatus('checking');
+    setUsernameError(null);
+
     if (debounceUsernameTimer.current) clearTimeout(debounceUsernameTimer.current);
     debounceUsernameTimer.current = setTimeout(async () => {
-      if (username.length < 3) {
-        setUsernameStatus('taken');
-        setUsernameError('Mindestens 3 Zeichen');
-        return;
-      }
-      const available = await checkUsernameAvailability(username);
+      const available = await checkUsernameAvailability(cleanUsername); // Prüfe den Clean-Namen!
       if (available) {
         setUsernameStatus('available');
         setUsernameError(null);
       } else {
         setUsernameStatus('taken');
-        setUsernameError('Bereits vergeben');
+        setUsernameError('Benutzername bereits vergeben');
       }
     }, 500);
-  }, [username, isLogin]);
+  }, [username, isLogin, checkUsernameAvailability]);
 
   // Email Validierung
   useEffect(() => {
-    if (isLogin || !email || !email.includes('@')) {
+    if (isLogin || !email) {
       setEmailStatus('idle');
       setEmailError(null);
       return;
     }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setEmailStatus('idle');
+      return;
+    }
+
     setEmailStatus('checking');
+    setEmailError(null);
+
     if (debounceEmailTimer.current) clearTimeout(debounceEmailTimer.current);
     debounceEmailTimer.current = setTimeout(async () => {
       const available = await checkEmailAvailability(email);
@@ -111,7 +145,7 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
         setEmailError('E-Mail bereits registriert');
       }
     }, 500);
-  }, [email, isLogin]);
+  }, [email, isLogin, checkEmailAvailability]);
 
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -125,7 +159,6 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
         return;
       }
 
-      // Altersprüfung (Frontend Check)
       const birthDateObj = new Date(birthdate);
       const today = new Date();
       let age = today.getFullYear() - birthDateObj.getFullYear();
@@ -148,11 +181,27 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
         toast({ title: 'Anmeldung fehlgeschlagen', description: error.message, variant: 'destructive' });
       }
     } else {
-      if (usernameStatus !== 'available' || emailStatus !== 'available' || password !== confirmPassword || !termsAgreed || !country) {
-        toast({ title: 'Prüfen Sie Ihre Eingaben', description: !country ? 'Bitte Land auswählen' : undefined, variant: 'destructive' });
+      if (usernameStatus !== 'available') {
+        toast({ title: 'Benutzername ungültig', description: usernameError || 'Bitte prüfen', variant: 'destructive' });
         setIsLoading(false);
         return;
       }
+      if (emailStatus !== 'available') {
+        toast({ title: 'E-Mail ungültig', description: emailError || 'Bitte prüfen', variant: 'destructive' });
+        setIsLoading(false);
+        return;
+      }
+      if (password !== confirmPassword) {
+        toast({ title: 'Passwort', description: 'Passwörter stimmen nicht überein.', variant: 'destructive' });
+        setIsLoading(false);
+        return;
+      }
+      if (!termsAgreed || !country) {
+        toast({ title: 'Fehlende Angaben', description: 'Bitte AGB und Land prüfen.', variant: 'destructive' });
+        setIsLoading(false);
+        return;
+      }
+
       try {
         await register(username, email, password, country, birthdate, 'fan');
         toast({ title: 'Code gesendet', description: 'Bitte E-Mails prüfen.' });
@@ -185,7 +234,6 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.2 }}
-        // FIX: max-h-[85vh] und overflow-y-auto hinzugefügt für Scrolling
         className="w-full max-w-md bg-card rounded-lg p-8 space-y-6 border border-border max-h-[85vh] overflow-y-auto chat-messages-scrollbar"
       >
 
@@ -202,7 +250,21 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
                   <Label>Benutzername</Label>
                   <div className="relative">
                     <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input value={username} onChange={e => setUsername(e.target.value)} className={`pl-10 bg-background border-border ${usernameError ? 'border-destructive' : ''}`} />
+                    <Input
+                      value={username}
+                      onChange={e => setUsername(e.target.value)}
+                      maxLength={30} // Maximale Länge direkt im Input limitieren
+                      className={cn(
+                        "pl-10 pr-10 bg-background border-border",
+                        usernameError ? 'border-destructive focus-visible:ring-destructive' : '',
+                        usernameStatus === 'available' ? 'border-green-500 focus-visible:ring-green-500' : ''
+                      )}
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      {usernameStatus === 'checking' && <Loader2Icon className="w-4 h-4 animate-spin text-muted-foreground" />}
+                      {usernameStatus === 'available' && <CheckCircleIcon className="w-4 h-4 text-green-500" />}
+                      {usernameStatus === 'taken' && <XCircleIcon className="w-4 h-4 text-destructive" />}
+                    </div>
                   </div>
                   {usernameError && <p className="text-xs text-destructive">{usernameError}</p>}
                 </div>
@@ -212,7 +274,23 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
                 <Label>E-Mail</Label>
                 <div className="relative">
                   <MailIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input type="email" value={email} onChange={e => setEmail(e.target.value)} className={`pl-10 bg-background border-border ${emailError ? 'border-destructive' : ''}`} />
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    className={cn(
+                      "pl-10 pr-10 bg-background border-border",
+                      emailError ? 'border-destructive focus-visible:ring-destructive' : '',
+                      !isLogin && emailStatus === 'available' ? 'border-green-500 focus-visible:ring-green-500' : ''
+                    )}
+                  />
+                  {!isLogin && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      {emailStatus === 'checking' && <Loader2Icon className="w-4 h-4 animate-spin text-muted-foreground" />}
+                      {emailStatus === 'available' && <CheckCircleIcon className="w-4 h-4 text-green-500" />}
+                      {emailStatus === 'taken' && <XCircleIcon className="w-4 h-4 text-destructive" />}
+                    </div>
+                  )}
                 </div>
                 {emailError && <p className="text-xs text-destructive">{emailError}</p>}
               </div>
@@ -222,12 +300,14 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
                   <Label>Passwort</Label>
                   {isLogin && <span className="text-xs text-secondary cursor-pointer hover:underline" onClick={() => setStep('forgot')}>Vergessen?</span>}
                 </div>
-                <div className="relative"><LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" /><Input type="password" value={password} onChange={e => setPassword(e.target.value)} className="pl-10 bg-background border-border" /></div>
+                <div className="relative">
+                  <LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input type="password" value={password} onChange={e => setPassword(e.target.value)} className="pl-10 bg-background border-border" />
+                </div>
               </div>
 
               {!isLogin && (
                 <div className="space-y-3">
-                  {/* Land Auswahl */}
                   <div className="space-y-2">
                     <Label>Land</Label>
                     <Select value={country} onValueChange={setCountry}>
@@ -242,7 +322,6 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
                     </Select>
                   </div>
 
-                  {/* Geburtsdatum */}
                   <div className="space-y-2">
                     <Label>Geburtsdatum</Label>
                     <div className="relative">

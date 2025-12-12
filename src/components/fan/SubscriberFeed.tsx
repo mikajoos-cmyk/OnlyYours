@@ -18,6 +18,8 @@ import type { Post as PostData } from '../../services/postService';
 import { tierService, Tier } from '../../services/tierService';
 import SubscriptionModal from './SubscriptionModal';
 import ReportModal from './ReportModal';
+import { SecureMedia } from '../ui/SecureMedia';
+import FeedPreloader from './FeedPreloader'; // <-- NEU
 
 interface SubscriberFeedProps {
   initialPosts?: PostData[] | ServicePostData[];
@@ -32,6 +34,7 @@ export default function SubscriberFeed({
   isProfileView = false,
   onClose
 }: SubscriberFeedProps) {
+  // ... (Gleiche Setup-Logik wie zuvor)
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -124,6 +127,7 @@ export default function SubscriberFeed({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isProfileView, nextPostAction, previousPostAction, showPpvModal, showComments, showTipModal, showSubscriptionModal, showReportModal]);
 
+  // ... (Scroll Handlers identisch)
   const scrollThreshold = 50;
 
   const handleScroll = (e: React.WheelEvent) => {
@@ -158,7 +162,7 @@ export default function SubscriberFeed({
 
   const handleLike = async (postId: string) => {
     if (isProfileView) {
-      // TODO: Lokale Like-Logik wenn nötig
+      // TODO: Lokale Like-Logik
     } else {
       await toggleLikeAction(postId);
     }
@@ -171,15 +175,15 @@ export default function SubscriberFeed({
 
   const handleCommentAdded = () => {
     if (selectedPostIdForComments) {
-        if (!isProfileView) {
-            incrementCommentCount(selectedPostIdForComments);
-        } else {
-             setPosts(prev => prev.map(p =>
-                p.id === selectedPostIdForComments
-                    ? { ...p, comments: p.comments + 1 }
-                    : p
-            ));
-        }
+      if (!isProfileView) {
+        incrementCommentCount(selectedPostIdForComments);
+      } else {
+        setPosts(prev => prev.map(p =>
+          p.id === selectedPostIdForComments
+            ? { ...p, comments: p.comments + 1 }
+            : p
+        ));
+      }
     }
   };
 
@@ -227,8 +231,8 @@ export default function SubscriberFeed({
   const handleReportClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user) {
-        toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um Inhalte zu melden.", variant: "destructive" });
-        return;
+      toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um Inhalte zu melden.", variant: "destructive" });
+      return;
     }
     setShowReportModal(true);
   };
@@ -250,8 +254,8 @@ export default function SubscriberFeed({
       return;
     }
     if (creatorTiers.length === 0) {
-       toast({ title: "Fehler", description: "Dieser Creator bietet (noch) keine Abos an.", variant: "destructive" });
-       return;
+      toast({ title: "Fehler", description: "Dieser Creator bietet (noch) keine Abos an.", variant: "destructive" });
+      return;
     }
 
     setShowPpvModal(false);
@@ -282,7 +286,7 @@ export default function SubscriberFeed({
   if (!currentPost && isProfileView) {
     return (
       <div className="fixed inset-0 top-16 z-40 bg-background flex items-center justify-center md:left-64 md:bottom-0 md:h-[calc(100vh-4rem)]">
-        {onClose && <Button onClick={onClose} variant="ghost" size="icon" className="absolute top-4 right-4 z-50"><XIcon/></Button>}
+        {onClose && <Button onClick={onClose} variant="ghost" size="icon" className="absolute top-4 right-4 z-50"><XIcon /></Button>}
         <p className="text-muted-foreground">Post nicht gefunden.</p>
       </div>
     );
@@ -316,13 +320,16 @@ export default function SubscriberFeed({
 
   const activeSub = useSubscriptionStore.getState().subscriptionMap.get(currentPost.creatorId);
   if (requiredTier && activeSub) {
-      subscribeText = `Upgrade auf "${requiredTier.name}" erforderlich`;
+    subscribeText = `Upgrade auf "${requiredTier.name}" erforderlich`;
   } else if (requiredTier) {
-      subscribeText = `Mit "${requiredTier.name}"-Abo freischalten`;
+    subscribeText = `Mit "${requiredTier.name}"-Abo freischalten`;
   }
 
   return (
     <>
+      {/* --- PRELOADER HINZUGEFÜGT --- */}
+      <FeedPreloader posts={posts} currentIndex={currentIndex} />
+
       <div
         ref={containerRef}
         className={cn(
@@ -334,199 +341,193 @@ export default function SubscriberFeed({
         onTouchMove={handleTouchMove}
       >
         {isProfileView && onClose && (
-           <Button
+          <Button
             onClick={onClose}
             size="icon"
             variant="ghost"
             className="absolute top-4 right-4 z-50 bg-black/50 text-foreground hover:bg-black/70 rounded-full"
-           >
+          >
             <XIcon className="w-6 h-6" strokeWidth={1.5} />
-           </Button>
+          </Button>
         )}
 
         <motion.div
-           key={currentPost.id}
-           initial={{ opacity: 0 }}
-           animate={{ opacity: 1 }}
-           exit={{ opacity: 0 }}
-           transition={{ duration: 0.3 }}
-           className="h-full w-full relative"
-         >
+          key={currentPost.id}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }}
+          className="h-full w-full relative"
+        >
+          <div
+            className="w-full h-full"
+            onClick={() => { if (hasAccess) return; }}
+          >
+            <SecureMedia
+              path={hasAccess ? currentPost.mediaUrl : (currentPost.thumbnail_url || currentPost.mediaUrl)}
+              type={currentPost.mediaType}
+              alt={currentPost.caption || ""}
+              className={cn(
+                "w-full h-full object-cover",
+                !hasAccess && "filter blur-2xl"
+              )}
+              autoPlay
+              muted
+              loop
+              playsInline
+            />
+          </div>
+
+          {!hasAccess && (
             <div
-              className="w-full h-full"
-              onClick={() => { if(hasAccess) return; }}
+              className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8"
             >
-              {currentPost.mediaType === 'video' ? (
-                <video
-                  src={currentPost.mediaUrl}
-                  autoPlay muted loop playsInline
+              <LockIcon className="w-16 h-16 text-foreground" />
+
+              {canPpv && (
+                <Button
+                  className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6 w-full max-w-sm"
+                  onClick={handlePpvClick}
+                >
+                  {`Beitrag für ${currentPost.price.toFixed(2)}€ freischalten`}
+                </Button>
+              )}
+
+              {canPpv && canSubscribe && (
+                <div className="relative w-full max-w-sm">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">
+                      ODER
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {canSubscribe && (
+                <Button
+                  variant={canPpv ? "outline" : "secondary"}
                   className={cn(
-                    "w-full h-full object-cover",
-                    !hasAccess && "filter blur-2xl"
+                    "text-lg px-8 py-6 w-full max-w-sm",
+                    canPpv
+                      ? "bg-transparent border-secondary text-secondary hover:bg-secondary/10 hover:text-secondary"
+                      : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
                   )}
-                />
-              ) : (
-                <img
-                  src={hasAccess ? currentPost.mediaUrl : (currentPost.thumbnail_url || currentPost.mediaUrl)}
-                  alt={currentPost.caption || ""}
-                  className={cn(
-                    "w-full h-full object-cover",
-                    !hasAccess && "filter blur-2xl"
-                  )}
-                />
+                  onClick={handleSubscribeClick}
+                >
+                  <UserCheckIcon className="w-5 h-5 mr-2" />
+                  {subscribeText}
+                </Button>
               )}
             </div>
+          )}
 
-            {!hasAccess && (
-              <div
-                className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8"
-              >
-                <LockIcon className="w-16 h-16 text-foreground" />
+          {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
 
-                {canPpv && (
-                  <Button
-                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6 w-full max-w-sm"
-                    onClick={handlePpvClick}
-                  >
-                    {`Beitrag für ${currentPost.price.toFixed(2)}€ freischalten`}
-                  </Button>
-                )}
-
-                {canPpv && canSubscribe && (
-                  <div className="relative w-full max-w-sm">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t border-border" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-card px-2 text-muted-foreground">
-                        ODER
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {canSubscribe && (
-                  <Button
-                    variant={canPpv ? "outline" : "secondary"}
-                    className={cn(
-                        "text-lg px-8 py-6 w-full max-w-sm",
-                        canPpv
-                            ? "bg-transparent border-secondary text-secondary hover:bg-secondary/10 hover:text-secondary"
-                            : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
-                    )}
-                    onClick={handleSubscribeClick}
-                  >
-                    <UserCheckIcon className="w-5 h-5 mr-2" />
-                    {subscribeText}
-                  </Button>
+          <div className="absolute top-4 left-4 right-20 z-10">
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => !isProfileView && navigate(`/profile/${currentPost.creator.username || currentPost.creatorId}`)}>
+              <Avatar className="w-12 h-12 border-2 border-foreground">
+                <AvatarImage src={currentPost.creator.avatar} alt={currentPost.creator.name} />
+                <AvatarFallback className="bg-secondary text-secondary-foreground">
+                  {currentPost.creator.name ? currentPost.creator.name.charAt(0) : ''}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-medium text-foreground drop-shadow-lg">
+                  {currentPost.creator.name}
+                </p>
+                {!isProfileView && (
+                  <p className="text-sm text-foreground/80 drop-shadow-lg">
+                    @{currentPost.creator.username || currentPost.creatorId}
+                  </p>
                 )}
               </div>
-            )}
-
-            {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
-
-            <div className="absolute top-4 left-4 right-20 z-10">
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => !isProfileView && navigate(`/profile/${currentPost.creator.username || currentPost.creatorId}`)}>
-                    <Avatar className="w-12 h-12 border-2 border-foreground">
-                        <AvatarImage src={currentPost.creator.avatar} alt={currentPost.creator.name} />
-                        <AvatarFallback className="bg-secondary text-secondary-foreground">
-                        {currentPost.creator.name ? currentPost.creator.name.charAt(0) : ''}
-                        </AvatarFallback>
-                    </Avatar>
-                    <div>
-                        <p className="font-medium text-foreground drop-shadow-lg">
-                        {currentPost.creator.name}
-                        </p>
-                        {!isProfileView && (
-                            <p className="text-sm text-foreground/80 drop-shadow-lg">
-                                @{currentPost.creator.username || currentPost.creatorId}
-                            </p>
-                        )}
-                    </div>
-                </div>
             </div>
+          </div>
 
-            {/* FIX: Buttons höher positionieren */}
-            <div className="absolute right-4 bottom-[calc(12rem+env(safe-area-inset-bottom))] md:bottom-32 z-10 flex flex-col gap-6 transition-all">
-                <motion.button
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => hasAccess && handleLike(currentPost.id)}
-                    className="flex flex-col items-center gap-1"
-                    disabled={!hasAccess}
-                >
-                    <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
-                        <HeartIcon
-                        className={cn(
-                            "w-7 h-7",
-                            currentPost.isLiked ? 'fill-secondary text-secondary' : 'text-foreground',
-                            !hasAccess && "opacity-50"
-                        )}
-                        strokeWidth={1.5}
-                        />
-                    </div>
-                    <span className={cn("text-sm font-medium text-foreground drop-shadow-lg", !hasAccess && "opacity-50")}>
-                        {(currentPost.likes).toLocaleString()}
-                    </span>
-                </motion.button>
+          {/* FIX: Buttons höher positionieren */}
+          <div className="absolute right-4 bottom-[calc(12rem+env(safe-area-inset-bottom))] md:bottom-32 z-10 flex flex-col gap-6 transition-all">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => hasAccess && handleLike(currentPost.id)}
+              className="flex flex-col items-center gap-1"
+              disabled={!hasAccess}
+            >
+              <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
+                <HeartIcon
+                  className={cn(
+                    "w-7 h-7",
+                    currentPost.isLiked ? 'fill-secondary text-secondary' : 'text-foreground',
+                    !hasAccess && "opacity-50"
+                  )}
+                  strokeWidth={1.5}
+                />
+              </div>
+              <span className="text-sm font-medium text-foreground drop-shadow-lg">
+                {(currentPost.likes).toLocaleString()}
+              </span>
+            </motion.button>
 
-                <button
-                    onClick={() => handleCommentClick(currentPost.id)}
-                    className="flex flex-col items-center gap-1"
-                >
-                    <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
-                        <MessageCircleIcon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
-                    </div>
-                    <span className="text-sm font-medium text-foreground drop-shadow-lg">
-                        {currentPost.comments}
-                    </span>
-                </button>
+            <button
+              onClick={() => handleCommentClick(currentPost.id)}
+              className="flex flex-col items-center gap-1"
+            >
+              <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
+                <MessageCircleIcon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
+              </div>
+              <span className="text-sm font-medium text-foreground drop-shadow-lg">
+                {currentPost.comments}
+              </span>
+            </button>
 
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const creator = currentPost.creator;
-                    handleShare(currentPost.id, creator.username || creator.id, creator.name);
-                  }}
-                  className="flex flex-col items-center gap-1"
-                >
-                    <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
-                        <Share2Icon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
-                    </div>
-                </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const creator = currentPost.creator;
+                handleShare(currentPost.id, creator.username || creator.id, creator.name);
+              }}
+              className="flex flex-col items-center gap-1"
+            >
+              <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
+                <Share2Icon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
+              </div>
+            </button>
 
-                <button
-                  onClick={(e) => handleTipClick(e, currentPost.creator)}
-                  className="flex flex-col items-center gap-1"
-                >
-                    <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
-                        <DollarSignIcon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
-                    </div>
-                </button>
+            <button
+              onClick={(e) => handleTipClick(e, currentPost.creator)}
+              className="flex flex-col items-center gap-1"
+            >
+              <div className="w-12 h-12 rounded-full bg-card/80 backdrop-blur-sm flex items-center justify-center">
+                <DollarSignIcon className="w-7 h-7 text-foreground" strokeWidth={1.5} />
+              </div>
+            </button>
 
-                <button
-                  onClick={handleReportClick}
-                  className="flex flex-col items-center gap-1 opacity-60 hover:opacity-100 transition-opacity"
-                >
-                  <div className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
-                    <FlagIcon className="w-4 h-4 text-foreground" strokeWidth={1.5} />
-                  </div>
-                </button>
+            <button
+              onClick={handleReportClick}
+              className="flex flex-col items-center gap-1 opacity-60 hover:opacity-100 transition-opacity"
+            >
+              <div className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
+                <FlagIcon className="w-4 h-4 text-foreground" strokeWidth={1.5} />
+              </div>
+            </button>
+          </div>
+
+          {/* FIX: Caption höher positionieren */}
+          <div className="absolute left-4 right-20 z-10 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-4 transition-all">
+            <p className={cn("text-foreground drop-shadow-lg mb-2", !hasAccess && "filter blur-sm select-none")}>
+              {hasAccess ? currentPost.caption : "Abonnieren oder kaufen, um die Beschreibung zu sehen."}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {currentPost.hashtags.map((tag) => (
+                <span key={tag} className="text-secondary text-sm drop-shadow-lg">
+                  #{tag}
+                </span>
+              ))}
             </div>
-
-            {/* FIX: Caption höher positionieren */}
-            <div className="absolute left-4 right-20 z-10 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-4 transition-all">
-                <p className={cn("text-foreground drop-shadow-lg mb-2", !hasAccess && "filter blur-sm select-none")}>
-                  {hasAccess ? currentPost.caption : "Abonnieren oder kaufen, um die Beschreibung zu sehen."}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                {currentPost.hashtags.map((tag) => (
-                    <span key={tag} className="text-secondary text-sm drop-shadow-lg">
-                    #{tag}
-                    </span>
-                ))}
-                </div>
-            </div>
-         </motion.div>
+          </div>
+        </motion.div>
       </div>
 
       <AnimatePresence>
@@ -544,14 +545,14 @@ export default function SubscriberFeed({
       </AnimatePresence>
 
       {showPpvModal && currentPost && (
-         <PpvModal
-            isOpen={showPpvModal}
-            onClose={() => setShowPpvModal(false)}
-            post={currentPost}
-            onPaymentSuccess={handlePurchaseSuccess}
-            creatorTiers={creatorTiers}
-            onSubscribeClick={handleSubscribeClick}
-         />
+        <PpvModal
+          isOpen={showPpvModal}
+          onClose={() => setShowPpvModal(false)}
+          post={currentPost}
+          onPaymentSuccess={handlePurchaseSuccess}
+          creatorTiers={creatorTiers}
+          onSubscribeClick={handleSubscribeClick}
+        />
       )}
 
       {showSubscriptionModal && currentPost && creatorTiers.length > 0 && (
@@ -578,9 +579,9 @@ export default function SubscriberFeed({
 
       {showReportModal && currentPost && (
         <ReportModal
-            isOpen={showReportModal}
-            onClose={() => setShowReportModal(false)}
-            postId={currentPost.id}
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          postId={currentPost.id}
         />
       )}
     </>

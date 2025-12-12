@@ -18,6 +18,7 @@ import TipModal from './TipModal';
 import ReportModal from './ReportModal';
 import type { Post as PostData } from '../../services/postService';
 import { SecureMedia } from '../ui/SecureMedia';
+import FeedPreloader from './FeedPreloader'; // <-- NEU
 
 export default function DiscoveryFeed() {
   const navigate = useNavigate();
@@ -50,7 +51,7 @@ export default function DiscoveryFeed() {
 
   const [showReportModal, setShowReportModal] = useState(false);
 
-  const [isViewerOpen, setIsViewerOpen] = useState(false);
+  // const [isViewerOpen, setIsViewerOpen] = useState(false); // Unused
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
@@ -84,13 +85,13 @@ export default function DiscoveryFeed() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (showPpvModal || showComments || isViewerOpen || showSubscriptionModal || showTipModal || showReportModal) return;
+      if (showPpvModal || showComments || showSubscriptionModal || showTipModal || showReportModal) return;
       if (e.key === 'ArrowDown') nextPost();
       else if (e.key === 'ArrowUp') previousPost();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [nextPost, previousPost, showPpvModal, showComments, isViewerOpen, showSubscriptionModal, showTipModal, showReportModal]);
+  }, [nextPost, previousPost, showPpvModal, showComments, showSubscriptionModal, showTipModal, showReportModal]);
 
   const handleScroll = (e: React.WheelEvent) => {
     if (isScrolling.current || Math.abs(e.deltaY) < 50 || showPpvModal || showComments || showSubscriptionModal || showTipModal || showReportModal) return;
@@ -246,6 +247,9 @@ export default function DiscoveryFeed() {
 
   return (
     <>
+      {/* --- PRELOADER HINZUGEFÜGT --- */}
+      <FeedPreloader posts={posts} currentIndex={currentIndex} />
+
       <div
         ref={containerRef}
         className="w-full overflow-hidden relative h-full"
@@ -263,20 +267,21 @@ export default function DiscoveryFeed() {
         >
           <div className="w-full h-full" onClick={() => { if (hasAccess) return; }}>
             <SecureMedia
-  path={hasAccess ? currentPost.mediaUrl : (currentPost.thumbnail_url || currentPost.mediaUrl)}
-  type={currentPost.mediaType}
-  alt={currentPost.caption || ""}
-  className={cn(
-    "w-full h-full",
-    !hasAccess && "filter blur-2xl"
-  )}
-  autoPlay
-  muted
-  loop
-  playsInline
-/>
+              path={hasAccess ? currentPost.mediaUrl : (currentPost.thumbnail_url || currentPost.mediaUrl)}
+              type={currentPost.mediaType}
+              alt={currentPost.caption || ""}
+              className={cn(
+                "w-full h-full",
+                !hasAccess && "filter blur-2xl"
+              )}
+              autoPlay
+              muted
+              loop
+              playsInline
+            />
           </div>
 
+          {/* ... Rest der UI bleibt gleich ... */}
           {!hasAccess && (
             <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8">
               <LockIcon className="w-16 h-16 text-foreground" />
@@ -342,7 +347,6 @@ export default function DiscoveryFeed() {
             </div>
           </div>
 
-          {/* FIX: Buttons höher positionieren (ca. 12rem / 192px von unten auf Mobile, 32 auf Desktop) */}
           <div className="absolute right-4 bottom-[calc(12rem+env(safe-area-inset-bottom))] md:bottom-32 z-10 flex flex-col gap-6 transition-all">
             <motion.button
               whileTap={{ scale: 0.9 }}
@@ -410,7 +414,6 @@ export default function DiscoveryFeed() {
 
           </div>
 
-          {/* FIX: Caption höher positionieren (ca. 5.5rem / 88px von unten auf Mobile, 4 auf Desktop) */}
           <div className="absolute left-4 right-20 z-10 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-4 transition-all">
             <p className={cn(
               "text-foreground drop-shadow-lg mb-2",

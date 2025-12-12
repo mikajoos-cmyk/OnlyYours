@@ -1,7 +1,14 @@
 import { supabase } from '../lib/supabase';
 
+// Einfacher Cache: Pfad -> { url, expiry }
+interface CachedUrl {
+  url: string;
+  expiry: number;
+}
+
 export class StorageService {
   private bucketName = 'media';
+  private urlCache: Map<string, CachedUrl> = new Map();
 
   async uploadMedia(file: File, userId: string): Promise<string> {
     const fileExt = file.name.split('.').pop();
@@ -17,7 +24,6 @@ export class StorageService {
     if (error) throw error;
     if (!data) throw new Error('Upload failed');
 
-    // Wir speichern nur den Pfad in der DB (z.B. "user_id/file.jpg")
     return data.path;
   }
 
@@ -38,6 +44,19 @@ export class StorageService {
     // Blob-URLs (lokale Vorschau) direkt zurückgeben
     if (path.startsWith('blob:')) return path;
 
+    // 1. Cache prüfen
+    const now = Date.now();
+    if (this.urlCache.has(path)) {
+      const cached = this.urlCache.get(path)!;
+      // Wenn noch mehr als 5 Minuten gültig, nutze Cache
+      if (cached.expiry > now + 5 * 60 * 1000) {
+        return cached.url;
+      } else {
+        this.urlCache.delete(path); // Abgelaufen
+      }
+    }
+
+    // 2. Neu anfragen
     const { data, error } = await supabase.storage
       .from(this.bucketName)
       .createSignedUrl(path, 3600); // 3600 Sekunden = 1 Stunde
@@ -46,6 +65,13 @@ export class StorageService {
       console.error('Error creating signed URL:', error);
       return null;
     }
+
+    // 3. Im Cache speichern (Gültigkeit - 5 Minuten Puffer)
+    this.urlCache.set(path, {
+      url: data.signedUrl,
+      expiry: now + (3600 * 1000)
+    });
+
     return data.signedUrl;
   }
 
@@ -53,8 +79,8 @@ export class StorageService {
     if (!url) return '';
     if (!url.startsWith('http')) return url; // Ist schon ein Pfad
     if (url.includes(`/${this.bucketName}/`)) {
-        const urlParts = url.split(`/${this.bucketName}/`);
-        return urlParts[urlParts.length - 1];
+      const urlParts = url.split(`/${this.bucketName}/`);
+      return urlParts[urlParts.length - 1];
     }
     return url;
   }
