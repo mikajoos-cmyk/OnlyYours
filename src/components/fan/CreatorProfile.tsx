@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { UsersIcon, GridIcon, VideoIcon, CheckIcon, LockIcon, MessageCircleIcon, HeartIcon, LayoutGrid, Image as ImageIcon, Film as FilmIcon, RadioIcon, SettingsIcon } from 'lucide-react';
+import { UsersIcon, GridIcon, VideoIcon, CheckIcon, LockIcon, MessageCircleIcon, HeartIcon, LayoutGrid, Image as ImageIcon, Film as FilmIcon, RadioIcon, SettingsIcon, ShoppingBagIcon } from 'lucide-react';
 import SubscriptionModal from './SubscriptionModal';
 import ProfilePostViewer from './ProfilePostViewer';
 import type { PostData as ViewerPostData } from './ProfilePostViewer';
@@ -102,11 +102,11 @@ export default function CreatorProfile() {
     if (!isLoadingProfile && !isLoadingSubs && creator && currentUser) {
       const subMap = useSubscriptionStore.getState().subscriptionMap;
       const activeSub = Array.from(subMap.values()).find(s => {
-          if (s.creatorId !== creator.id) return false;
-          const isStillValid = s.endDate && new Date(s.endDate) > new Date();
-          if (s.status === 'ACTIVE') return true;
-          if (s.status === 'CANCELED' && isStillValid) return true;
-          return false;
+        if (s.creatorId !== creator.id) return false;
+        const isStillValid = s.endDate && new Date(s.endDate) > new Date();
+        if (s.status === 'ACTIVE') return true;
+        if (s.status === 'CANCELED' && isStillValid) return true;
+        return false;
       });
 
       if (!activeSub) {
@@ -118,7 +118,7 @@ export default function CreatorProfile() {
       setSubscriptionStatus(isAnyActive ? 'ACTIVE' : 'CANCELED');
 
     } else if (!currentUser || creator?.id === creator?.id) {
-        setSubscriptionStatus(null);
+      setSubscriptionStatus(null);
     }
   }, [creator, currentUser, isLoadingProfile, isLoadingSubs, useSubscriptionStore.getState().subscriptionMap]);
 
@@ -140,7 +140,7 @@ export default function CreatorProfile() {
     }
     setShowPpvModal(false);
     setTimeout(() => {
-        setShowSubscriptionModal(true);
+      setShowSubscriptionModal(true);
     }, 150);
   };
 
@@ -187,24 +187,24 @@ export default function CreatorProfile() {
 
   // --- NEU: Handler für Updates aus dem Viewer ---
   const handleLikeToggle = (postId: string) => {
-      setPosts(prev => prev.map(p => {
-          if (p.id === postId) {
-              const newIsLiked = !p.isLiked;
-              return {
-                  ...p,
-                  isLiked: newIsLiked,
-                  likes_count: p.likes_count + (newIsLiked ? 1 : -1), // DB uses likes_count
-                  likes: p.likes + (newIsLiked ? 1 : -1) // Frontend mapped sometimes to likes
-              };
-          }
-          return p;
-      }));
+    setPosts(prev => prev.map(p => {
+      if (p.id === postId) {
+        const newIsLiked = !p.isLiked;
+        return {
+          ...p,
+          isLiked: newIsLiked,
+          likes_count: p.likes_count + (newIsLiked ? 1 : -1), // DB uses likes_count
+          likes: p.likes + (newIsLiked ? 1 : -1) // Frontend mapped sometimes to likes
+        };
+      }
+      return p;
+    }));
   };
 
   const handleCommentAdded = (postId: string) => {
-      setPosts(prev => prev.map(p =>
-          p.id === postId ? { ...p, comments: p.comments + 1, comments_count: p.comments_count + 1 } : p
-      ));
+    setPosts(prev => prev.map(p =>
+      p.id === postId ? { ...p, comments: p.comments + 1, comments_count: p.comments_count + 1 } : p
+    ));
   };
   // --- ENDE NEU ---
 
@@ -327,7 +327,22 @@ export default function CreatorProfile() {
       );
     }
 
-    return <div className="mt-8">{subscribeButton}</div>;
+    return (
+      <div className="mt-8 flex flex-col items-center">
+        {subscribeButton}
+
+        {!isOwnProfile && (
+          <Button
+            onClick={() => navigate(`/shop/${creator.username}`)}
+            variant="outline"
+            className="mt-4 w-full md:w-auto border-foreground hover:bg-neutral"
+          >
+            <ShoppingBagIcon className="w-4 h-4 mr-2" />
+            Zum Shop
+          </Button>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -412,16 +427,16 @@ export default function CreatorProfile() {
             </Button>
             {creatorTiers.map((tier) => (
               <Button
-                  key={tier.id}
-                  onClick={() => setTierFilter(tier.id)}
-                  size="sm"
-                  className={cn(
-                    "px-5 py-2 rounded-full text-sm font-semibold",
-                    tierFilter === tier.id ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
-                  )}
-                >
-                  <LockIcon className="w-4 h-4 mr-2" /> {tier.name}
-                </Button>
+                key={tier.id}
+                onClick={() => setTierFilter(tier.id)}
+                size="sm"
+                className={cn(
+                  "px-5 py-2 rounded-full text-sm font-semibold",
+                  tierFilter === tier.id ? "bg-secondary text-secondary-foreground shadow-md" : "bg-transparent text-muted-foreground hover:bg-neutral"
+                )}
+              >
+                <LockIcon className="w-4 h-4 mr-2" /> {tier.name}
+              </Button>
             ))}
           </div>
         )}
@@ -439,18 +454,18 @@ export default function CreatorProfile() {
                   onClick={() => handlePostClick(index, post.hasAccess)}
                 >
                   <SecureMedia
-  path={post.thumbnailUrl}
-  type={post.type} // Hier nutzen wir den Typ, damit Videos im Grid ggf. loopen
-  alt={post.caption || ""}
-  className={cn(
-      "w-full h-full transition-transform duration-200 group-hover:scale-105",
-      !post.hasAccess && "filter blur-2xl"
-  )}
-  muted
-  loop
-  playsInline
-  autoPlay
-/>
+                    path={post.thumbnailUrl}
+                    type={post.type} // Hier nutzen wir den Typ, damit Videos im Grid ggf. loopen
+                    alt={post.caption || ""}
+                    className={cn(
+                      "w-full h-full transition-transform duration-200 group-hover:scale-105",
+                      !post.hasAccess && "filter blur-2xl"
+                    )}
+                    muted
+                    loop
+                    playsInline
+                    autoPlay
+                  />
                   {post.type === 'video' && (
                     <VideoIcon className="absolute top-2 right-2 w-5 h-5 text-foreground drop-shadow-lg" strokeWidth={2} />
                   )}
@@ -502,14 +517,14 @@ export default function CreatorProfile() {
         />
       )}
       {showPpvModal && selectedPostForPpv && (
-         <PpvModal
-            isOpen={showPpvModal}
-            onClose={() => setShowPpvModal(false)}
-            post={selectedPostForPpv}
-            onPaymentSuccess={handlePurchaseSuccess}
-            creatorTiers={creatorTiers}
-            onSubscribeClick={handleSubscribeClick}
-         />
+        <PpvModal
+          isOpen={showPpvModal}
+          onClose={() => setShowPpvModal(false)}
+          post={selectedPostForPpv}
+          onPaymentSuccess={handlePurchaseSuccess}
+          creatorTiers={creatorTiers}
+          onSubscribeClick={handleSubscribeClick}
+        />
       )}
     </div>
   );

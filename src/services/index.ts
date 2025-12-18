@@ -10,4 +10,5 @@ export { notificationService } from './notificationService';
 export { statisticsService } from './statisticsService';
 export { payoutService } from './payoutService';
 export { paymentService } from './paymentService';
-export { tierService } from './tierService'; // <-- HINZUGEFÜGT
+export { tierService } from './tierService';
+export { shopService } from './shopService'; // <-- HINZUGEFÜGT

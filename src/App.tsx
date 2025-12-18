@@ -10,6 +10,7 @@ import OnboardingFlow from './components/onboarding/OnboardingFlow';
 import AppShell from './components/layout/AppShell';
 import DiscoveryFeed from './components/fan/DiscoveryFeed';
 import CreatorProfile from './components/fan/CreatorProfile';
+import CreatorShop from './components/fan/CreatorShop';
 import SubscriberFeed from './components/fan/SubscriberFeed';
 import SearchPage from './components/fan/SearchPage';
 import Dashboard from './components/creator/Dashboard';
@@ -43,11 +44,11 @@ function App() {
     if (isAuthenticated && user) {
       loadSubscriptions();
       startPolling(user.id);
-      
+
       // --- NEU: Aktivitätsstatus aktualisieren ---
       userService.updateLastSeen();
       // -------------------------------------------
-      
+
     } else {
       clearSubscriptions();
       stopPolling();
@@ -90,6 +91,7 @@ function App() {
           <Route path="/" element={<Navigate to="/discover" replace />} />
           <Route path="/discover" element={<DiscoveryFeed />} />
           <Route path="/profile/:username" element={<CreatorProfile />} />
+          <Route path="/shop/:username" element={<CreatorShop />} />
           <Route path="/feed" element={<SubscriberFeed />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/profile" element={<ProfilePage />} />

@@ -43,7 +43,7 @@ export class PaymentService {
       .eq('user_id', userId)
       .eq('status', 'SUCCESS') // Nur erfolgreiche Transaktionen anzeigen
       .order('created_at', { ascending: false })
-      .limit(limit);
+      .limit(limit) as any;
 
     if (error) {
       console.error('Error fetching payment history:', error);
@@ -74,18 +74,18 @@ export class PaymentService {
 
     // Metadaten für die Transaktionshistorie abrufen
     const { data: creator } = await supabase
-        .from('users')
-        .select('display_name')
-        .eq('id', creatorId)
-        .single();
+      .from('users')
+      .select('display_name')
+      .eq('id', creatorId)
+      .single();
 
     const { data: post } = await supabase
-        .from('posts')
-        .select('caption')
-        .eq('id', postId)
-        .single();
+      .from('posts')
+      .select('caption')
+      .eq('id', postId)
+      .single();
 
-    const paymentData: PaymentInsert = {
+    const paymentData: any = {
       user_id: user.id,
       creator_id: creatorId,
       amount: amount,
@@ -94,14 +94,13 @@ export class PaymentService {
       status: 'SUCCESS',
       related_id: postId,
       metadata: {
-        creatorName: creator?.display_name || 'Unbekannt',
-        postCaption: post?.caption?.substring(0, 50) || 'Post'
+        creatorName: (creator as any)?.display_name || 'Unbekannt',
+        postCaption: (post as any)?.caption?.substring(0, 50) || 'Post'
       }
     };
 
-    const { data: newPayment, error } = await supabase
-      .from('payments')
-      .insert(paymentData)
+    const { data: newPayment, error } = await (supabase.from('payments') as any)
+      .insert(paymentData as any)
       .select()
       .single();
 
@@ -132,7 +131,7 @@ export class PaymentService {
       .eq('id', creatorId)
       .single();
 
-    const paymentData: PaymentInsert = {
+    const paymentData: any = {
       user_id: user.id,
       creator_id: creatorId,
       amount: amount,
@@ -141,13 +140,12 @@ export class PaymentService {
       status: 'SUCCESS',
       related_id: null,
       metadata: {
-        creatorName: creator?.display_name || 'Unbekannt'
+        creatorName: (creator as any)?.display_name || 'Unbekannt'
       }
     };
 
-    const { data: newPayment, error } = await supabase
-      .from('payments')
-      .insert(paymentData)
+    const { data: newPayment, error } = await (supabase.from('payments') as any)
+      .insert(paymentData as any)
       .select()
       .single();
 
@@ -158,6 +156,34 @@ export class PaymentService {
 
     return newPayment;
   }
+
+  /**
+   * Führt den Datenbank-Eintrag für einen Produktkauf durch.
+   */
+  async purchaseProduct(creatorId: string, productId: string, amount: number, productTitle: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // 1. Zahlungseintrag erstellen
+    const { error: paymentError } = await (supabase.from('payments') as any).insert({
+      user_id: user.id,
+      creator_id: creatorId,
+      amount: amount,
+      currency: 'EUR',
+      type: 'PRODUCT',
+      status: 'SUCCESS',
+      related_id: productId,
+      metadata: { productTitle: productTitle }
+    });
+
+    if (paymentError) {
+      console.error('CRITICAL: Payment registration failed in DB:', paymentError);
+      throw new Error(`Kauf konnte nicht registriert werden: ${paymentError.message}`);
+    }
+
+    console.log('Payment registered successfully for product:', productId);
+  }
+
 
   /**
    * Ruft NUR die IDs aller erfolgreich gekauften PPV-Posts ab.
@@ -178,8 +204,8 @@ export class PaymentService {
     }
 
     const ids = (data || [])
-      .map(p => p.related_id)
-      .filter((id): id is string => id !== null);
+      .map((p: any) => p.related_id)
+      .filter((id: string | null): id is string => id !== null);
 
     return new Set<string>(ids);
   }
@@ -224,8 +250,9 @@ export class PaymentService {
     const metadata = payment.metadata as { creatorName?: string, postCaption?: string };
 
     try {
-      switch (payment.type) {
+      switch (payment.type as any) {
         case 'SUBSCRIPTION':
+
           if (metadata?.creatorName) {
             return `Abonnement: ${metadata.creatorName}`;
           }
@@ -240,6 +267,12 @@ export class PaymentService {
             return `Trinkgeld für: ${metadata.creatorName}`;
           }
           return 'Trinkgeld';
+        case 'PRODUCT':
+          const productMeta = payment.metadata as { productTitle?: string };
+          if (productMeta?.productTitle) {
+            return `Kauf: ${productMeta.productTitle}`;
+          }
+          return 'Produktkauf';
         default:
           return 'Unbekannte Transaktion';
       }

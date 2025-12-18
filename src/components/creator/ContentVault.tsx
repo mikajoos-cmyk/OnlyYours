@@ -10,8 +10,8 @@ import { useAuthStore } from '../../stores/authStore';
 import { postService, Post as ServicePostData } from '../../services/postService';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../hooks/use-toast';
-import { cn } from '../../lib/utils';
 import { SecureMedia } from '../ui/SecureMedia';
+import ProductManager from './ProductManager';
 
 export default function ContentVault() {
   const { user } = useAuthStore();
@@ -28,6 +28,8 @@ export default function ContentVault() {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [selectedPostIndex, setSelectedPostIndex] = useState(0);
+  const [vaultMode, setVaultMode] = useState<'posts' | 'products'>('posts');
+
 
   useEffect(() => {
     const fetchContent = async () => {
@@ -69,7 +71,7 @@ export default function ContentVault() {
         );
         break;
       case 'drafts':
-         contentToShow = allPosts.filter(p =>
+        contentToShow = allPosts.filter(p =>
           !p.is_published &&
           (!p.scheduled_for || new Date(p.scheduled_for) <= now)
         );
@@ -99,7 +101,7 @@ export default function ContentVault() {
         avatar: post.creator.avatar,
         isVerified: post.creator.isVerified,
       },
-  })), [filteredContent]);
+    })), [filteredContent]);
 
   const handlePostClick = (index: number) => {
     setSelectedPostIndex(index);
@@ -124,23 +126,39 @@ export default function ContentVault() {
   };
 
   return (
-    <>
-      {/* FIX: h-full hier ist wichtig, damit die Tabs den Container füllen */}
-      <Tabs defaultValue="all" onValueChange={setCurrentTab} className="w-full h-full flex flex-col">
+    <div className="flex flex-col h-full py-8 px-4">
+      <div className="max-w-6xl mx-auto w-full space-y-8 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-serif text-foreground">Content Vault</h1>
+          <div className="flex bg-card border border-border rounded-lg p-1">
+            <Button
+              variant={vaultMode === 'posts' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setVaultMode('posts')}
+              className="rounded-md"
+            >
+              Beiträge
+            </Button>
+            <Button
+              variant={vaultMode === 'products' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setVaultMode('products')}
+              className="rounded-md"
+            >
+              Shop-Produkte
+            </Button>
+          </div>
+        </div>
 
-        <div className="flex flex-col h-full py-8 px-4">
-          <div className="max-w-6xl mx-auto w-full space-y-8 flex-shrink-0">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <h1 className="text-3xl font-serif text-foreground">Content Vault</h1>
-              <Button
-                className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
-                onClick={() => navigate('/post/new')}
-              >
-                <UploadIcon className="w-5 h-5 mr-2" strokeWidth={1.5} />
-                Hochladen
-              </Button>
-            </div>
+        {vaultMode === 'posts' && (
+          <div className="flex flex-col space-y-8">
+            <Button
+              className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal w-fit"
+              onClick={() => navigate('/post/new')}
+            >
+              <UploadIcon className="w-5 h-5 mr-2" strokeWidth={1.5} />
+              Hochladen
+            </Button>
 
             {/* Auswahl-Aktionen-Leiste */}
             {selectedItems.length > 0 && (
@@ -164,9 +182,8 @@ export default function ContentVault() {
               </Card>
             )}
 
-            {/* Tabs-Navigation */}
-            <div className="my-8">
-              <TabsList className="bg-card border border-border w-full md:w-auto">
+            <Tabs defaultValue="all" onValueChange={setCurrentTab} className="w-full">
+              <TabsList className="bg-card border border-border w-full md:w-auto mb-8">
                 <TabsTrigger value="all" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
                   Alle
                 </TabsTrigger>
@@ -180,20 +197,7 @@ export default function ContentVault() {
                   Entwürfe
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
 
-          {/* Grid-Ansicht (Scrollbar Bereich) */}
-          <div
-             className={cn(
-               "flex-grow overflow-y-auto chat-messages-scrollbar",
-               // FIX: Dynamisches Padding für Mobile (Nav + Safe Area), 0 für Desktop
-               "pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0"
-             )}
-          >
-            {/* FIX: 'h-full' entfernt, damit der Inhalt wachsen kann. 'min-h-full' für Zentrierung bei wenig Inhalt. */}
-            <div className="max-w-6xl mx-auto min-h-full">
-              {/* FIX: 'h-full' entfernt. 'mt-0' beibehalten. */}
               <TabsContent value={currentTab} className="mt-0">
                 {loading && <p className="text-center text-muted-foreground py-10">Inhalte werden geladen...</p>}
                 {error && <p className="text-destructive text-center py-10">{error}</p>}
@@ -201,27 +205,27 @@ export default function ContentVault() {
                   <p className="text-center text-muted-foreground py-10">Keine Inhalte in dieser Kategorie gefunden.</p>
                 )}
                 {!loading && !error && (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-20">
                     {filteredContent.map((post, index) => (
                       <div
                         key={post.id}
                         className="relative group rounded-lg overflow-hidden cursor-pointer bg-neutral aspect-square"
                         onClick={(e) => {
-                           if (e.target instanceof HTMLElement && e.target.closest('[role="checkbox"]')) {
-                             return;
-                           }
-                           handlePostClick(index);
+                          if (e.target instanceof HTMLElement && e.target.closest('[role="checkbox"]')) {
+                            return;
+                          }
+                          handlePostClick(index);
                         }}
                       >
                         <SecureMedia
-  path={post.thumbnail_url || post.mediaUrl}
-  type={post.mediaType}
-  alt=""
-  className="w-full h-full object-cover"
-  muted
-  loop
-  playsInline
-/>
+                          path={post.thumbnail_url || post.mediaUrl}
+                          type={post.mediaType}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          muted
+                          loop
+                          playsInline
+                        />
 
                         {post.mediaType === 'video' && (
                           <VideoIcon className="absolute top-2 right-2 w-5 h-5 text-white drop-shadow-lg" strokeWidth={2} />
@@ -250,10 +254,16 @@ export default function ContentVault() {
                   </div>
                 )}
               </TabsContent>
-            </div>
+            </Tabs>
           </div>
-        </div>
-      </Tabs>
+        )}
+
+        {vaultMode === 'products' && (
+          <div className="pb-20">
+            <ProductManager showOnly="list" />
+          </div>
+        )}
+      </div>
 
       {isViewerOpen && (
         <ProfilePostViewer
@@ -262,6 +272,6 @@ export default function ContentVault() {
           onClose={() => setIsViewerOpen(false)}
         />
       )}
-    </>
+    </div>
   );
 }

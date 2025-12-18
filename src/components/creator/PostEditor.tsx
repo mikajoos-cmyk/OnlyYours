@@ -21,6 +21,8 @@ import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { tierService, Tier } from '../../services/tierService';
 import { SecureMedia } from '../ui/SecureMedia';
+import ProductManager from './ProductManager';
+import { ShoppingBagIcon, FileTextIcon } from 'lucide-react';
 
 export default function PostEditor() {
   const { user } = useAuthStore();
@@ -30,6 +32,8 @@ export default function PostEditor() {
   // Formular-States
   const [caption, setCaption] = useState('');
   const [price, setPrice] = useState(''); // PPV-Preis
+  const [editorMode, setEditorMode] = useState<'post' | 'product'>('post');
+
   const [hashtags, setHashtags] = useState<string[]>([""]); // <-- NEU: Hashtag-State
 
   // --- AKTUALISIERT: accessLevel State ---
@@ -90,7 +94,7 @@ export default function PostEditor() {
 
     setSelectedFile(file);
     if (filePreview) {
-        URL.revokeObjectURL(filePreview);
+      URL.revokeObjectURL(filePreview);
     }
     const previewUrl = URL.createObjectURL(file);
     setFilePreview(previewUrl);
@@ -190,8 +194,8 @@ export default function PostEditor() {
 
     // Logik-Prüfung für Tiers
     if (accessLevel !== 'public' && tiers.length === 0 && !loadingTiers) {
-        toast({ title: 'Fehler', description: 'Sie haben noch keine Abo-Stufen erstellt. Bitte wählen Sie "Öffentlich" oder erstellen Sie zuerst eine Stufe.', variant: 'destructive' });
-        return;
+      toast({ title: 'Fehler', description: 'Sie haben noch keine Abo-Stufen erstellt. Bitte wählen Sie "Öffentlich" oder erstellen Sie zuerst eine Stufe.', variant: 'destructive' });
+      return;
     }
 
     setIsLoading(true);
@@ -261,269 +265,298 @@ export default function PostEditor() {
   return (
     <div className="min-h-screen py-8 px-4">
       <div className="max-w-4xl mx-auto space-y-8">
-        <h1 className="text-3xl font-serif text-foreground">Neuer Beitrag</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-serif text-foreground">
+            {editorMode === 'post' ? 'Neuer Beitrag' : 'Neues Produkt'}
+          </h1>
+          <div className="flex bg-card border border-border rounded-lg p-1">
+            <Button
+              variant={editorMode === 'post' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setEditorMode('post')}
+              className="rounded-md"
+            >
+              <FileTextIcon className="w-4 h-4 mr-2" />
+              Beitrag
+            </Button>
+            <Button
+              variant={editorMode === 'product' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setEditorMode('product')}
+              className="rounded-md"
+            >
+              <ShoppingBagIcon className="w-4 h-4 mr-2" />
+              Produkt
+            </Button>
+          </div>
+        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <Card className="bg-card border-border">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-foreground">Medien hochladen</CardTitle>
-              {filePreview && (
-                <Button variant="ghost" size="icon" onClick={clearFile} disabled={isLoading}>
-                  <Trash2Icon className="w-5 h-5 text-destructive" />
-                </Button>
-              )}
-            </CardHeader>
-            <CardContent>
-              {filePreview ? (
-                <div className="w-full aspect-square rounded-lg overflow-hidden bg-background">
-                  <SecureMedia
-  path={filePreview}
-  type={mediaType}
-  alt="Vorschau"
-  className="w-full h-full object-cover"
-  controls={mediaType === 'VIDEO'}
-/>
-                </div>
-              ) : (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={onDragOver}
-                  onDragLeave={onDragLeave}
-                  onDrop={onDrop}
-                  className={cn(
-                    "border-2 border-dashed border-border rounded-lg p-12 text-center hover:border-secondary transition-colors cursor-pointer",
-                    dragOver && "border-secondary bg-secondary/10"
-                  )}
-                >
-                  <UploadIcon className="w-12 h-12 text-muted-foreground mx-auto mb-4" strokeWidth={1.5} />
-                  <p className="text-foreground mb-2">
-                    Klicken oder ziehen Sie Dateien hierher
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Unterstützt: Bilder und Videos
-                  </p>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={(e) => handleFileChange(e.target.files?.[0])}
-                    accept="image/*,video/*"
-                    className="hidden"
+        {editorMode === 'product' ? (
+          <ProductManager showOnly="form" />
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+            <Card className="bg-card border-border">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-foreground">Medien hochladen</CardTitle>
+                {filePreview && (
+                  <Button variant="ghost" size="icon" onClick={clearFile} disabled={isLoading}>
+                    <Trash2Icon className="w-5 h-5 text-destructive" />
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent>
+                {filePreview ? (
+                  <div className="w-full aspect-square rounded-lg overflow-hidden bg-background">
+                    <SecureMedia
+                      path={filePreview}
+                      type={mediaType as any}
+                      alt="Vorschau"
+                      className="w-full h-full object-cover"
+                      controls={mediaType === 'VIDEO'}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={onDragOver}
+                    onDragLeave={onDragLeave}
+                    onDrop={onDrop}
+                    className={cn(
+                      "border-2 border-dashed border-border rounded-lg p-12 text-center hover:border-secondary transition-colors cursor-pointer",
+                      dragOver && "border-secondary bg-secondary/10"
+                    )}
+                  >
+                    <UploadIcon className="w-12 h-12 text-muted-foreground mx-auto mb-4" strokeWidth={1.5} />
+                    <p className="text-foreground mb-2">
+                      Klicken oder ziehen Sie Dateien hierher
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Unterstützt: Bilder und Videos
+                    </p>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={(e) => handleFileChange(e.target.files?.[0])}
+                      accept="image/*,video/*"
+                      className="hidden"
+                    />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-foreground">Beitragsdetails</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="caption" className="text-foreground">
+                    Beschreibung
+                  </Label>
+                  <Textarea
+                    id="caption"
+                    placeholder="Schreiben Sie eine Beschreibung..."
+                    value={caption}
+                    onChange={(e) => setCaption(e.target.value)}
+                    className="min-h-32 bg-background text-foreground border-border"
+                    disabled={isLoading}
                   />
                 </div>
-              )}
-            </CardContent>
-          </Card>
 
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-foreground">Beitragsdetails</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="caption" className="text-foreground">
-                  Beschreibung
-                </Label>
-                <Textarea
-                  id="caption"
-                  placeholder="Schreiben Sie eine Beschreibung..."
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  className="min-h-32 bg-background text-foreground border-border"
-                  disabled={isLoading}
-                />
-              </div>
+                {/* --- NEU: Hashtags --- */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="hashtags" className="text-foreground">
+                      Hashtags (optional)
+                    </Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleAddHashtag}
+                      disabled={isLoading}
+                      className="text-secondary hover:text-secondary/80"
+                    >
+                      <PlusIcon className="w-5 h-5" />
+                    </Button>
+                  </div>
 
-              {/* --- NEU: Hashtags --- */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="hashtags" className="text-foreground">
-                    Hashtags (optional)
-                  </Label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleAddHashtag}
-                    disabled={isLoading}
-                    className="text-secondary hover:text-secondary/80"
-                  >
-                    <PlusIcon className="w-5 h-5" />
-                  </Button>
-                </div>
-
-                <div className="space-y-2 max-h-32 overflow-y-auto chat-messages-scrollbar pr-2">
-                  {hashtags.map((tag, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <div className="relative flex-grow">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">#</span>
-                        <Input
-                          id={`hashtag-${index}`}
-                          type="text"
-                          placeholder="zB fitness"
-                          value={tag}
-                          onChange={(e) => handleHashtagChange(index, e.target.value)}
-                          className="bg-background text-foreground border-border pl-7"
+                  <div className="space-y-2 max-h-32 overflow-y-auto chat-messages-scrollbar pr-2">
+                    {hashtags.map((tag, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <div className="relative flex-grow">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">#</span>
+                          <Input
+                            id={`hashtag-${index}`}
+                            type="text"
+                            placeholder="zB fitness"
+                            value={tag}
+                            onChange={(e) => handleHashtagChange(index, e.target.value)}
+                            className="bg-background text-foreground border-border pl-7"
+                            disabled={isLoading}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemoveHashtag(index)}
                           disabled={isLoading}
-                        />
+                          className="text-destructive hover:text-destructive/80"
+                        >
+                          <XIcon className="w-5 h-5" />
+                        </Button>
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleRemoveHashtag(index)}
-                        disabled={isLoading}
-                        className="text-destructive hover:text-destructive/80"
-                      >
-                        <XIcon className="w-5 h-5" />
-                      </Button>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Keine Leerzeichen oder Sonderzeichen (außer "_") verwenden.
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Keine Leerzeichen oder Sonderzeichen (außer "_") verwenden.
-                </p>
-              </div>
-              {/* --- ENDE HASHTAGS --- */}
+                {/* --- ENDE HASHTAGS --- */}
 
-              {/* --- Zugriffsstufe --- */}
-              <div className="space-y-2">
-                <Label htmlFor="access-level" className="text-foreground">
-                  Wer kann diesen Beitrag sehen?
-                </Label>
-                <Select value={accessLevel} onValueChange={setAccessLevel} disabled={isLoading || loadingTiers}>
-                  <SelectTrigger className="bg-background text-foreground border-border">
-                    <SelectValue placeholder="Zugriffsstufe wählen..." />
-                  </SelectTrigger>
-                  <SelectContent className="bg-card text-foreground border-border">
-                    <SelectItem value="public">
-                      <div className="flex items-center gap-2">
-                        <GlobeIcon className="w-4 h-4" />
-                        Alle Benutzer (Öffentlich)
-                      </div>
-                    </SelectItem>
-
-                    {tiers.map((tier) => (
-                      <SelectItem key={tier.id} value={tier.id}>
-                         <div className="flex items-center gap-2">
-                          <LockIcon className="w-4 h-4" />
-                          {tier.name} (Stufe)
+                {/* --- Zugriffsstufe --- */}
+                <div className="space-y-2">
+                  <Label htmlFor="access-level" className="text-foreground">
+                    Wer kann diesen Beitrag sehen?
+                  </Label>
+                  <Select value={accessLevel} onValueChange={setAccessLevel} disabled={isLoading || loadingTiers}>
+                    <SelectTrigger className="bg-background text-foreground border-border">
+                      <SelectValue placeholder="Zugriffsstufe wählen..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card text-foreground border-border">
+                      <SelectItem value="public">
+                        <div className="flex items-center gap-2">
+                          <GlobeIcon className="w-4 h-4" />
+                          Alle Benutzer (Öffentlich)
                         </div>
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {loadingTiers && <p className="text-xs text-muted-foreground">Lade Abo-Stufen...</p>}
-                {!loadingTiers && tiers.length === 0 && (
+
+                      {tiers.map((tier) => (
+                        <SelectItem key={tier.id} value={tier.id}>
+                          <div className="flex items-center gap-2">
+                            <LockIcon className="w-4 h-4" />
+                            {tier.name} (Stufe)
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {loadingTiers && <p className="text-xs text-muted-foreground">Lade Abo-Stufen...</p>}
+                  {!loadingTiers && tiers.length === 0 && (
                     <p className="text-xs text-muted-foreground">
-                        Hinweis: Sie haben noch keine Abo-Stufen erstellt. Posts sind standardmäßig "Öffentlich".
+                      Hinweis: Sie haben noch keine Abo-Stufen erstellt. Posts sind standardmäßig "Öffentlich".
                     </p>
-                )}
-              </div>
+                  )}
+                </div>
 
-              {/* --- Preis (PPV) --- */}
-              <div className="space-y-2">
-                <Label htmlFor="price" className="text-foreground">
-                  Pay-per-View Preis (optional)
-                </Label>
-                <Input
-                  id="price"
-                  type="number"
-                  placeholder="0.00"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  className="bg-background text-foreground border-border"
-                  disabled={isLoading}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Setzen Sie einen Preis (z.B. 5.00), um diesen Post als Pay-per-View anzubieten.
-                  {accessLevel !== 'public' && " Abonnenten dieser Stufe erhalten ihn kostenlos."}
-                </p>
-              </div>
+                {/* --- Preis (PPV) --- */}
+                <div className="space-y-2">
+                  <Label htmlFor="price" className="text-foreground">
+                    Pay-per-View Preis (optional)
+                  </Label>
+                  <Input
+                    id="price"
+                    type="number"
+                    placeholder="0.00"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    className="bg-background text-foreground border-border"
+                    disabled={isLoading}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Setzen Sie einen Preis (z.B. 5.00), um diesen Post als Pay-per-View anzubieten.
+                    {accessLevel !== 'public' && " Abonnenten dieser Stufe erhalten ihn kostenlos."}
+                  </p>
+                </div>
 
-              {/* --- KALENDER/ZEIT-PICKER (Unverändert) --- */}
-              <div className="space-y-2">
-                <Label className="text-foreground">
-                  Zeitplan (optional)
-                </Label>
-                <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal h-10 px-3 py-2 bg-background text-foreground border-border hover:bg-neutral",
-                        !selectedDate && "text-muted-foreground"
-                      )}
-                      disabled={isLoading}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {displayScheduledDate()}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={selectedDate}
-                      onSelect={setSelectedDate}
-                      disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                      initialFocus
-                      locale={de}
-                    />
-                    <div className="p-4 border-t border-border flex items-center justify-between">
-                      <Label className="text-foreground">Uhrzeit</Label>
-                      <TimePicker
-                        value={selectedTime}
-                        onChange={setSelectedTime}
-                        disabled={!selectedDate}
-                      />
-                    </div>
-                    <div className="p-4 pt-0 flex justify-end gap-2">
+                {/* --- KALENDER/ZEIT-PICKER (Unverändert) --- */}
+                <div className="space-y-2">
+                  <Label className="text-foreground">
+                    Zeitplan (optional)
+                  </Label>
+                  <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                    <PopoverTrigger asChild>
                       <Button
-                        variant="ghost"
-                        onClick={() => setSelectedDate(undefined)}
-                        disabled={!selectedDate}
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal h-10 px-3 py-2 bg-background text-foreground border-border hover:bg-neutral",
+                          !selectedDate && "text-muted-foreground"
+                        )}
+                        disabled={isLoading}
                       >
-                        Löschen
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {displayScheduledDate()}
                       </Button>
-                       <Button
-                        className="bg-secondary text-secondary-foreground hover:bg-secondary/90"
-                        onClick={() => setPopoverOpen(false)}
-                      >
-                        Übernehmen
-                      </Button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={setSelectedDate}
+                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                        initialFocus
+                        locale={de}
+                      />
+                      <div className="p-4 border-t border-border flex items-center justify-between">
+                        <Label className="text-foreground">Uhrzeit</Label>
+                        <TimePicker
+                          value={selectedTime}
+                          onChange={setSelectedTime}
+                          disabled={!selectedDate}
+                        />
+                      </div>
+                      <div className="p-4 pt-0 flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          onClick={() => setSelectedDate(undefined)}
+                          disabled={!selectedDate}
+                        >
+                          Löschen
+                        </Button>
+                        <Button
+                          className="bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                          onClick={() => setPopoverOpen(false)}
+                        >
+                          Übernehmen
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
 
-              {/* --- SUBMIT-BUTTONS (Unverändert) --- */}
-              <div className="flex gap-4 pt-4">
-                <Button
-                  onClick={() => handleSubmit(false)} // 'false' = kein Entwurf
-                  className="flex-1 bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
-                  disabled={isLoading || !selectedFile}
-                >
-                  {isLoading ? (
-                    <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />
-                  ) : (
-                    getCombinedIsoString() ? 'Planen' : 'Veröffentlichen'
-                  )}
-                </Button>
-                <Button
-                  onClick={() => handleSubmit(true)} // 'true' = Entwurf
-                  variant="outline"
-                  className="flex-1 bg-background text-foreground border-border hover:bg-neutral font-normal"
-                  disabled={isLoading || !selectedFile}
-                >
-                  {isLoading ? (
-                    <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />
-                  ) : (
-                    'Als Entwurf speichern'
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                {/* --- SUBMIT-BUTTONS (Unverändert) --- */}
+                <div className="flex gap-4 pt-4">
+                  <Button
+                    onClick={() => handleSubmit(false)} // 'false' = kein Entwurf
+                    className="flex-1 bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
+                    disabled={isLoading || !selectedFile}
+                  >
+                    {isLoading ? (
+                      <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />
+                    ) : (
+                      getCombinedIsoString() ? 'Planen' : 'Veröffentlichen'
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => handleSubmit(true)} // 'true' = Entwurf
+                    variant="outline"
+                    className="flex-1 bg-background text-foreground border-border hover:bg-neutral font-normal"
+                    disabled={isLoading || !selectedFile}
+                  >
+                    {isLoading ? (
+                      <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />
+                    ) : (
+                      'Als Entwurf speichern'
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );
