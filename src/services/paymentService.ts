@@ -160,33 +160,47 @@ export class PaymentService {
   /**
    * NEU: Führt den Datenbank-Eintrag für einen Produktkauf durch.
    */
+  /**
+   * DEBUG-VERSION: Produktkauf registrieren
+   */
   async purchaseProduct(creatorId: string, productId: string, amount: number, productTitle: string) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    console.log('[PaymentService] Starting purchaseProduct...', { creatorId, productId, amount });
 
-    // Eintrag in die payments Tabelle
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.error('[PaymentService] No authenticated user found');
+      throw new Error('Not authenticated');
+    }
+
+    // Explizites Casting für TypeScript, falls die Typen noch nicht aktualisiert sind
+    const paymentData = {
+      user_id: user.id,
+      creator_id: creatorId,
+      amount: amount,
+      currency: 'EUR',
+      type: 'PRODUCT', // Hier könnte der Fehler liegen, wenn SQL Schritt 1 fehlte
+      status: 'SUCCESS',
+      related_id: productId,
+      metadata: {
+        productTitle: productTitle,
+        description: `Kauf von: ${productTitle}`
+      }
+    };
+
+    console.log('[PaymentService] Sending to DB:', paymentData);
+
     const { data, error } = await (supabase.from('payments') as any)
-      .insert({
-        user_id: user.id,
-        creator_id: creatorId,
-        amount: amount,
-        currency: 'EUR',
-        type: 'PRODUCT', // Nutzt den neuen ENUM Wert
-        status: 'SUCCESS',
-        related_id: productId, // Verknüpfung zum Produkt
-        metadata: {
-          productTitle: productTitle,
-          description: `Kauf von: ${productTitle}`
-        }
-      })
+      .insert(paymentData as any) // 'as any' um Typ-Fehler temporär zu umgehen
       .select()
       .single();
 
     if (error) {
-      console.error('Error recording product purchase:', error);
-      throw new Error('Kauf konnte nicht registriert werden: ' + error.message);
+      console.error('[PaymentService] DB Insert Error:', error);
+      console.error('[PaymentService] Error Details:', error.message, error.details, error.hint);
+      throw new Error(`DB Error: ${error.message}`);
     }
 
+    console.log('[PaymentService] Purchase successful:', data);
     return data;
   }
 

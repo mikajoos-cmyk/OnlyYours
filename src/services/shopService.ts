@@ -7,6 +7,8 @@ export interface Product {
     description: string;
     imageUrl: string;
     price: number;
+    shippingCost: number;
+    shippingIncluded: boolean;
     isActive: boolean;
 }
 
@@ -30,6 +32,8 @@ export class ShopService {
             description: p.description,
             imageUrl: p.image_url,
             price: p.price,
+            shippingCost: p.shipping_cost || 0,
+            shippingIncluded: p.shipping_included || false,
             isActive: p.is_active
         }));
     }
@@ -54,12 +58,14 @@ export class ShopService {
             description: p.description,
             imageUrl: p.image_url,
             price: p.price,
+            shippingCost: p.shipping_cost || 0,
+            shippingIncluded: p.shipping_included || false,
             isActive: p.is_active
         }));
     }
 
     // Produkt erstellen
-    async createProduct(product: { title: string, description: string, price: number, imageUrl: string }) {
+    async createProduct(product: { title: string, description: string, price: number, shippingCost: number, shippingIncluded: boolean, imageUrl: string }) {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Not authenticated");
 
@@ -68,6 +74,8 @@ export class ShopService {
             title: product.title,
             description: product.description,
             price: product.price,
+            shipping_cost: (product as any).shippingCost,
+            shipping_included: (product as any).shippingIncluded,
             image_url: product.imageUrl
         } as any);
 
@@ -75,11 +83,13 @@ export class ShopService {
     }
 
     // Produkt aktualisieren
-    async updateProduct(productId: string, product: { title: string, description: string, price: number, imageUrl?: string, isActive?: boolean }) {
+    async updateProduct(productId: string, product: { title: string, description: string, price: number, shippingCost: number, shippingIncluded: boolean, imageUrl?: string, isActive?: boolean }) {
         const { error } = await supabase.from('products' as any).update({
             title: product.title,
             description: product.description,
             price: product.price,
+            shipping_cost: (product as any).shippingCost,
+            shipping_included: (product as any).shippingIncluded,
             image_url: product.imageUrl,
             is_active: product.isActive
         } as any).eq('id', productId);

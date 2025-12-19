@@ -62,9 +62,15 @@ export class MessageService {
    * NEU: Sendet eine automatische Nachricht im Namen des Creators an den Fan.
    * Nutzt die SQL-Funktion 'send_automated_message'.
    */
+  /**
+   * DEBUG-VERSION: Automatische Nachricht senden
+   */
   async sendAutomatedShopMessage(creatorId: string, fanId: string, productTitle: string) {
+    console.log('[MessageService] Sending automated message...', { creatorId, fanId });
+
     const messageContent = `Vielen Dank für den Kauf von "${productTitle}"! 🎉\n\nBitte antworte mir hier mit deiner Lieferadresse (Name, Straße, PLZ, Ort), damit ich den Versand vorbereiten kann.`;
 
+    // Aufruf der SQL Funktion
     const { error } = await (supabase.rpc as any)('send_automated_message', {
       p_sender_id: creatorId,
       p_receiver_id: fanId,
@@ -72,8 +78,11 @@ export class MessageService {
     });
 
     if (error) {
-      console.error("Fehler beim Senden der automatischen Shop-Nachricht:", error);
+      console.error('[MessageService] RPC Error send_automated_message:', error);
+      throw error; // Fehler werfen, damit das Frontend ihn sieht
     }
+
+    console.log('[MessageService] Automated message sent successfully.');
   }
 
   // ENTSCHLÜSSELT LESEN via View 'decrypted_messages'

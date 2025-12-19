@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
-import { UploadIcon, Loader2Icon, Trash2Icon } from 'lucide-react';
+import { UploadIcon, Loader2Icon, Trash2Icon, PencilIcon } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
@@ -19,15 +19,18 @@ interface Product {
     title: string;
     description?: string;
     price: number;
+    shippingCost: number;
+    shippingIncluded: boolean;
     imageUrl: string;
     isActive: boolean;
 }
 
 interface ProductManagerProps {
     showOnly?: 'list' | 'form';
+    initialEditId?: string;
 }
 
-export default function ProductManager({ showOnly }: ProductManagerProps) {
+export default function ProductManager({ showOnly, initialEditId }: ProductManagerProps) {
     const { user } = useAuthStore();
     const { toast } = useToast();
     const navigate = useNavigate();
@@ -40,6 +43,8 @@ export default function ProductManager({ showOnly }: ProductManagerProps) {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [price, setPrice] = useState('');
+    const [shippingCost, setShippingCost] = useState('0');
+    const [shippingIncluded, setShippingIncluded] = useState(false);
     const [isActive, setIsActive] = useState(true);
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -51,7 +56,22 @@ export default function ProductManager({ showOnly }: ProductManagerProps) {
 
     useEffect(() => {
         loadProducts();
-    }, []);
+        if (initialEditId && showOnly === 'form') {
+            loadProductToEdit(initialEditId);
+        }
+    }, [initialEditId, showOnly]);
+
+    const loadProductToEdit = async (id: string) => {
+        try {
+            const data = await shopService.getMyProducts();
+            const product = data.find(p => p.id === id);
+            if (product) {
+                handleEdit(product);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
 
     const loadProducts = async () => {
         try {
@@ -87,24 +107,23 @@ export default function ProductManager({ showOnly }: ProductManagerProps) {
         setTitle('');
         setDescription('');
         setPrice('');
+        setShippingCost('0');
+        setShippingIncluded(false);
         setIsActive(true);
         clearFile();
     };
 
     const handleEdit = (product: Product) => {
         if (showOnly === 'list') {
-            // Wenn nur Liste angezeigt wird, navigieren wir zum Editor
-            // In diesem Fall müssen wir evtl. eine Route für Edit haben oder 
-            // den State globaler verwalten. Aber laut User-Request soll 
-            // das Erstellungsfeld in der Vault weg.
-            // Wir lassen die Edit-Funktion hier erstmal nur zu, wenn das Formular da ist.
-            navigate('/post/new');
+            navigate(`/post/new?mode=product&edit=${product.id}`);
             return;
         }
         setEditingId(product.id);
         setTitle(product.title);
         setDescription(product.description || '');
         setPrice(product.price.toString());
+        setShippingCost(product.shippingCost.toString());
+        setShippingIncluded(product.shippingIncluded);
         setIsActive(product.isActive);
         setFilePreview(product.imageUrl);
         setSelectedFile(null);
@@ -141,6 +160,8 @@ export default function ProductManager({ showOnly }: ProductManagerProps) {
                     title,
                     description,
                     price: parseFloat(price),
+                    shippingCost: parseFloat(shippingCost || '0'),
+                    shippingIncluded,
                     imageUrl: imageUrl || '',
                     isActive
                 });
@@ -150,6 +171,8 @@ export default function ProductManager({ showOnly }: ProductManagerProps) {
                     title,
                     description,
                     price: parseFloat(price),
+                    shippingCost: parseFloat(shippingCost || '0'),
+                    shippingIncluded,
                     imageUrl: imageUrl || ''
                 });
                 toast({ title: 'Erfolgreich', description: 'Produkt wurde erstellt.' });
@@ -226,6 +249,32 @@ export default function ProductManager({ showOnly }: ProductManagerProps) {
                                 <Label>Preis (€)</Label>
                                 <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" disabled={isSubmitting} />
                             </div>
+                            <div className="space-y-4 pt-4 border-t border-border">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={shippingIncluded}
+                                        onChange={(e) => setShippingIncluded(e.target.checked)}
+                                        id="shipping_included"
+                                        className="w-4 h-4 rounded border-gray-300 text-secondary focus:ring-secondary"
+                                    />
+                                    <Label htmlFor="shipping_included" className="cursor-pointer">Versandkosten im Preis enthalten</Label>
+                                </div>
+
+                                {!shippingIncluded && (
+                                    <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
+                                        <Label>Versandkosten (€)</Label>
+                                        <Input
+                                            type="number"
+                                            value={shippingCost}
+                                            onChange={(e) => setShippingCost(e.target.value)}
+                                            placeholder="5.00"
+                                            disabled={isSubmitting}
+                                        />
+                                        <p className="text-xs text-muted-foreground">Diese Kosten werden dem Kunden zusätzlich angezeigt.</p>
+                                    </div>
+                                )}
+                            </div>
                             {editingId && (
                                 <div className="flex items-center gap-2">
                                     <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} id="is_active" />
@@ -268,14 +317,17 @@ export default function ProductManager({ showOnly }: ProductManagerProps) {
                                         <div className="flex justify-between items-start mb-2">
                                             <div>
                                                 <h3 className="font-bold">{p.title}</h3>
-                                                <p className="text-secondary font-serif">{p.price.toFixed(2)}€</p>
+                                                <div className="flex flex-col">
+                                                    <p className="text-secondary font-serif text-lg">{p.price.toFixed(2)}€</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {p.shippingIncluded ? 'inkl. Versand' : `+ ${p.shippingCost.toFixed(2)}€ Versand`}
+                                                    </p>
+                                                </div>
                                             </div>
                                             <div className="flex gap-1">
-                                                {showOnly !== 'list' && (
-                                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(p)}>
-                                                        <UploadIcon className="w-4 h-4" />
-                                                    </Button>
-                                                )}
+                                                <Button variant="ghost" size="icon" onClick={() => handleEdit(p)}>
+                                                    <PencilIcon className="w-4 h-4" />
+                                                </Button>
                                                 <Button variant="ghost" size="icon" onClick={() => handleDelete(p.id)} className="text-destructive">
                                                     <Trash2Icon className="w-4 h-4" />
                                                 </Button>

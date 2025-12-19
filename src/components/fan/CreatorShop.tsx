@@ -55,44 +55,61 @@ export default function CreatorShop() {
     };
 
     const handlePaymentSuccess = async () => {
-        if (!selectedProduct || !creator || !currentUser) return;
+        // Debugging: Startzustand prüfen
+        console.log('--- KAUF PROZESS START ---');
+
+        if (!selectedProduct || !creator || !currentUser) {
+            console.error('Fehlende Daten für den Kaufabschluss');
+            return;
+        }
 
         try {
-            // 1. Kauf in DB registrieren
+            // SCHRITT 1: Zahlung in DB speichern
+            toast({ title: "Verarbeite...", description: "Speichere Kauf in Datenbank..." });
+
             await paymentService.purchaseProduct(
                 creator.id,
                 selectedProduct.id,
                 selectedProduct.price,
                 selectedProduct.title
             );
+            console.log('Schritt 1 (Payment DB) OK');
 
-            // 2. Nachricht vom CREATOR an den FAN (Automatisch via RPC)
-            // "Vielen Dank für den Einkauf..."
+            // SCHRITT 2: Info-Nachricht vom FAN an CREATOR (ZUERST)
+            // "Ich habe X gekauft..."
+            const fanToCreatorMessage = `📦 Neuer Einkauf: Ich habe "${selectedProduct.title}" für ${selectedProduct.price.toFixed(2)}€ gekauft.`;
+
+            await messageService.sendMessage(creator.id, fanToCreatorMessage);
+            console.log('Schritt 2 (Fan-Message) OK');
+
+            // SCHRITT 3: Auto-Antwort vom CREATOR an den FAN (DANACH)
+            // "Danke für den Einkauf..."
+            // Hinweis: Stellen Sie sicher, dass messageService.sendAutomatedShopMessage in messageService.ts existiert (siehe vorheriger Schritt)
             await messageService.sendAutomatedShopMessage(
                 creator.id,
                 currentUser.id,
                 selectedProduct.title
             );
+            console.log('Schritt 3 (Auto-Message) OK');
 
-            // 3. Nachricht vom FAN an den CREATOR (Info über Kauf)
-            // "Ich habe X gekauft..."
-            const fanToCreatorMessage = `📦 Neuer Einkauf: Ich habe "${selectedProduct.title}" für ${selectedProduct.price.toFixed(2)}€ gekauft.`;
-            await messageService.sendMessage(creator.id, fanToCreatorMessage);
-
+            // ERFOLG
             toast({
                 title: "Kauf erfolgreich!",
-                description: "Der Creator wurde benachrichtigt. Bitte klären Sie die Versanddetails im Chat."
+                description: "Der Creator wurde benachrichtigt. Bitte kläre die Versanddetails im Chat.",
+                duration: 5000
             });
 
-            // Weiterleitung zu den Nachrichten, damit der User direkt die Adresse eingeben kann
+            // Zum Chat weiterleiten
             navigate('/messages');
 
         } catch (e: any) {
-            console.error("Kauf-Ablauf Fehler:", e);
+            console.error("KAUF PROZESS FEHLER:", e);
+
             toast({
-                title: "Fehler",
-                description: "Kauf bestätigt, aber Verarbeitung unvollständig: " + e.message,
-                variant: "destructive"
+                title: "Fehler beim Abschluss",
+                description: `Technischer Fehler: ${e.message || JSON.stringify(e)}. Bitte Support kontaktieren.`,
+                variant: "destructive",
+                duration: 10000
             });
         }
     };
@@ -132,7 +149,12 @@ export default function CreatorShop() {
                             </div>
                             <CardHeader className="pb-2">
                                 <CardTitle className="text-lg">{product.title}</CardTitle>
-                                <p className="text-2xl font-serif text-secondary">{product.price.toFixed(2)}€</p>
+                                <div className="flex flex-col">
+                                    <p className="text-2xl font-serif text-secondary">{product.price.toFixed(2)}€</p>
+                                    <p className="text-sm text-muted-foreground">
+                                        {product.shippingIncluded ? 'inkl. Versand' : `+ ${product.shippingCost.toFixed(2)}€ Versand`}
+                                    </p>
+                                </div>
                             </CardHeader>
                             <CardContent className="flex-1 flex flex-col justify-between">
                                 <p className="text-sm text-muted-foreground mb-4 line-clamp-3">

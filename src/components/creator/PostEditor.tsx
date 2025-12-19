@@ -1,5 +1,6 @@
 // src/components/creator/PostEditor.tsx
 import { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -29,10 +30,14 @@ export default function PostEditor() {
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('edit');
+  const initialMode = searchParams.get('mode') === 'product' ? 'product' : 'post';
+
   // Formular-States
   const [caption, setCaption] = useState('');
   const [price, setPrice] = useState(''); // PPV-Preis
-  const [editorMode, setEditorMode] = useState<'post' | 'product'>('post');
+  const [editorMode, setEditorMode] = useState<'post' | 'product'>(initialMode);
 
   const [hashtags, setHashtags] = useState<string[]>([""]); // <-- NEU: Hashtag-State
 
@@ -74,6 +79,40 @@ export default function PostEditor() {
     };
     fetchTiers();
   }, [user?.id, toast]);
+
+  // Bestehenden Post laden, falls im Edit-Modus
+  useEffect(() => {
+    const loadPost = async () => {
+      if (editId && editorMode === 'post') {
+        setIsLoading(true);
+        try {
+          // Wir brauchen eine Methode um den Post zu holen, auch wenn er nicht veröffentlicht ist
+          // getCreatorVaultPosts liefert alle, wir filtern lokal oder rufen spezifisch ab
+          const posts = await postService.getCreatorVaultPosts(user?.id || '');
+          const post = posts.find(p => p.id === editId);
+
+          if (post) {
+            setCaption(post.caption);
+            setPrice(post.price.toString());
+            setHashtags(post.hashtags.length > 0 ? post.hashtags : [""]);
+            setAccessLevel(post.tier_id || 'public');
+            setFilePreview(post.mediaUrl);
+            setMediaType(post.mediaType.toUpperCase() as 'IMAGE' | 'VIDEO');
+            if (post.scheduled_for) {
+              setSelectedDate(new Date(post.scheduled_for));
+              setSelectedTime(format(new Date(post.scheduled_for), 'HH:mm'));
+            }
+          }
+        } catch (error) {
+          console.error("Fehler beim Laden des Posts:", error);
+          toast({ title: "Fehler", description: "Beitrag konnte nicht geladen werden.", variant: "destructive" });
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+    loadPost();
+  }, [editId, editorMode, user?.id]);
 
   // Handler für Dateiauswahl
   const handleFileChange = (file: File | undefined) => {
@@ -183,7 +222,7 @@ export default function PostEditor() {
 
   // Haupt-Submit-Handler
   const handleSubmit = async (isDraft: boolean) => {
-    if (!selectedFile || !mediaType) {
+    if ((!selectedFile && !filePreview) || !mediaType) {
       toast({ title: 'Fehler', description: 'Bitte wählen Sie eine Mediendatei aus.', variant: 'destructive' });
       return;
     }
@@ -225,25 +264,39 @@ export default function PostEditor() {
         .filter(tag => tag.length > 0); // Leere Strings filtern
       // --- ENDE ---
 
-      const postData = {
-        mediaUrl: mediaUrl,
-        thumbnail_url: thumbnailUrl,
-        mediaType: mediaType,
-        caption: caption,
-        hashtags: cleanedHashtags, // <-- HIER AKTUALISIERT
-        price: postPrice, // PPV-Preis
-        tierId: postTierId, // Korrekte Tier-ID
-        scheduledFor: scheduledForISO,
-        is_published: !isDraft,
-      };
-
-      await postService.createPost(postData);
+      if (editId) {
+        await postService.updatePost(editId, {
+          media_url: mediaUrl,
+          thumbnail_url: thumbnailUrl,
+          media_type: mediaType,
+          caption: caption,
+          hashtags: cleanedHashtags,
+          price: postPrice,
+          tier_id: postTierId,
+          scheduled_for: scheduledForISO,
+          is_published: !isDraft,
+        });
+      } else {
+        await postService.createPost({
+          mediaUrl,
+          thumbnail_url: thumbnailUrl,
+          mediaType,
+          caption,
+          hashtags: cleanedHashtags,
+          price: postPrice,
+          tierId: postTierId,
+          scheduledFor: scheduledForISO,
+          is_published: !isDraft,
+        });
+      }
 
       setIsLoading(false);
 
-      if (isDraft) {
+      if (editId) {
+        toast({ title: 'Beitrag aktualisiert!', description: 'Ihre Änderungen wurden gespeichert.' });
+      } else if (isDraft) {
         toast({ title: 'Entwurf gespeichert!', description: 'Ihr Beitrag wurde im Content Vault gespeichert.' });
-      } else if (postData.scheduledFor) {
+      } else if (scheduledForISO) {
         toast({ title: 'Beitrag geplant!', description: 'Ihr Beitrag wird automatisch veröffentlicht.' });
       } else {
         toast({ title: 'Beitrag veröffentlicht!', description: 'Ihr Beitrag ist jetzt live.' });
@@ -267,7 +320,9 @@ export default function PostEditor() {
       <div className="max-w-4xl mx-auto space-y-8">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-serif text-foreground">
-            {editorMode === 'post' ? 'Neuer Beitrag' : 'Neues Produkt'}
+            {editorMode === 'post'
+              ? (editId ? 'Beitrag bearbeiten' : 'Neuer Beitrag')
+              : (editId ? 'Produkt bearbeiten' : 'Neues Produkt')}
           </h1>
           <div className="flex bg-card border border-border rounded-lg p-1">
             <Button
@@ -292,7 +347,7 @@ export default function PostEditor() {
         </div>
 
         {editorMode === 'product' ? (
-          <ProductManager showOnly="form" />
+          <ProductManager showOnly="form" initialEditId={editId || undefined} />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 

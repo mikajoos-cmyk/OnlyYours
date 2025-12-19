@@ -4,7 +4,7 @@ import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Checkbox } from '../ui/checkbox';
-import { UploadIcon, Trash2Icon, VideoIcon } from 'lucide-react';
+import { UploadIcon, Trash2Icon, VideoIcon, PencilIcon } from 'lucide-react';
 import ProfilePostViewer, { PostData as ViewerPostData } from '../fan/ProfilePostViewer';
 import { useAuthStore } from '../../stores/authStore';
 import { postService, Post as ServicePostData } from '../../services/postService';
@@ -96,10 +96,14 @@ export default function ContentVault() {
       ...post,
       media: post.mediaUrl,
       creator: {
+        id: post.creator.id,
         name: post.creator.name,
         username: post.creator.username || post.creator.id,
         avatar: post.creator.avatar,
-        isVerified: post.creator.isVerified,
+        isVerified: post.creator.isVerified ?? false,
+        bio: post.creator.bio,
+        followers: post.creator.followers,
+        subscriptionPrice: post.creator.subscriptionPrice,
       },
     })), [filteredContent]);
 
@@ -228,7 +232,7 @@ export default function ContentVault() {
                         />
 
                         {post.mediaType === 'video' && (
-                          <VideoIcon className="absolute top-2 right-2 w-5 h-5 text-white drop-shadow-lg" strokeWidth={2} />
+                          <VideoIcon className="absolute top-2 left-10 w-5 h-5 text-white drop-shadow-lg" strokeWidth={2} />
                         )}
 
                         <div className="absolute top-2 left-2 z-10">
@@ -238,6 +242,20 @@ export default function ContentVault() {
                             className="w-6 h-6 bg-black/50 border-white/50 text-secondary data-[state=checked]:bg-secondary data-[state=checked]:border-secondary"
                             onClick={(e) => e.stopPropagation()}
                           />
+                        </div>
+
+                        <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 border-none text-white"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/post/new?edit=${post.id}`);
+                            }}
+                          >
+                            <PencilIcon className="w-4 h-4" />
+                          </Button>
                         </div>
 
                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">

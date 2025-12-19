@@ -19,10 +19,14 @@ import { SecureMedia } from '../ui/SecureMedia';
 import FeedPreloader from './FeedPreloader'; // <-- NEU
 
 export interface CreatorInfo {
+  id: string;
   name: string;
   avatar: string;
   username: string;
-  isVerified?: boolean;
+  isVerified: boolean;
+  bio: string;
+  followers: number;
+  subscriptionPrice: number;
 }
 
 export interface PostData extends Omit<ServicePostData, 'creator'> {
