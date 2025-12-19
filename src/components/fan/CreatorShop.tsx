@@ -59,27 +59,41 @@ export default function CreatorShop() {
 
         try {
             // 1. Kauf in DB registrieren
-            console.log('Attempting to purchase product:', selectedProduct.id, 'for creator:', creator.id);
-            const purchaseResult = await paymentService.purchaseProduct(creator.id, selectedProduct.id, selectedProduct.price, selectedProduct.title);
-            console.log('Product purchase registered successfully:', purchaseResult);
+            await paymentService.purchaseProduct(
+                creator.id,
+                selectedProduct.id,
+                selectedProduct.price,
+                selectedProduct.title
+            );
 
-            // 2. Nachricht an Creator senden (Automatisch)
-            const messageText = `📦 Neuer Verkauf: Ich habe "${selectedProduct.title}" für ${selectedProduct.price}€ gekauft. Bitte sende mir Infos zum Versand / zur Adresse.`;
-            console.log('Attempting to send message to creator:', creator.id);
-            await messageService.sendMessage(creator.id, messageText);
-            console.log('Message sent successfully.');
+            // 2. Nachricht vom CREATOR an den FAN (Automatisch via RPC)
+            // "Vielen Dank für den Einkauf..."
+            await messageService.sendAutomatedShopMessage(
+                creator.id,
+                currentUser.id,
+                selectedProduct.title
+            );
+
+            // 3. Nachricht vom FAN an den CREATOR (Info über Kauf)
+            // "Ich habe X gekauft..."
+            const fanToCreatorMessage = `📦 Neuer Einkauf: Ich habe "${selectedProduct.title}" für ${selectedProduct.price.toFixed(2)}€ gekauft.`;
+            await messageService.sendMessage(creator.id, fanToCreatorMessage);
 
             toast({
                 title: "Kauf erfolgreich!",
-                description: "Der Creator wurde benachrichtigt. Checke deine Nachrichten für den Adressaustausch."
+                description: "Der Creator wurde benachrichtigt. Bitte klären Sie die Versanddetails im Chat."
             });
 
-            // Weiterleitung zum Chat
+            // Weiterleitung zu den Nachrichten, damit der User direkt die Adresse eingeben kann
             navigate('/messages');
 
         } catch (e: any) {
-            console.error("Payment Success Handler Error:", e);
-            toast({ title: "Fehler", description: "Kauf bestätigt, aber System-Eintrag fehlgeschlagen: " + (e.message || "Unbekannter Fehler"), variant: "destructive" });
+            console.error("Kauf-Ablauf Fehler:", e);
+            toast({
+                title: "Fehler",
+                description: "Kauf bestätigt, aber Verarbeitung unvollständig: " + e.message,
+                variant: "destructive"
+            });
         }
     };
 

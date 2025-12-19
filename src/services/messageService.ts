@@ -51,11 +51,29 @@ export class MessageService {
   // Willkommensnachricht (ebenfalls verschlüsselt via RPC)
   async sendWelcomeMessage(creatorId: string, fanId: string, content: string): Promise<void> {
     const { error } = await supabase.rpc('send_encrypted_message', {
-        p_sender_id: creatorId,
-        p_receiver_id: fanId,
-        p_content: content
+      p_sender_id: creatorId,
+      p_receiver_id: fanId,
+      p_content: content
     });
     if (error) console.error("Fehler beim Senden der Willkommensnachricht:", error);
+  }
+
+  /**
+   * NEU: Sendet eine automatische Nachricht im Namen des Creators an den Fan.
+   * Nutzt die SQL-Funktion 'send_automated_message'.
+   */
+  async sendAutomatedShopMessage(creatorId: string, fanId: string, productTitle: string) {
+    const messageContent = `Vielen Dank für den Kauf von "${productTitle}"! 🎉\n\nBitte antworte mir hier mit deiner Lieferadresse (Name, Straße, PLZ, Ort), damit ich den Versand vorbereiten kann.`;
+
+    const { error } = await (supabase.rpc as any)('send_automated_message', {
+      p_sender_id: creatorId,
+      p_receiver_id: fanId,
+      p_content: messageContent
+    });
+
+    if (error) {
+      console.error("Fehler beim Senden der automatischen Shop-Nachricht:", error);
+    }
   }
 
   // ENTSCHLÜSSELT LESEN via View 'decrypted_messages'
@@ -125,23 +143,23 @@ export class MessageService {
 
   // Polling für neue Nachrichten (via View)
   async getNewMessages(otherUserId: string, sinceTimestamp: string): Promise<Message[]> {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
 
-      const { data: messages, error } = await supabase
-        .from('decrypted_messages')
-        .select(`*, sender:users!sender_id(id, display_name, avatar_url), receiver:users!receiver_id(id, display_name, avatar_url)`)
-        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`)
-        .gt('created_at', sinceTimestamp)
-        .order('created_at', { ascending: true });
+    const { data: messages, error } = await supabase
+      .from('decrypted_messages')
+      .select(`*, sender:users!sender_id(id, display_name, avatar_url), receiver:users!receiver_id(id, display_name, avatar_url)`)
+      .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`)
+      .gt('created_at', sinceTimestamp)
+      .order('created_at', { ascending: true });
 
-      if (error) throw error;
+    if (error) throw error;
 
-      // Als gelesen markieren (auf echter Tabelle)
-      const newIds = (messages || []).filter((m: any) => m.receiver_id === user.id && !m.is_read).map((m: any) => m.id);
-      if(newIds.length > 0) await supabase.from('messages').update({is_read: true}).in('id', newIds);
+    // Als gelesen markieren (auf echter Tabelle)
+    const newIds = (messages || []).filter((m: any) => m.receiver_id === user.id && !m.is_read).map((m: any) => m.id);
+    if (newIds.length > 0) await supabase.from('messages').update({ is_read: true }).in('id', newIds);
 
-      return this.mapMessagesToFrontend(messages || []);
+    return this.mapMessagesToFrontend(messages || []);
   }
 
   async markConversationAsRead(otherUserId: string): Promise<void> {
@@ -153,16 +171,16 @@ export class MessageService {
 
   private mapMessagesToFrontend(messages: any[]): Message[] {
     return messages.map(msg => ({
-       id: msg.id,
-       senderId: msg.sender_id,
-       receiverId: msg.receiver_id,
-       content: msg.content,
-       isRead: msg.is_read,
-       createdAt: msg.created_at,
-       sender: msg.sender ? { id: msg.sender.id, name: msg.sender.display_name, avatar: msg.sender.avatar_url } : undefined,
-       receiver: msg.receiver ? { id: msg.receiver.id, name: msg.receiver.display_name, avatar: msg.receiver.avatar_url } : undefined,
-     }));
- }
+      id: msg.id,
+      senderId: msg.sender_id,
+      receiverId: msg.receiver_id,
+      content: msg.content,
+      isRead: msg.is_read,
+      createdAt: msg.created_at,
+      sender: msg.sender ? { id: msg.sender.id, name: msg.sender.display_name, avatar: msg.sender.avatar_url } : undefined,
+      receiver: msg.receiver ? { id: msg.receiver.id, name: msg.receiver.display_name, avatar: msg.receiver.avatar_url } : undefined,
+    }));
+  }
 }
 
 export const messageService = new MessageService();

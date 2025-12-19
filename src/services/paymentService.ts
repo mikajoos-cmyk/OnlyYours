@@ -158,30 +158,36 @@ export class PaymentService {
   }
 
   /**
-   * Führt den Datenbank-Eintrag für einen Produktkauf durch.
+   * NEU: Führt den Datenbank-Eintrag für einen Produktkauf durch.
    */
   async purchaseProduct(creatorId: string, productId: string, amount: number, productTitle: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // 1. Zahlungseintrag erstellen
-    const { error: paymentError } = await (supabase.from('payments') as any).insert({
-      user_id: user.id,
-      creator_id: creatorId,
-      amount: amount,
-      currency: 'EUR',
-      type: 'PRODUCT',
-      status: 'SUCCESS',
-      related_id: productId,
-      metadata: { productTitle: productTitle }
-    });
+    // Eintrag in die payments Tabelle
+    const { data, error } = await (supabase.from('payments') as any)
+      .insert({
+        user_id: user.id,
+        creator_id: creatorId,
+        amount: amount,
+        currency: 'EUR',
+        type: 'PRODUCT', // Nutzt den neuen ENUM Wert
+        status: 'SUCCESS',
+        related_id: productId, // Verknüpfung zum Produkt
+        metadata: {
+          productTitle: productTitle,
+          description: `Kauf von: ${productTitle}`
+        }
+      })
+      .select()
+      .single();
 
-    if (paymentError) {
-      console.error('CRITICAL: Payment registration failed in DB:', paymentError);
-      throw new Error(`Kauf konnte nicht registriert werden: ${paymentError.message}`);
+    if (error) {
+      console.error('Error recording product purchase:', error);
+      throw new Error('Kauf konnte nicht registriert werden: ' + error.message);
     }
 
-    console.log('Payment registered successfully for product:', productId);
+    return data;
   }
 
 
