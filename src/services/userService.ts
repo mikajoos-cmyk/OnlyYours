@@ -1,5 +1,6 @@
 // src/services/userService.ts
 import { supabase } from '../lib/supabase';
+import { storageService } from './storageService'; // Import hinzugefügt
 
 export interface UserProfile {
   id: string;
@@ -39,29 +40,33 @@ export class UserService {
       .maybeSingle();
 
     if (error) {
-        console.error("Supabase error in getUserByUsername:", error);
-        throw error;
+      console.error("Supabase error in getUserByUsername:", error);
+      throw error;
     }
     if (!data) {
-        console.log("No user found for username:", normalizedUsername);
-        return null;
+      console.log("No user found for username:", normalizedUsername);
+      return null;
     }
+
+    // Basic Profil auflösen
+    const profile = await this.mapToUserProfile(data);
 
     if (currentUser && currentUser.id === data.id) {
-        const { data: privateData, error: privateError } = await supabase
-            .from('users')
-            .select('mux_stream_key')
-            .eq('id', currentUser.id)
-            .single();
+      const { data: privateData, error: privateError } = await supabase
+        .from('users')
+        .select('mux_stream_key')
+        .eq('id', currentUser.id)
+        .single();
 
-        if (privateError) {
-          console.warn("Konnte Stream-Key für eigenen Benutzer nicht laden", privateError.message);
-        }
+      if (privateError) {
+        console.warn("Konnte Stream-Key für eigenen Benutzer nicht laden", privateError.message);
+      }
 
-        return this.mapToUserProfile({ ...data, ...privateData });
+      // Erneut mappen mit privaten Daten
+      return this.mapToUserProfile({ ...data, ...privateData });
     }
 
-    return this.mapToUserProfile(data);
+    return profile;
   }
 
   async getUserById(userId: string): Promise<UserProfile | null> {
@@ -102,7 +107,8 @@ export class UserService {
       throw error;
     }
 
-    return (data || []).map(user => this.mapToUserProfile(user));
+    // Promise.all für asynchrones Mapping verwenden
+    return Promise.all((data || []).map(user => this.mapToUserProfile(user)));
   }
 
   async getLiveCreators(limit: number = 50) {
@@ -121,7 +127,7 @@ export class UserService {
       throw error;
     }
 
-    return (data || []).map(user => this.mapToUserProfile(user));
+    return Promise.all((data || []).map(user => this.mapToUserProfile(user)));
   }
 
   async getTopCreators(limit: number = 20) {
@@ -136,16 +142,13 @@ export class UserService {
 
     if (error) throw error;
 
-    return (data || []).map(user => this.mapToUserProfile(user));
+    return Promise.all((data || []).map(user => this.mapToUserProfile(user)));
   }
 
-  // --- NEUE METHODE ---
   async updateLastSeen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Wir aktualisieren nur public.users
-    // Fire & Forget, wir warten nicht auf das Ergebnis
     supabase
       .from('users')
       .update({ last_seen: new Date().toISOString() })
@@ -154,7 +157,6 @@ export class UserService {
         if (error) console.error("Failed to update last_seen:", error);
       });
   }
-  // --------------------
 
   async updateUserStats(userId: string, stats: {
     totalEarnings?: number;
@@ -162,13 +164,20 @@ export class UserService {
     // Veraltet, Trigger übernimmt das
   }
 
-  private mapToUserProfile(data: any): UserProfile {
+  private async mapToUserProfile(data: any): Promise<UserProfile> {
+    // FIX: Avatar URL auflösen
+    let resolvedAvatarUrl = data.avatar_url;
+    if (resolvedAvatarUrl && !resolvedAvatarUrl.startsWith('http')) {
+      const signed = await storageService.getSignedUrl(resolvedAvatarUrl);
+      if (signed) resolvedAvatarUrl = signed;
+    }
+
     return {
       id: data.id,
       username: data.username,
       displayName: data.display_name,
       bio: data.bio,
-      avatarUrl: data.avatar_url,
+      avatarUrl: resolvedAvatarUrl, // Verwendet jetzt die aufgelöste URL
       bannerUrl: data.banner_url,
       role: data.role,
       isVerified: data.is_verified,

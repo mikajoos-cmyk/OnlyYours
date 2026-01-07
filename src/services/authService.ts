@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
+import { storageService } from './storageService'; // Import hinzugefügt
 
 type UserUpdate = Database['public']['Tables']['users']['Update'];
 
@@ -32,23 +33,19 @@ export interface AuthUser {
 export class AuthService {
 
   async register(username: string, email: string, password: string, country: string, birthdate: string, role: 'fan' | 'creator' = 'creator') {
-    // 1. Username bereinigen
     const cleanUsername = username.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
 
-    // 2. Sicherheitsprüfung
     if (cleanUsername.length < 3) {
       throw new Error("Benutzername muss mindestens 3 Zeichen lang sein (nur Buchstaben, Zahlen, _).");
     }
 
-    // 3. Registrierung bei Supabase Auth
-    // Wir senden 'full_name', da der Trigger dies erwartet (siehe SQL COALESCE)
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           username: cleanUsername,
-          full_name: username, // WICHTIG für den Trigger
+          full_name: username,
           role: role.toUpperCase(),
           country: country,
           birthdate: birthdate,
@@ -62,13 +59,11 @@ export class AuthService {
     return authData;
   }
 
-  // Korrigierte Prüfung mit RPC
   async checkUsernameAvailability(username: string): Promise<boolean> {
     const cleanUsername = username.toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
     if (!cleanUsername || cleanUsername.length < 3) return false;
 
     try {
-      // Ruft die SQL Funktion auf. Wenn Fehler (z.B. Funktion fehlt), nehmen wir an es ist belegt (false).
       const { data: exists, error } = await supabase.rpc('check_username_exists', {
         username_to_check: cleanUsername
       });
@@ -77,8 +72,6 @@ export class AuthService {
         console.warn("RPC check_username_exists failed:", error);
         return false;
       }
-
-      // RPC gibt TRUE zurück wenn der Name existiert -> also ist er NICHT verfügbar.
       return !exists;
     } catch (e) {
       return false;
@@ -138,14 +131,13 @@ export class AuthService {
     if (authError) throw authError;
     if (!authData.user) throw new Error('Login failed');
 
-    // Warten bis Profil da ist (Trigger kann ms dauern)
     let retries = 3;
     let userProfile = null;
 
     while (retries > 0 && !userProfile) {
       userProfile = await this.getCurrentUserFullProfile();
       if (!userProfile) {
-        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms warten
+        await new Promise(resolve => setTimeout(resolve, 500));
         retries--;
       }
     }
@@ -157,7 +149,6 @@ export class AuthService {
     }
 
     if (!userProfile) {
-      // Fallback: Manchmal ist Auth schneller als DB
       throw new Error('Login erfolgreich, aber Profil wird noch erstellt. Bitte gleich nochmal versuchen.');
     }
     return userProfile;
@@ -176,7 +167,6 @@ export class AuthService {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return null;
 
-    // Auth User holen
     const freshUser = session.user;
 
     const { data: userData, error } = await supabase
@@ -188,6 +178,15 @@ export class AuthService {
     if (error || !userData) {
       return null;
     }
+
+    // --- FIX: Avatar URL auflösen, falls es ein Storage-Pfad ist ---
+    if (userData.avatar_url && !userData.avatar_url.startsWith('http')) {
+      const signedUrl = await storageService.getSignedUrl(userData.avatar_url);
+      if (signedUrl) {
+        userData.avatar_url = signedUrl;
+      }
+    }
+    // --- ENDE FIX ---
 
     let decryptedEarnings = 0;
     try {
