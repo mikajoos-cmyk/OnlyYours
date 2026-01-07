@@ -1,6 +1,6 @@
 // src/services/userService.ts
 import { supabase } from '../lib/supabase';
-import { storageService } from './storageService'; // Import hinzugefügt
+import { storageService } from './storageService';
 
 export interface UserProfile {
   id: string;
@@ -48,7 +48,6 @@ export class UserService {
       return null;
     }
 
-    // Basic Profil auflösen
     const profile = await this.mapToUserProfile(data);
 
     if (currentUser && currentUser.id === data.id) {
@@ -62,8 +61,8 @@ export class UserService {
         console.warn("Konnte Stream-Key für eigenen Benutzer nicht laden", privateError.message);
       }
 
-      // Erneut mappen mit privaten Daten
-      return this.mapToUserProfile({ ...data, ...privateData });
+      // Erneut mappen mit privaten Daten (falls nötig, aber eigentlich reicht das Merge)
+      return { ...profile, mux_stream_key: privateData?.mux_stream_key || null };
     }
 
     return profile;
@@ -107,7 +106,6 @@ export class UserService {
       throw error;
     }
 
-    // Promise.all für asynchrones Mapping verwenden
     return Promise.all((data || []).map(user => this.mapToUserProfile(user)));
   }
 
@@ -172,13 +170,20 @@ export class UserService {
       if (signed) resolvedAvatarUrl = signed;
     }
 
+    // FIX: Banner URL auflösen
+    let resolvedBannerUrl = data.banner_url;
+    if (resolvedBannerUrl && !resolvedBannerUrl.startsWith('http')) {
+      const signed = await storageService.getSignedUrl(resolvedBannerUrl);
+      if (signed) resolvedBannerUrl = signed;
+    }
+
     return {
       id: data.id,
       username: data.username,
       displayName: data.display_name,
       bio: data.bio,
-      avatarUrl: resolvedAvatarUrl, // Verwendet jetzt die aufgelöste URL
-      bannerUrl: data.banner_url,
+      avatarUrl: resolvedAvatarUrl,
+      bannerUrl: resolvedBannerUrl, // Verwendet jetzt die aufgelöste URL
       role: data.role,
       isVerified: data.is_verified,
       subscriptionPrice: parseFloat(data.subscription_price),

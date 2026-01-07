@@ -1,6 +1,7 @@
+// src/services/authService.ts
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
-import { storageService } from './storageService'; // Import hinzugefügt
+import { storageService } from './storageService';
 
 type UserUpdate = Database['public']['Tables']['users']['Update'];
 
@@ -179,11 +180,19 @@ export class AuthService {
       return null;
     }
 
-    // --- FIX: Avatar URL auflösen, falls es ein Storage-Pfad ist ---
+    // --- FIX: Avatar URL auflösen ---
     if (userData.avatar_url && !userData.avatar_url.startsWith('http')) {
       const signedUrl = await storageService.getSignedUrl(userData.avatar_url);
       if (signedUrl) {
         userData.avatar_url = signedUrl;
+      }
+    }
+
+    // --- FIX: Banner URL auflösen ---
+    if (userData.banner_url && !userData.banner_url.startsWith('http')) {
+      const signedUrl = await storageService.getSignedUrl(userData.banner_url);
+      if (signedUrl) {
+        userData.banner_url = signedUrl;
       }
     }
     // --- ENDE FIX ---
