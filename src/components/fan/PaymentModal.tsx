@@ -109,7 +109,7 @@ export default function PaymentModal({
         <DialogHeader>
           <DialogTitle>Zahlung abschließen</DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            Sichere Zahlung via Stripe.
+            Zahlungsabwicklung via Stripe.
           </DialogDescription>
         </DialogHeader>
 

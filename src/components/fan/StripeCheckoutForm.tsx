@@ -66,10 +66,6 @@ export default function StripeCheckoutForm({ amount, onSuccess }: { amount: numb
         )}
       </Button>
 
-      {/* Stripe Branding / Sicherheits-Hinweis */}
-      <div className="flex justify-center items-center gap-1 text-[10px] text-muted-foreground uppercase tracking-widest mt-4">
-        <LockIcon className="w-3 h-3" /> SSL Verschlüsselt
-      </div>
     </form>
   );
 }
