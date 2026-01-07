@@ -9,7 +9,7 @@ export interface UserProfile {
   bio: string;
   avatarUrl: string | null;
   bannerUrl: string | null;
-  role: 'FAN' | 'CREATOR';
+  role: 'FAN' | 'CREATOR' | 'ADMIN';
   isVerified: boolean;
   subscriptionPrice: number;
   followersCount: number;
@@ -90,7 +90,7 @@ export class UserService {
     let queryBuilder = supabase
       .from('users')
       .select(publicSelect)
-      .eq('role', 'CREATOR')
+      .in('role', ['CREATOR', 'ADMIN'])
       .or(
         `username.ilike.%${cleanedQuery}%,` +
         `display_name.ilike.%${cleanedQuery}%,` +

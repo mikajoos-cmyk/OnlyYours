@@ -57,7 +57,7 @@ export default function SearchPage() {
 
   const { user: currentUser } = useAuthStore();
   const { checkAccess, isLoading: isLoadingSubs, loadSubscriptions } = useSubscriptionStore();
-  const [subscriptionMap, setSubscriptionMap] = useState<Map<string, 'ACTIVE' | 'CANCELED'>>(new Map());
+  const [subscriptionMap, setSubscriptionMap] = useState<Map<string, 'ACTIVE' | 'CANCELED' | 'EXPIRED'>>(new Map());
 
   // States für Modals
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
@@ -160,7 +160,7 @@ export default function SearchPage() {
       })
       .catch(err => {
         console.error("Fehler beim Laden der Tiers für das Modal:", err);
-        toast({ title: "Fehler", description: "Abo-Optionen konnten nicht geladen werden.", variant: "destructive"});
+        toast({ title: "Fehler", description: "Abo-Optionen konnten nicht geladen werden.", variant: "destructive" });
       })
       .finally(() => {
         setLoading(false);
@@ -228,7 +228,7 @@ export default function SearchPage() {
         avatar: post.creator.avatar,
         isVerified: post.creator.isVerified,
       },
-  })), [postResults]);
+    })), [postResults]);
 
   return (
     <>
@@ -241,7 +241,7 @@ export default function SearchPage() {
             <div className="relative flex-1">
               <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" strokeWidth={1.5} />
               <Input
-                placeholder={activeTab === 'creators' ? 'Suche nach Creators (tippe "live")...' : 'Suche nach Posts (Hashtags, Titel)...'}
+                placeholder={activeTab === 'creators' ? 'Suche nach Creators & Admins...' : 'Suche nach Posts (Hashtags, Titel)...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 bg-card text-foreground border-border h-12"
@@ -405,7 +405,7 @@ export default function SearchPage() {
                             </div>
                           </div>
 
-                          {!isOwnProfile && (
+                          {!isOwnProfile && creator.role !== 'ADMIN' && (
                             <Button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -434,6 +434,11 @@ export default function SearchPage() {
                               )}
                             </Button>
                           )}
+                          {!isOwnProfile && creator.role === 'ADMIN' && (
+                            <div className="text-xs text-muted-foreground font-medium px-3 py-1 bg-secondary/10 rounded-full border border-secondary/20">
+                              Administrator
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                     );
@@ -445,7 +450,7 @@ export default function SearchPage() {
             {/* Post-Ergebnisse (unverändert) */}
             <TabsContent value="posts" className="mt-6">
               {!loading && !error && postResults.length === 0 && (
-                 <p className="text-muted-foreground text-center py-8">
+                <p className="text-muted-foreground text-center py-8">
                   {searchQuery ? 'Keine Posts für diese Suche gefunden.' : 'Gib einen Suchbegriff ein.'}
                 </p>
               )}
@@ -462,8 +467,8 @@ export default function SearchPage() {
                         src={post.thumbnailUrl}
                         alt=""
                         className={cn(
-                            "w-full h-full object-cover transition-transform duration-200 group-hover:scale-105",
-                            !post.hasAccess && "filter blur-2xl"
+                          "w-full h-full object-cover transition-transform duration-200 group-hover:scale-105",
+                          !post.hasAccess && "filter blur-2xl"
                         )}
                       />
                       {post.type === 'video' && (
