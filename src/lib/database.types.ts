@@ -26,6 +26,7 @@ export type Database = {
           updated_at: string
           interests: string[] | null
           country: string | null
+          welcome_message: string | null
         }
         Insert: {
           id: string
@@ -43,6 +44,7 @@ export type Database = {
           updated_at?: string
           interests?: string[] | null
           country?: string | null
+          welcome_message?: string | null
         }
         Update: {
           id?: string
@@ -60,6 +62,7 @@ export type Database = {
           updated_at?: string
           interests?: string[] | null
           country?: string | null
+          welcome_message?: string | null
         }
       }
       subscription_tiers: {

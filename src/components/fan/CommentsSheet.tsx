@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -22,6 +23,7 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
   const [isLoading, setIsLoading] = useState(false);
   const { user: currentUser } = useAuthStore();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   // State zur Erkennung, ob die Tastatur offen ist (Fokus auf Input)
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
@@ -35,10 +37,10 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
     };
 
     const handleBlur = () => {
-       // Kleine Verzögerung, um Fokus-Wechsel nicht als Schließen zu werten
-       setTimeout(() => {
+      // Kleine Verzögerung, um Fokus-Wechsel nicht als Schließen zu werten
+      setTimeout(() => {
         if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
-            setIsKeyboardOpen(false);
+          setIsKeyboardOpen(false);
         }
       }, 100);
     };
@@ -92,6 +94,7 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
         user: {
           id: currentUser.id,
           name: currentUser.name,
+          username: currentUser.username || '',
           avatar: currentUser.avatar,
           isVerified: currentUser.isVerified || false,
         },
@@ -148,14 +151,17 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
 
         <div className="flex-1 overflow-y-auto p-4 chat-messages-scrollbar">
           {isLoading ? (
-             <p className="text-center text-muted-foreground">Lade...</p>
+            <p className="text-center text-muted-foreground">Lade...</p>
           ) : comments.length === 0 ? (
             <p className="text-center text-muted-foreground">Noch keine Kommentare.</p>
           ) : (
             <div className="space-y-6">
               {comments.map((comment) => (
                 <div key={comment.id} className="flex gap-3">
-                  <Avatar className="w-10 h-10 flex-shrink-0">
+                  <Avatar
+                    className="w-10 h-10 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => navigate(`/profile/${comment.user.username}`)}
+                  >
                     <AvatarImage src={comment.user.avatar} alt={comment.user.name} />
                     <AvatarFallback className="bg-secondary text-secondary-foreground">
                       {comment.user.name.charAt(0)}
@@ -164,7 +170,10 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-foreground font-medium text-sm">
+                        <p
+                          className="text-foreground font-medium text-sm cursor-pointer hover:text-secondary transition-colors inline-flex items-center"
+                          onClick={() => navigate(`/profile/${comment.user.username}`)}
+                        >
                           {comment.user.name}
                           {comment.user.isVerified && <span className="ml-1 text-secondary">*</span>}
                         </p>
@@ -201,7 +210,7 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
               spellCheck={false}
               data-form-type="other"
               name={`comment_field_${post?.id}`} // Eindeutiger Name verhindert oft Autofill
-              // -------------------------------------------
+            // -------------------------------------------
             />
             <Button
               onClick={handleCommentSubmit}

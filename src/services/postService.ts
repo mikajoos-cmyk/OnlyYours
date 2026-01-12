@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
+import { storageService } from './storageService';
 
 type PostRow = Database['public']['Tables']['posts']['Row'];
 type PostInsert = Database['public']['Tables']['posts']['Insert'];
@@ -71,7 +72,7 @@ export class PostService {
 
     const { data, error } = await supabase
       .from('posts')
-      .insert(postData)
+      .insert(postData as any)
       .select()
       .single();
 
@@ -79,10 +80,6 @@ export class PostService {
     return data;
   }
 
-  /**
-   * Holt den Discovery Feed.
-   * Nutzt jetzt den "get_recommended_feed" Algorithmus via RPC, wenn eingeloggt.
-   */
   async getDiscoveryFeed(limit: number = 20, offset: number = 0) {
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -90,26 +87,19 @@ export class PostService {
     let error: any = null;
 
     if (user) {
-      // 1. Personalisierter Algorithmus für eingeloggte User
       const { data, error: rpcError } = await supabase
         .rpc('get_recommended_feed', {
           p_user_id: user.id,
           p_limit: limit,
           p_offset: offset
-        });
+        } as any);
 
       if (rpcError) {
         console.error("Algorithmus-Fehler, Fallback auf Standard:", rpcError);
-        // Fallback unten
       } else {
-        // Die RPC gibt Posts zurück, aber wir müssen die Creator-Daten joinen.
-        // Da RPCs keine Joins direkt als JSON-Struktur zurückgeben (meistens flach),
-        // müssen wir tricksen oder die IDs nehmen und Creator fetchen.
-        // Bessere Lösung für Performance: Wir laden die Creator-Daten für die IDs nach.
-
-        const postIds = data?.map((p: any) => p.id) || [];
+        const postIds = (data as any[])?.map((p: any) => p.id) || [];
         if (postIds.length > 0) {
-           const { data: richPosts, error: richError } = await supabase
+          const { data: richPosts, error: richError } = await supabase
             .from('posts')
             .select(`
               *,
@@ -126,23 +116,20 @@ export class PostService {
             `)
             .in('id', postIds);
 
-            if (!richError && richPosts) {
-                // Wir müssen die Sortierung des Algorithmus (data) beibehalten!
-                // richPosts kommt unsortiert zurück.
-                const sortMap = new Map(data.map((p: any, index: number) => [p.id, index]));
-                posts = richPosts.sort((a, b) => {
-                    return (sortMap.get(a.id) || 0) - (sortMap.get(b.id) || 0);
-                });
-            } else {
-                error = richError;
-            }
+          if (!richError && richPosts) {
+            const sortMap = new Map((data as any[]).map((p: any, index: number) => [p.id, index]));
+            posts = (richPosts as any[]).sort((a: any, b: any) => {
+              return (sortMap.get(a.id) || 0) - (sortMap.get(b.id) || 0);
+            });
+          } else {
+            error = richError;
+          }
         }
       }
     }
 
-    // Fallback: Wenn nicht eingeloggt oder keine Ergebnisse vom Algo
     if (posts.length === 0 && !error) {
-       const { data: standardPosts, error: standardError } = await supabase
+      const { data: standardPosts, error: standardError } = await supabase
         .from('posts')
         .select(`
           *,
@@ -162,8 +149,8 @@ export class PostService {
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 
-        posts = standardPosts || [];
-        error = standardError;
+      posts = standardPosts as any[] || [];
+      error = standardError;
     }
 
     if (error) throw error;
@@ -175,12 +162,12 @@ export class PostService {
         .from('likes')
         .select('post_id')
         .eq('user_id', userId)
-        .in('post_id', posts.map(p => p.id));
+        .in('post_id', posts.map((p: any) => p.id));
 
-      userLikes = new Set(likes?.map(l => l.post_id) || []);
+      userLikes = new Set(likes?.map((l: any) => l.post_id) || []);
     }
 
-    return this.mapPostsToFrontend(posts, userLikes);
+    return await this.mapPostsToFrontend(posts, userLikes);
   }
 
   async getSubscriberFeed(limit: number = 20, offset: number = 0) {
@@ -193,7 +180,7 @@ export class PostService {
       .eq('fan_id', user.id)
       .or(`status.eq.ACTIVE,and(status.eq.CANCELED,end_date.gt.now())`);
 
-    const creatorIds = subscriptions?.map(s => s.creator_id) || [];
+    const creatorIds = subscriptions?.map((s: any) => s.creator_id) || [];
     if (creatorIds.length === 0) return [];
 
     const { data: posts, error } = await supabase
@@ -223,13 +210,12 @@ export class PostService {
       .from('likes')
       .select('post_id')
       .eq('user_id', user.id)
-      .in('post_id', posts?.map(p => p.id) || []);
+      .in('post_id', (posts as any[] || []).map((p: any) => p.id));
 
-    const userLikes = new Set(likes?.map(l => l.post_id) || []);
+    const userLikes = new Set(likes?.map((l: any) => l.post_id) || []);
 
-    return this.mapPostsToFrontend(posts || [], userLikes);
+    return await this.mapPostsToFrontend(posts as any[] || [], userLikes);
   }
-
 
   async getCreatorPosts(creatorId: string, limit: number = 20, offset: number = 0) {
     const { data: posts, error } = await supabase
@@ -264,12 +250,12 @@ export class PostService {
         .from('likes')
         .select('post_id')
         .eq('user_id', userId)
-        .in('post_id', posts?.map(p => p.id) || []);
+        .in('post_id', (posts as any[] || []).map((p: any) => p.id));
 
-      userLikes = new Set(likes?.map(l => l.post_id) || []);
+      userLikes = new Set(likes?.map((l: any) => l.post_id) || []);
     }
 
-    return this.mapPostsToFrontend(posts || [], userLikes);
+    return await this.mapPostsToFrontend(posts as any[] || [], userLikes);
   }
 
   async getPostById(postId: string): Promise<Post | null> {
@@ -294,7 +280,7 @@ export class PostService {
       .single();
 
     if (error || !post) {
-      if (error && error.code !== 'PGRST116') {
+      if (error && (error as any).code !== 'PGRST116') {
         console.error("Error fetching post by ID:", error);
       }
       return null;
@@ -313,11 +299,12 @@ export class PostService {
         .maybeSingle();
 
       if (like) {
-        userLikes.add(like.post_id);
+        userLikes.add((like as any).post_id);
       }
     }
 
-    return this.mapPostsToFrontend([post], userLikes)[0];
+    const mappedPosts = await this.mapPostsToFrontend([post], userLikes);
+    return mappedPosts[0];
   }
 
   async getCreatorVaultPosts(creatorId: string, limit: number = 50, offset: number = 0): Promise<Post[]> {
@@ -349,13 +336,12 @@ export class PostService {
       .from('likes')
       .select('post_id')
       .eq('user_id', user.id)
-      .in('post_id', posts?.map(p => p.id) || []);
+      .in('post_id', (posts as any[] || []).map((p: any) => p.id));
 
-    const userLikes = new Set(likes?.map(l => l.post_id) || []);
+    const userLikes = new Set(likes?.map((l: any) => l.post_id) || []);
 
-    return this.mapPostsToFrontend(posts || [], userLikes);
+    return await this.mapPostsToFrontend(posts as any[] || [], userLikes);
   }
-
 
   async toggleLike(postId: string) {
     const { data: { user } } = await supabase.auth.getUser();
@@ -372,9 +358,9 @@ export class PostService {
       await supabase
         .from('likes')
         .delete()
-        .eq('id', existingLike.id);
+        .eq('id', (existingLike as any).id);
 
-      await supabase.rpc('decrement_likes_count', { post_id_input: postId });
+      await supabase.rpc('decrement_likes_count', { post_id_input: postId } as any);
 
       return false;
     } else {
@@ -383,9 +369,9 @@ export class PostService {
         .insert({
           user_id: user.id,
           post_id: postId,
-        });
+        } as any);
 
-      await supabase.rpc('increment_likes_count', { post_id_input: postId });
+      await supabase.rpc('increment_likes_count', { post_id_input: postId } as any);
 
       return true;
     }
@@ -394,7 +380,7 @@ export class PostService {
   async updatePost(postId: string, updates: PostUpdate) {
     const { data, error } = await supabase
       .from('posts')
-      .update(updates)
+      .update(updates as any)
       .eq('id', postId)
       .select()
       .single();
@@ -451,7 +437,7 @@ export class PostService {
         .eq('fan_id', userId)
         .or(`status.eq.ACTIVE,and(status.eq.CANCELED,end_date.gt.now())`);
 
-      const creatorIds = subscriptions?.map(s => s.creator_id) || [];
+      const creatorIds = subscriptions?.map((s: any) => s.creator_id) || [];
 
       if (creatorIds.length === 0) {
         return [];
@@ -489,28 +475,28 @@ export class PostService {
     }
 
     let userLikes: Set<string> = new Set();
-    if (userId && posts.length > 0) {
+    if (userId && (posts as any[]).length > 0) {
       const { data: likes } = await supabase
         .from('likes')
         .select('post_id')
         .eq('user_id', userId)
-        .in('post_id', posts.map(p => p.id));
+        .in('post_id', (posts as any[]).map((p: any) => p.id));
 
-      userLikes = new Set(likes?.map(l => l.post_id) || []);
+      userLikes = new Set(likes?.map((l: any) => l.post_id) || []);
     }
 
-    return this.mapPostsToFrontend(posts || [], userLikes);
+    return await this.mapPostsToFrontend(posts || [], userLikes);
   }
 
-  private mapPostsToFrontend(posts: any[], userLikes: Set<string>): Post[] {
-    return posts.map(post => ({
+  private async mapPostsToFrontend(posts: any[], userLikes: Set<string>): Promise<Post[]> {
+    return Promise.all(posts.map(async post => ({
       id: post.id,
       creatorId: post.creator_id,
       creator: {
         id: post.creator.id,
         name: post.creator.display_name,
         username: post.creator.username,
-        avatar: post.creator.avatar_url || 'https://placehold.co/100x100',
+        avatar: await storageService.resolveImageUrl(post.creator.avatar_url),
         isVerified: post.creator.is_verified,
         bio: post.creator.bio,
         followers: post.creator.followers_count,
@@ -529,7 +515,7 @@ export class PostService {
       created_at: post.created_at,
       price: post.price,
       tier_id: post.tier_id,
-    }));
+    })));
   }
 }
 

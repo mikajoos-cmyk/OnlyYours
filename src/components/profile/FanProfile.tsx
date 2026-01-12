@@ -12,14 +12,14 @@ import { subscriptionService } from '../../services/subscriptionService';
 import { storageService } from '../../services/storageService';
 import { paymentService, PaymentTransaction, SavedPaymentMethod } from '../../services/paymentService';
 import { useToast } from '../../hooks/use-toast';
-import { CameraIcon, ShieldIcon, CreditCardIcon, Loader2Icon, Trash2Icon, PlusIcon, XIcon, SettingsIcon } from 'lucide-react';
+import { CameraIcon, CreditCardIcon, Loader2Icon, Trash2Icon, PlusIcon, XIcon, SettingsIcon, RefreshCwIcon } from 'lucide-react';
 import AddPaymentMethodModal from '../fan/AddPaymentMethodModal';
-import { useNavigate } from 'react-router-dom';
+
 
 export default function FanProfile() {
   const { user, updateProfile, changePassword } = useAuthStore();
   const { toast } = useToast();
-  const navigate = useNavigate();
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeSubscriptions, setActiveSubscriptions] = useState<any[]>([]);
@@ -28,16 +28,14 @@ export default function FanProfile() {
   const [showAddMethodModal, setShowAddMethodModal] = useState(false);
   const [isMethodsLoading, setIsMethodsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
   const [isAccountLoading, setIsAccountLoading] = useState(false);
   const [isAvatarLoading, setIsAvatarLoading] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState('');
+
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isPasswordLoading, setIsPasswordLoading] = useState(false);
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [interests, setInterests] = useState<string[]>(user?.interests || []);
   const [newInterest, setNewInterest] = useState('');
 
@@ -58,31 +56,35 @@ export default function FanProfile() {
     }
   };
 
+  const fetchData = async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const [subs, history] = await Promise.all([
+        subscriptionService.getUserSubscriptions(),
+        paymentService.getUserPaymentHistory(user.id)
+      ]);
+
+      const mappedSubs = subs.map(s => ({
+        id: s.id,
+        creator: { name: s.creator?.name || 'Unbekannter Creator' },
+        price: s.price,
+        endDate: s.endDate,
+        status: s.status,
+        autoRenew: s.autoRenew // Wichtig für die UI-Logik
+      }));
+
+      setActiveSubscriptions(mappedSubs);
+      setTransactions(history);
+      fetchPaymentMethods();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      if (!user?.id) return;
-      setLoading(true);
-      try {
-        const [subs, history] = await Promise.all([
-          subscriptionService.getUserSubscriptions(),
-          paymentService.getUserPaymentHistory(user.id)
-        ]);
-        const mappedSubs = subs.map(s => ({
-          id: s.id,
-          creator: { name: s.creator?.name || 'Unbekannter Creator' },
-          price: s.price,
-          endDate: s.endDate,
-          status: s.status
-        }));
-        setActiveSubscriptions(mappedSubs);
-        setTransactions(history);
-        fetchPaymentMethods();
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
   }, [user?.id]);
 
@@ -94,6 +96,7 @@ export default function FanProfile() {
     }
   }, [user]);
 
+  // ... (Avatar & Account Upload Handlers sind identisch, zur Kürzung hier nur referenziert)
   const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -113,25 +116,19 @@ export default function FanProfile() {
     e.preventDefault();
     setIsAccountLoading(true);
     try {
-      const cleanedInterests = interests
-        .map(t => t.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())
-        .filter(t => t.length > 0);
+      const cleanedInterests = interests.map(t => t.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase()).filter(t => t.length > 0);
       setInterests(cleanedInterests);
       await updateProfile({ display_name: displayName, interests: cleanedInterests });
       toast({ title: "Profil aktualisiert!" });
     } catch (error: any) {
-      toast({ title: "Update fehlgeschlagen", description: error.message, variant: "destructive" });
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
     } finally {
       setIsAccountLoading(false);
     }
   };
 
   const handleAddInterest = () => {
-    if (newInterest.trim() === "") return;
-    if (interests.length >= 10) {
-      toast({ title: "Limit erreicht", variant: "destructive" });
-      return;
-    }
+    if (newInterest.trim() === "" || interests.length >= 10) return;
     const cleanTag = newInterest.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
     if (cleanTag.length > 0 && !interests.includes(cleanTag)) {
       setInterests(prev => [...prev, cleanTag]);
@@ -139,16 +136,11 @@ export default function FanProfile() {
     }
   };
 
-  const handleRemoveInterest = (tagToRemove: string) => {
-    setInterests(prev => prev.filter(tag => tag !== tagToRemove));
-  };
+  const handleRemoveInterest = (tag: string) => setInterests(prev => prev.filter(t => t !== tag));
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword !== confirmPassword) {
-      toast({ title: "Fehler", description: "Passwörter stimmen nicht überein.", variant: "destructive" });
-      return;
-    }
+    if (newPassword !== confirmPassword) return toast({ title: "Fehler", description: "Passwörter stimmen nicht überein.", variant: "destructive" });
     setIsPasswordLoading(true);
     try {
       await changePassword(newPassword);
@@ -173,16 +165,31 @@ export default function FanProfile() {
   };
 
   const handleDeleteAccount = async () => {
-    const confirmed = window.confirm("ACHTUNG: Diese Aktion kann nicht rückgängig gemacht werden. Ihr Konto und alle Daten werden dauerhaft gelöscht. Fortfahren?");
-    if (!confirmed) return;
+    if (window.confirm("Konto wirklich löschen?")) {
+      toast({ title: "Info", description: "Bitte Support kontaktieren.", variant: "default" });
+    }
+  };
 
+  // --- KÜNDIGEN ---
+  const handleCancelSubscription = async (subId: string) => {
+    if (!confirm("Abo wirklich kündigen? Es läuft zum Ende des Zeitraums aus.")) return;
     try {
-      // Hier würdest du eine Funktion aufrufen wie `await authService.deleteAccount();`
-      // Da Supabase Client keine direkte User-Löschung erlaubt (nur Admin),
-      // müsste dies über eine Edge Function geschehen.
-      toast({ title: "Information", description: "Bitte kontaktieren Sie den Support (support@onlyyours.app) zur Löschung.", variant: "default" });
-    } catch (e) {
-      toast({ title: "Fehler", description: "Konto konnte nicht gelöscht werden.", variant: "destructive" });
+      await subscriptionService.cancelSubscription(subId);
+      toast({ title: "Gekündigt", description: "Abo läuft zum Periodenende aus." });
+      await fetchData();
+    } catch (error: any) {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
+    }
+  };
+
+  // --- REAKTIVIEREN ---
+  const handleResumeSubscription = async (subId: string) => {
+    try {
+      await subscriptionService.resumeSubscription(subId);
+      toast({ title: "Reaktiviert!", description: "Abo wird automatisch verlängert." });
+      await fetchData();
+    } catch (error: any) {
+      toast({ title: "Fehler", description: error.message, variant: "destructive" });
     }
   };
 
@@ -197,7 +204,6 @@ export default function FanProfile() {
           <TabsTrigger value="settings" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">Einstellungen</TabsTrigger>
         </TabsList>
 
-        {/* ACCOUNT TAB */}
         <TabsContent value="account" className="mt-6">
           <Card className="bg-card border-border">
             <CardHeader><CardTitle className="text-foreground">Profil & Interessen</CardTitle></CardHeader>
@@ -230,7 +236,6 @@ export default function FanProfile() {
           </Card>
         </TabsContent>
 
-        {/* SECURITY TAB */}
         <TabsContent value="security" className="mt-6">
           <Card className="bg-card border-border">
             <CardHeader><CardTitle className="text-foreground">Sicherheit</CardTitle></CardHeader>
@@ -244,33 +249,98 @@ export default function FanProfile() {
           </Card>
         </TabsContent>
 
-        {/* SUBSCRIPTIONS TAB */}
         <TabsContent value="subscriptions" className="mt-6">
           <Card className="bg-card border-border">
             <CardHeader><CardTitle className="text-foreground">Meine Abonnements</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {!loading && activeSubscriptions.map((sub) => (
-                  <div key={sub.id} className="flex justify-between items-center border-b border-border py-4">
-                    <div><h3 className="font-medium">{sub.creator.name}</h3><p className="text-sm text-muted-foreground">{sub.status === 'CANCELED' ? 'Gekündigt' : 'Aktiv'}</p></div>
-                    <div className="flex items-center gap-4"><span className="text-secondary">{formatCurrency(sub.price)}</span><Button variant="outline" onClick={async () => { await subscriptionService.cancelSubscription(sub.id); toast({ title: "Gekündigt" }); window.location.reload(); }}>Kündigen</Button></div>
-                  </div>
-                ))}
+                {!loading && activeSubscriptions.length === 0 && <p className="text-muted-foreground">Keine aktiven Abonnements.</p>}
+                {!loading && activeSubscriptions.map((sub) => {
+                  // Logik: Abo gilt als "aktiv verlängernd", wenn Status ACTIVE und autoRenew TRUE ist.
+                  const isRenewing = sub.status === 'ACTIVE' && sub.autoRenew;
+
+                  return (
+                    <div key={sub.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-border py-4 gap-4">
+                      <div>
+                        <h3 className="font-medium text-lg">{sub.creator.name}</h3>
+                        <div className="flex items-center gap-2">
+                          <p className={isRenewing ? "text-sm text-success" : "text-sm text-warning"}>
+                            {isRenewing ? 'Aktiv' : 'Läuft aus'}
+                          </p>
+                          {sub.endDate && (
+                            <p className="text-xs text-muted-foreground">
+                              • {isRenewing ? 'Verlängerung: ' : 'Endet am: '}
+                              {new Date(sub.endDate).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                        <span className="text-secondary font-medium text-lg">{formatCurrency(sub.price)}</span>
+
+                        {/* BUTTON WECHSEL */}
+                        {isRenewing ? (
+                          <Button
+                            variant="outline"
+                            className="hover:bg-destructive/10 hover:text-destructive border-border"
+                            onClick={() => handleCancelSubscription(sub.id)}
+                          >
+                            Kündigen
+                          </Button>
+                        ) : (
+                          <Button
+                            className="bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                            onClick={() => handleResumeSubscription(sub.id)}
+                          >
+                            <RefreshCwIcon className="w-4 h-4 mr-2" />
+                            Reaktivieren
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* PAYMENTS TAB */}
         <TabsContent value="payments" className="mt-6">
           <Card className="bg-card border-border">
             <CardHeader><CardTitle className="text-foreground flex items-center gap-2"><CreditCardIcon className="w-5 h-5" /> Zahlungsmethoden</CardTitle></CardHeader>
             <CardContent className="space-y-6">
               <div className="flex justify-between"><h3 className="font-medium">Gespeicherte Karten</h3><Button onClick={() => setShowAddMethodModal(true)} className="bg-secondary text-secondary-foreground"><PlusIcon className="w-4 h-4 mr-2" /> Neu</Button></div>
               <div className="space-y-3">
+                {paymentMethods.length === 0 && !isMethodsLoading && <p className="text-muted-foreground text-sm">Keine Karten gespeichert.</p>}
+
+                {/* --- HIER DIE ERWEITERTE ANZEIGE --- */}
                 {paymentMethods.map(m => (
-                  <div key={m.id} className="flex justify-between items-center p-3 border border-border rounded"><div className="flex gap-3"><CreditCardIcon /><p className="capitalize">{m.brand} •••• {m.last4}</p></div><Button variant="ghost" size="icon" onClick={() => handleDeletePaymentMethod(m.id)}><Trash2Icon className="w-4 h-4" /></Button></div>
+                  <div key={m.id} className="flex justify-between items-center p-4 border border-border rounded-lg bg-card/50 hover:bg-card transition-colors">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-neutral rounded flex items-center justify-center">
+                        <CreditCardIcon className="w-6 h-6 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground capitalize flex items-center gap-2">
+                          {m.icon || m.type} <span className="text-muted-foreground">{m.label}</span>
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {m.subLabel}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeletePaymentMethod(m.id)}
+                      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2Icon className="w-5 h-5" />
+                    </Button>
+                  </div>
                 ))}
+                {/* --- ENDE ERWEITERTE ANZEIGE --- */}
+
               </div>
               <div className="border-t border-border pt-6"><h3 className="font-medium mb-4">Historie</h3>
                 <div className="space-y-3">{transactions.map(t => (<div key={t.id} className="flex justify-between border-b border-border py-2"><div><p>{t.description}</p><p className="text-xs text-muted-foreground">{new Date(t.created_at).toLocaleDateString()}</p></div><span>-{formatCurrency(t.amount)}</span></div>))}</div>
@@ -279,7 +349,6 @@ export default function FanProfile() {
           </Card>
         </TabsContent>
 
-        {/* SETTINGS TAB */}
         <TabsContent value="settings" className="mt-6">
           <Card className="bg-card border-border">
             <CardHeader>
@@ -294,17 +363,8 @@ export default function FanProfile() {
                 </div>
                 <Switch checked={true} disabled />
               </div>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="text-base">Push Benachrichtigungen</Label>
-                  <p className="text-sm text-muted-foreground">Benachrichtigungen im Browser.</p>
-                </div>
-                <Switch checked={false} disabled />
-              </div>
-
               <div className="border-t border-destructive/20 pt-6 mt-6">
                 <h3 className="text-destructive font-medium mb-2 flex items-center gap-2"><SettingsIcon className="w-4 h-4" /> Gefahrenzone</h3>
-                <p className="text-sm text-muted-foreground mb-4">Das Löschen des Kontos ist endgültig und kann nicht widerrufen werden.</p>
                 <Button variant="destructive" onClick={handleDeleteAccount} className="w-full md:w-auto">
                   Konto löschen
                 </Button>
@@ -312,7 +372,6 @@ export default function FanProfile() {
             </CardContent>
           </Card>
         </TabsContent>
-
       </Tabs>
 
       <AddPaymentMethodModal isOpen={showAddMethodModal} onClose={() => setShowAddMethodModal(false)} onSuccess={() => fetchPaymentMethods()} />

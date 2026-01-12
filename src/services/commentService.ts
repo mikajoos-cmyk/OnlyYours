@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
+import { storageService } from './storageService';
 
 type CommentInsert = Database['public']['Tables']['comments']['Insert'];
 
@@ -12,6 +13,7 @@ export interface Comment {
   user: {
     id: string;
     name: string;
+    username: string;
     avatar: string;
     isVerified: boolean;
   };
@@ -30,7 +32,7 @@ export class CommentService {
 
     const { data, error } = await supabase
       .from('comments')
-      .insert(commentData)
+      .insert(commentData as any)
       .select()
       .single();
 
@@ -60,7 +62,7 @@ export class CommentService {
 
     if (error) throw error;
 
-    return this.mapCommentsToFrontend(comments || []);
+    return await this.mapCommentsToFrontend(comments || []);
   }
 
   async deleteComment(commentId: string) {
@@ -85,8 +87,8 @@ export class CommentService {
     }
   }
 
-  private mapCommentsToFrontend(comments: any[]): Comment[] {
-    return comments.map(comment => ({
+  private async mapCommentsToFrontend(comments: any[]): Promise<Comment[]> {
+    return Promise.all(comments.map(async comment => ({
       id: comment.id,
       postId: comment.post_id,
       userId: comment.user_id,
@@ -95,10 +97,11 @@ export class CommentService {
       user: {
         id: comment.user.id,
         name: comment.user.display_name,
-        avatar: comment.user.avatar_url || 'https://placehold.co/100x100',
+        username: comment.user.username,
+        avatar: comment.user.avatar_url ? await storageService.resolveImageUrl(comment.user.avatar_url) : '',
         isVerified: comment.user.is_verified,
       },
-    }));
+    })));
   }
 }
 

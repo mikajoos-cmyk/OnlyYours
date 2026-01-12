@@ -163,19 +163,11 @@ export class UserService {
   }
 
   private async mapToUserProfile(data: any): Promise<UserProfile> {
-    // FIX: Avatar URL auflösen
-    let resolvedAvatarUrl = data.avatar_url;
-    if (resolvedAvatarUrl && !resolvedAvatarUrl.startsWith('http')) {
-      const signed = await storageService.getSignedUrl(resolvedAvatarUrl);
-      if (signed) resolvedAvatarUrl = signed;
-    }
-
-    // FIX: Banner URL auflösen
-    let resolvedBannerUrl = data.banner_url;
-    if (resolvedBannerUrl && !resolvedBannerUrl.startsWith('http')) {
-      const signed = await storageService.getSignedUrl(resolvedBannerUrl);
-      if (signed) resolvedBannerUrl = signed;
-    }
+    // FIX: Avatar & Banner URL auflösen
+    const [resolvedAvatarUrl, resolvedBannerUrl] = await Promise.all([
+      storageService.resolveImageUrl(data.avatar_url),
+      storageService.resolveImageUrl(data.banner_url)
+    ]);
 
     return {
       id: data.id,

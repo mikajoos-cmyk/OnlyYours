@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
+import { storageService } from './storageService';
 
 export interface Message {
   id: string;
@@ -137,10 +138,12 @@ export class MessageService {
           .eq('receiver_id', user.id)
           .eq('is_read', false);
 
+        const resolvedAvatar = await storageService.resolveImageUrl(otherUser.avatar_url);
+
         chatsMap.set(otherUserId, {
           userId: otherUserId,
           userName: otherUser.display_name || 'Unbekannt',
-          userAvatar: otherUser.avatar_url || 'https://placehold.co/100x100',
+          userAvatar: resolvedAvatar,
           lastMessage: message.content, // Ist jetzt entschlüsselt
           lastMessageTime: message.created_at,
           unreadCount: unreadCount || 0,
@@ -178,17 +181,25 @@ export class MessageService {
     await supabase.from('messages').update({ is_read: true }).eq('sender_id', otherUserId).eq('receiver_id', user.id).eq('is_read', false);
   }
 
-  private mapMessagesToFrontend(messages: any[]): Message[] {
-    return messages.map(msg => ({
+  private async mapMessagesToFrontend(messages: any[]): Promise<Message[]> {
+    return Promise.all(messages.map(async msg => ({
       id: msg.id,
       senderId: msg.sender_id,
       receiverId: msg.receiver_id,
       content: msg.content,
       isRead: msg.is_read,
       createdAt: msg.created_at,
-      sender: msg.sender ? { id: msg.sender.id, name: msg.sender.display_name, avatar: msg.sender.avatar_url } : undefined,
-      receiver: msg.receiver ? { id: msg.receiver.id, name: msg.receiver.display_name, avatar: msg.receiver.avatar_url } : undefined,
-    }));
+      sender: msg.sender ? {
+        id: msg.sender.id,
+        name: msg.sender.display_name,
+        avatar: await storageService.resolveImageUrl(msg.sender.avatar_url)
+      } : undefined,
+      receiver: msg.receiver ? {
+        id: msg.receiver.id,
+        name: msg.receiver.display_name,
+        avatar: await storageService.resolveImageUrl(msg.receiver.avatar_url)
+      } : undefined,
+    })));
   }
 }
 

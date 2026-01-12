@@ -180,20 +180,12 @@ export class AuthService {
       return null;
     }
 
-    // --- FIX: Avatar URL auflösen ---
-    if (userData.avatar_url && !userData.avatar_url.startsWith('http')) {
-      const signedUrl = await storageService.getSignedUrl(userData.avatar_url);
-      if (signedUrl) {
-        userData.avatar_url = signedUrl;
-      }
+    // --- FIX: Avatar & Banner URL auflösen ---
+    if ((userData as any).avatar_url) {
+      (userData as any).avatar_url = await storageService.resolveImageUrl((userData as any).avatar_url);
     }
-
-    // --- FIX: Banner URL auflösen ---
-    if (userData.banner_url && !userData.banner_url.startsWith('http')) {
-      const signedUrl = await storageService.getSignedUrl(userData.banner_url);
-      if (signedUrl) {
-        userData.banner_url = signedUrl;
-      }
+    if ((userData as any).banner_url) {
+      (userData as any).banner_url = await storageService.resolveImageUrl((userData as any).banner_url);
     }
     // --- ENDE FIX ---
 

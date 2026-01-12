@@ -223,10 +223,14 @@ export default function SearchPage() {
       ...post,
       media: post.mediaUrl,
       creator: {
+        id: post.creator.id,
         name: post.creator.name,
         username: post.creator.username || post.creator.id,
         avatar: post.creator.avatar,
         isVerified: post.creator.isVerified,
+        bio: post.creator.bio || '',
+        followers: post.creator.followers || 0,
+        subscriptionPrice: post.creator.subscriptionPrice || 0,
       },
     })), [postResults]);
 

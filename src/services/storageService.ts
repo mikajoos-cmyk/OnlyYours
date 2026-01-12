@@ -75,6 +75,20 @@ export class StorageService {
     return data.signedUrl;
   }
 
+  /**
+   * Resolves a potentially relative image path to a full URL.
+   * If it's already a full URL (http...) or a blob URL, it returns it as is.
+   * Otherwise, it fetches a signed URL from storage.
+   */
+  async resolveImageUrl(filePath: string | null | undefined): Promise<string> {
+    if (!filePath) return 'https://placehold.co/100x100';
+    if (filePath.startsWith('http') || filePath.startsWith('blob:') || filePath.startsWith('data:')) {
+      return filePath;
+    }
+    const signedUrl = await this.getSignedUrl(filePath);
+    return signedUrl || 'https://placehold.co/100x100';
+  }
+
   private extractPathFromUrl(url: string): string {
     if (!url) return '';
     if (!url.startsWith('http')) return url; // Ist schon ein Pfad

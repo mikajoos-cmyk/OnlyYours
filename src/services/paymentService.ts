@@ -1,214 +1,83 @@
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/database.types';
 
-type PaymentRow = Database['public']['Tables']['payments']['Row'];
-type PaymentInsert = Database['public']['Tables']['payments']['Insert'];
-
-// Ein Typ für die Transaktionshistorie im Frontend
 export interface PaymentTransaction {
   id: string;
   created_at: string;
-  description: string; // Wird aus 'type' und 'metadata' generiert
+  description: string;
   amount: number;
   status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'REFUNDED';
 }
 
-// NEU: Typ für gespeicherte Zahlungsmethoden
+// UPDATE: Generisches Interface für alle Methoden
 export interface SavedPaymentMethod {
   id: string;
-  brand: string;
-  last4: string;
-  expMonth: number;
-  expYear: number;
+  type: string;        // 'card', 'sepa_debit', 'paypal', etc.
+  label: string;       // z.B. "**** 4242" oder "DE89...332"
+  subLabel?: string;   // z.B. "Expires 12/24" oder "Mandat: XYZ"
+  icon?: string;       // Brand icon string (visa, mastercard, etc.)
+  isDefault: boolean;
 }
 
 export class PaymentService {
 
-  /**
-   * Ruft die Zahlungshistorie für den aktuell angemeldeten Benutzer ab.
-   */
   async getUserPaymentHistory(userId: string, limit: number = 20): Promise<PaymentTransaction[]> {
     const { data, error } = await supabase
       .from('payments')
-      .select(`
-        id,
-        created_at,
-        amount,
-        status,
-        type,
-        related_id,
-        metadata,
-        creator_id
-      `)
+      .select('*')
       .eq('user_id', userId)
-      .eq('status', 'SUCCESS') // Nur erfolgreiche Transaktionen anzeigen
+      .eq('status', 'SUCCESS')
       .order('created_at', { ascending: false })
-      .limit(limit) as any;
+      .limit(limit);
 
-    if (error) {
-      console.error('Error fetching payment history:', error);
-      throw error;
-    }
+    if (error) throw error;
 
-    if (!data) {
-      return [];
-    }
-
-    // Die Daten in ein Frontend-freundliches Format umwandeln
-    return (data || []).map(payment => ({
+    return (data || []).map((payment: any) => ({
       id: payment.id,
       created_at: payment.created_at,
       amount: payment.amount,
       status: payment.status,
-      description: this.generatePaymentDescription(payment as PaymentRow),
+      description: this.generatePaymentDescription(payment),
     }));
   }
 
-  /**
-   * Führt den Datenbank-Eintrag für einen Pay-Per-View-Kauf durch.
-   * (Wird aufgerufen, nachdem die Zahlung via Stripe erfolgreich war)
-   */
-  async purchasePost(postId: string, creatorId: string, amount: number): Promise<PaymentRow> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    // Metadaten für die Transaktionshistorie abrufen
-    const { data: creator } = await supabase
-      .from('users')
-      .select('display_name')
-      .eq('id', creatorId)
-      .single();
-
-    const { data: post } = await supabase
-      .from('posts')
-      .select('caption')
-      .eq('id', postId)
-      .single();
-
-    const paymentData: any = {
-      user_id: user.id,
-      creator_id: creatorId,
-      amount: amount,
-      currency: 'EUR',
-      type: 'PAY_PER_VIEW',
-      status: 'SUCCESS',
-      related_id: postId,
-      metadata: {
-        creatorName: (creator as any)?.display_name || 'Unbekannt',
-        postCaption: (post as any)?.caption?.substring(0, 50) || 'Post'
-      }
-    };
-
-    const { data: newPayment, error } = await (supabase.from('payments') as any)
-      .insert(paymentData as any)
-      .select()
-      .single();
+  async getSavedPaymentMethods(): Promise<SavedPaymentMethod[]> {
+    const { data, error } = await supabase.functions.invoke('manage-payment-methods', {
+      method: 'GET',
+    });
 
     if (error) {
-      console.error('Error purchasing post:', error);
-      throw error;
+      console.error('Error fetching payment methods:', error);
+      return [];
     }
-
-    return newPayment;
+    return data?.methods || [];
   }
 
-  /**
-   * Führt den Datenbank-Eintrag für ein Trinkgeld durch.
-   * (Wird aufgerufen, nachdem die Zahlung via Stripe erfolgreich war)
-   */
-  async sendTip(creatorId: string, amount: number): Promise<PaymentRow> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+  async deletePaymentMethod(paymentMethodId: string): Promise<void> {
+    const { error } = await supabase.functions.invoke('manage-payment-methods', {
+      method: 'DELETE',
+      body: { paymentMethodId }
+    });
+    if (error) throw error;
+  }
 
-    if (user.id === creatorId) {
-      throw new Error('Cannot send tip to yourself');
-    }
-
-    // Metadaten für die Transaktionshistorie
-    const { data: creator } = await supabase
-      .from('users')
-      .select('display_name')
-      .eq('id', creatorId)
-      .single();
-
-    const paymentData: any = {
-      user_id: user.id,
-      creator_id: creatorId,
-      amount: amount,
-      currency: 'EUR',
-      type: 'TIP',
-      status: 'SUCCESS',
-      related_id: null,
-      metadata: {
-        creatorName: (creator as any)?.display_name || 'Unbekannt'
+  async chargeSavedCard(
+    paymentMethodId: string,
+    amount: number,
+    metadata: any
+  ): Promise<void> {
+    const { data, error } = await supabase.functions.invoke('charge-saved-card', {
+      body: {
+        paymentMethodId,
+        amount,
+        metadata
       }
-    };
+    });
 
-    const { data: newPayment, error } = await (supabase.from('payments') as any)
-      .insert(paymentData as any)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error sending tip:', error);
-      throw error;
-    }
-
-    return newPayment;
+    if (error) throw new Error(error.message || "Verbindung fehlgeschlagen");
+    if (data?.error) throw new Error(data.error);
   }
 
-  /**
-   * NEU: Führt den Datenbank-Eintrag für einen Produktkauf durch.
-   */
-  /**
-   * DEBUG-VERSION: Produktkauf registrieren
-   */
-  async purchaseProduct(creatorId: string, productId: string, amount: number, productTitle: string) {
-    console.log('[PaymentService] Starting purchaseProduct...', { creatorId, productId, amount });
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      console.error('[PaymentService] No authenticated user found');
-      throw new Error('Not authenticated');
-    }
-
-    // Explizites Casting für TypeScript, falls die Typen noch nicht aktualisiert sind
-    const paymentData = {
-      user_id: user.id,
-      creator_id: creatorId,
-      amount: amount,
-      currency: 'EUR',
-      type: 'PRODUCT', // Hier könnte der Fehler liegen, wenn SQL Schritt 1 fehlte
-      status: 'SUCCESS',
-      related_id: productId,
-      metadata: {
-        productTitle: productTitle,
-        description: `Kauf von: ${productTitle}`
-      }
-    };
-
-    console.log('[PaymentService] Sending to DB:', paymentData);
-
-    const { data, error } = await (supabase.from('payments') as any)
-      .insert(paymentData as any) // 'as any' um Typ-Fehler temporär zu umgehen
-      .select()
-      .single();
-
-    if (error) {
-      console.error('[PaymentService] DB Insert Error:', error);
-      console.error('[PaymentService] Error Details:', error.message, error.details, error.hint);
-      throw new Error(`DB Error: ${error.message}`);
-    }
-
-    console.log('[PaymentService] Purchase successful:', data);
-    return data;
-  }
-
-
-  /**
-   * Ruft NUR die IDs aller erfolgreich gekauften PPV-Posts ab.
-   * Hocheffizient für den App-Start zur Rechteprüfung.
-   */
   async getPaidPostIds(userId: string): Promise<Set<string>> {
     const { data, error } = await supabase
       .from('payments')
@@ -218,88 +87,19 @@ export class PaymentService {
       .eq('status', 'SUCCESS')
       .not('related_id', 'is', null);
 
-    if (error) {
-      console.error('Error fetching paid post IDs:', error);
-      return new Set<string>();
-    }
+    if (error) return new Set<string>();
 
-    const ids = (data || [])
-      .map((p: any) => p.related_id)
-      .filter((id: string | null): id is string => id !== null);
-
+    const ids = (data || []).map((p: any) => p.related_id).filter((id: string | null): id is string => id !== null);
     return new Set<string>(ids);
   }
 
-  // --- NEU: Methoden für Zahlungsverwaltung ---
-
-  /**
-   * Ruft die gespeicherten Zahlungsmethoden (Karten) über die Edge Function ab.
-   */
-  async getSavedPaymentMethods(): Promise<SavedPaymentMethod[]> {
-    const { data, error } = await supabase.functions.invoke('manage-payment-methods', {
-      method: 'GET',
-    });
-
-    if (error) {
-      console.error('Error fetching payment methods via Edge Function:', error);
-      throw error;
-    }
-    // Die Edge Function gibt { methods: [...] } zurück
-    return data.methods || [];
-  }
-
-  /**
-   * Löscht eine gespeicherte Zahlungsmethode über die Edge Function.
-   */
-  async deletePaymentMethod(paymentMethodId: string): Promise<void> {
-    const { error } = await supabase.functions.invoke('manage-payment-methods', {
-      method: 'DELETE',
-      body: { paymentMethodId }
-    });
-
-    if (error) {
-      console.error('Error deleting payment method:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Erzeugt eine lesbare Beschreibung für eine Transaktion.
-   */
-  private generatePaymentDescription(payment: PaymentRow): string {
-    const metadata = payment.metadata as { creatorName?: string, postCaption?: string };
-
-    try {
-      switch (payment.type as any) {
-        case 'SUBSCRIPTION':
-
-          if (metadata?.creatorName) {
-            return `Abonnement: ${metadata.creatorName}`;
-          }
-          return 'Abonnement-Zahlung';
-        case 'PAY_PER_VIEW':
-          if (metadata?.postCaption) {
-            return `PPV: ${metadata.postCaption}...`;
-          }
-          return 'Pay-Per-View-Inhalt';
-        case 'TIP':
-          if (metadata?.creatorName) {
-            return `Trinkgeld für: ${metadata.creatorName}`;
-          }
-          return 'Trinkgeld';
-        case 'PRODUCT':
-          const productMeta = payment.metadata as { productTitle?: string };
-          if (productMeta?.productTitle) {
-            return `Kauf: ${productMeta.productTitle}`;
-          }
-          return 'Produktkauf';
-        default:
-          return 'Unbekannte Transaktion';
-      }
-    } catch (e) {
-      console.error("Fehler beim Parsen der Payment-Metadaten:", e);
-      return "Transaktion";
-    }
+  private generatePaymentDescription(payment: any): string {
+    const meta = payment.metadata || {};
+    if (payment.type === 'SUBSCRIPTION') return `Abo: ${meta.creatorName || 'Creator'}`;
+    if (payment.type === 'TIP') return `Tip: ${meta.creatorName || 'Creator'}`;
+    if (payment.type === 'PAY_PER_VIEW') return `PPV: ${meta.postCaption || 'Inhalt'}`;
+    if (payment.type === 'PRODUCT') return `Kauf: ${meta.productTitle || 'Produkt'}`;
+    return 'Zahlung';
   }
 }
 
