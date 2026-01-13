@@ -181,25 +181,30 @@ export class SubscriptionService {
     }
   }
 
+  // src/services/subscriptionService.ts
+
   async resumeSubscription(subscriptionId: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    console.log("Resuming subscription...", subscriptionId);
+    console.log("Resuming subscription via Edge Function...", subscriptionId);
 
-    const { error: functionError } = await supabase.functions.invoke('resume-subscription', {
+    // Wir rufen NUR die Edge Function auf. 
+    // Sie kümmert sich um Stripe UND das Datenbank-Update (als Admin).
+    const { data, error } = await supabase.functions.invoke('resume-subscription', {
       body: { subscriptionId }
     });
 
-    if (functionError) {
-      console.warn("Edge Function failed, fallback DB", functionError);
-      const { error: dbError } = await (supabase
-        .from('subscriptions') as any)
-        .update({ auto_renew: true, status: 'ACTIVE' } as any)
-        .eq('id', subscriptionId)
-        .eq('fan_id', user.id);
-      if (dbError) throw dbError;
+    if (error) {
+      console.error("Edge Function failed:", error);
+      throw new Error(error.message || "Reaktivierung fehlgeschlagen");
     }
+
+    console.log("✅ Reaktivierung erfolgreich. Antwort:", data);
+
+    // Wir machen KEIN manuelles DB-Update mehr hier.
+    // Stattdessen vertrauen wir darauf, dass der Aufrufer (z.B. FanProfile.tsx)
+    // danach `fetchData()` oder `loadSubscriptions()` aufruft, um die frischen Daten zu holen.
   }
 
   async cancelSubscription(subscriptionId: string) {
