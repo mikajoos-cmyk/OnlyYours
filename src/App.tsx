@@ -25,6 +25,7 @@ import PostPage from './components/fan/PostPage';
 import LiveStreamWrapper from './components/creator/LiveStreamWrapper';
 import Impressum from './components/legal/Impressum';
 import Datenschutz from './components/legal/Datenschutz';
+import AGB from './components/legal/AGB';
 import AdminDashboard from './pages/AdminDashboard';
 
 function App() {
@@ -73,6 +74,7 @@ function App() {
         <Routes>
           <Route path="/impressum" element={<Impressum />} />
           <Route path="/datenschutz" element={<Datenschutz />} />
+          <Route path="/agb" element={<AGB />} />
           <Route path="*" element={
             <>
               <OnboardingFlow />
@@ -109,6 +111,7 @@ function App() {
           {/* Rechtliche Routen */}
           <Route path="/impressum" element={<Impressum />} />
           <Route path="/datenschutz" element={<Datenschutz />} />
+          <Route path="/agb" element={<AGB />} />
 
           {/* Admin Route */}
           <Route path="/admin" element={<AdminDashboard />} />

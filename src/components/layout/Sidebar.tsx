@@ -82,10 +82,11 @@ export default function Sidebar({ isCreatorMode }: SidebarProps) {
       <div className="p-4 border-t border-border mt-auto flex-shrink-0">
         <div className="flex justify-center gap-4 text-xs text-muted-foreground">
           <button onClick={() => navigate('/impressum')} className="hover:text-foreground">Impressum</button>
+          <button onClick={() => navigate('/agb')} className="hover:text-foreground">AGB</button>
           <button onClick={() => navigate('/datenschutz')} className="hover:text-foreground">Datenschutz</button>
         </div>
         <div className="text-center text-[10px] text-muted-foreground/50 mt-2">
-          © 2024 OnlyYours
+          © 2026 OnlyYours
         </div>
       </div>
     </aside>

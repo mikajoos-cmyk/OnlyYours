@@ -33,7 +33,7 @@ export default function Datenschutz() {
           <p>
             <strong>Hinweis zur verantwortlichen Stelle:</strong><br />
             Die verantwortliche Stelle für die Datenverarbeitung auf dieser Website ist:<br />
-            OnlyYours GmbH<br />
+            OnlyYours UG (haftungsbeschränkt)<br />
             Musterstraße 123, 12345 Berlin<br />
             E-Mail: support@onlyyours.app
           </p>

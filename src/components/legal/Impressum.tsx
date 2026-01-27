@@ -18,7 +18,7 @@ export default function Impressum() {
         <div className="space-y-4 text-muted-foreground">
           <h2 className="text-xl font-medium text-foreground">Angaben gemäß § 5 TMG</h2>
           <p>
-            OnlyYours GmbH<br />
+            OnlyYours UG (haftungsbeschränkt)<br />
             Musterstraße 123<br />
             12345 Berlin<br />
             Deutschland

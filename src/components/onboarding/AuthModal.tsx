@@ -344,7 +344,7 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
                   <div className="flex items-start space-x-2">
                     <Checkbox id="terms" checked={termsAgreed} onCheckedChange={(c) => setTermsAgreed(c as boolean)} className="mt-1" />
                     <Label htmlFor="terms" className="text-sm leading-normal cursor-pointer">
-                      Ich stimme den <a href="/impressum" target="_blank" className="text-secondary hover:underline">AGB</a> und der <a href="/datenschutz" target="_blank" className="text-secondary hover:underline">Datenschutzerklärung</a> zu. Ich bestätige, dass ich über 18 Jahre alt bin.
+                      Ich stimme den <a href="/agb" target="_blank" className="text-secondary hover:underline">AGB</a> und der <a href="/datenschutz" target="_blank" className="text-secondary hover:underline">Datenschutzerklärung</a> zu. Ich bestätige, dass ich über 18 Jahre alt bin.
                     </Label>
                   </div>
                 </div>
