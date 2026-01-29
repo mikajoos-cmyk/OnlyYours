@@ -1,18 +1,7 @@
-import { useNavigate } from 'react-router-dom';
-import { Button } from '../ui/button';
-import { ArrowLeftIcon } from 'lucide-react';
-
 export default function Datenschutz() {
-  const navigate = useNavigate();
-
   return (
-    <div className="min-h-screen bg-background text-foreground p-4 md:p-8">
+    <div className="min-h-screen max-h-screen overflow-y-auto bg-background text-foreground p-4 md:p-8">
       <div className="max-w-3xl mx-auto space-y-8">
-        <Button variant="ghost" onClick={() => navigate(-1)} className="pl-0 hover:bg-transparent hover:text-secondary">
-          <ArrowLeftIcon className="mr-2 h-4 w-4" />
-          Zurück
-        </Button>
-
         <h1 className="text-3xl font-serif">Datenschutzerklärung</h1>
 
         <div className="space-y-4 text-muted-foreground">
@@ -40,7 +29,7 @@ export default function Datenschutz() {
 
           <h2 className="text-xl font-medium text-foreground">4. Datenerfassung auf dieser Website</h2>
           <p>
-            <strong>Cookies:</strong> Unsere Internetseiten verwenden so genannte „Cookies“. Cookies sind kleine Textdateien und richten auf Ihrem Endgerät keinen Schaden an. Sie dienen dazu, unser Angebot nutzerfreundlicher, effektiver und sicherer zu machen.
+            <strong>Cookies:</strong> Unsere Internetseiten verwenden so genannte „Cookies". Cookies sind kleine Textdateien und richten auf Ihrem Endgerät keinen Schaden an. Sie dienen dazu, unser Angebot nutzerfreundlicher, effektiver und sicherer zu machen.
           </p>
           <p>
             <strong>Zahlungsverkehr:</strong> Zur Abwicklung von Zahlungen (Abonnements, Trinkgelder) nutzen wir den Zahlungsdienstleister Stripe. Ihre Zahlungsdaten werden direkt an Stripe übermittelt und nicht auf unseren Servern gespeichert.

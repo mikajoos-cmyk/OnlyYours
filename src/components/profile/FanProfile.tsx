@@ -14,6 +14,7 @@ import { paymentService, PaymentTransaction, SavedPaymentMethod } from '../../se
 import { useToast } from '../../hooks/use-toast';
 import { CameraIcon, CreditCardIcon, Loader2Icon, Trash2Icon, PlusIcon, XIcon, SettingsIcon, RefreshCwIcon } from 'lucide-react';
 import AddPaymentMethodModal from '../fan/AddPaymentMethodModal';
+import ImageCropDialog from './ImageCropDialog';
 
 
 export default function FanProfile() {
@@ -38,6 +39,10 @@ export default function FanProfile() {
   const [isPasswordLoading, setIsPasswordLoading] = useState(false);
   const [interests, setInterests] = useState<string[]>(user?.interests || []);
   const [newInterest, setNewInterest] = useState('');
+
+  // Crop dialog states
+  const [showCropDialog, setShowCropDialog] = useState(false);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   const formatCurrency = (value: number) => {
     return `€${value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -96,13 +101,33 @@ export default function FanProfile() {
     }
   }, [user]);
 
-  // ... (Avatar & Account Upload Handlers sind identisch, zur Kürzung hier nur referenziert)
   const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({ title: "Fehler", description: "Bitte wählen Sie eine Bilddatei aus.", variant: "destructive" });
+      return;
+    }
+
+    // Open crop dialog
+    setSelectedImageFile(file);
+    setShowCropDialog(true);
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleCropComplete = async (croppedBlob: Blob) => {
+    if (!user) return;
     setIsAvatarLoading(true);
     try {
-      const avatarUrl = await storageService.uploadMedia(file, user.id);
+      // Convert blob to file
+      const croppedFile = new File([croppedBlob], 'avatar.jpg', { type: 'image/jpeg' });
+      const avatarUrl = await storageService.uploadMedia(croppedFile, user.id);
       await updateProfile({ avatar_url: avatarUrl });
       toast({ title: "Profilbild aktualisiert!" });
     } catch (error: any) {
@@ -375,6 +400,17 @@ export default function FanProfile() {
       </Tabs>
 
       <AddPaymentMethodModal isOpen={showAddMethodModal} onClose={() => setShowAddMethodModal(false)} onSuccess={() => fetchPaymentMethods()} />
+
+      {/* --- Image Crop Dialog --- */}
+      <ImageCropDialog
+        isOpen={showCropDialog}
+        imageFile={selectedImageFile}
+        onClose={() => {
+          setShowCropDialog(false);
+          setSelectedImageFile(null);
+        }}
+        onCropComplete={handleCropComplete}
+      />
     </div>
   );
 }

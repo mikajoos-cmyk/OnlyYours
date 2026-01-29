@@ -26,6 +26,7 @@ import LiveStreamWrapper from './components/creator/LiveStreamWrapper';
 import Impressum from './components/legal/Impressum';
 import Datenschutz from './components/legal/Datenschutz';
 import AGB from './components/legal/AGB';
+import CreatorVertrag from './components/legal/CreatorVertrag';
 import AdminDashboard from './pages/AdminDashboard';
 
 function App() {
@@ -75,6 +76,7 @@ function App() {
           <Route path="/impressum" element={<Impressum />} />
           <Route path="/datenschutz" element={<Datenschutz />} />
           <Route path="/agb" element={<AGB />} />
+          <Route path="/creator-vertrag" element={<CreatorVertrag />} />
           <Route path="*" element={
             <>
               <OnboardingFlow />
@@ -112,6 +114,7 @@ function App() {
           <Route path="/impressum" element={<Impressum />} />
           <Route path="/datenschutz" element={<Datenschutz />} />
           <Route path="/agb" element={<AGB />} />
+          <Route path="/creator-vertrag" element={<CreatorVertrag />} />
 
           {/* Admin Route */}
           <Route path="/admin" element={<AdminDashboard />} />

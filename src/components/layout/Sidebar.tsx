@@ -81,9 +81,10 @@ export default function Sidebar({ isCreatorMode }: SidebarProps) {
 
       <div className="p-4 border-t border-border mt-auto flex-shrink-0">
         <div className="flex justify-center gap-4 text-xs text-muted-foreground">
-          <button onClick={() => navigate('/impressum')} className="hover:text-foreground">Impressum</button>
-          <button onClick={() => navigate('/agb')} className="hover:text-foreground">AGB</button>
-          <button onClick={() => navigate('/datenschutz')} className="hover:text-foreground">Datenschutz</button>
+          <a href="/impressum" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Impressum</a>
+          <a href="/agb" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">AGB</a>
+          <a href="/creator-vertrag" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Creator-Vertrag</a>
+          <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Datenschutz</a>
         </div>
         <div className="text-center text-[10px] text-muted-foreground/50 mt-2">
           © 2026 OnlyYours

@@ -1,18 +1,7 @@
-import { useNavigate } from 'react-router-dom';
-import { Button } from '../ui/button';
-import { ArrowLeftIcon } from 'lucide-react';
-
 export default function AGB() {
-    const navigate = useNavigate();
-
     return (
-        <div className="min-h-screen bg-background text-foreground p-4 md:p-8">
+        <div className="min-h-screen max-h-screen overflow-y-auto bg-background text-foreground p-4 md:p-8">
             <div className="max-w-3xl mx-auto space-y-8">
-                <Button variant="ghost" onClick={() => navigate(-1)} className="pl-0 hover:bg-transparent hover:text-secondary">
-                    <ArrowLeftIcon className="mr-2 h-4 w-4" />
-                    Zurück
-                </Button>
-
                 <h1 className="text-3xl font-serif">Allgemeine Geschäftsbedingungen (AGB)</h1>
 
                 <div className="space-y-6 text-muted-foreground">
