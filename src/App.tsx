@@ -28,6 +28,7 @@ import Datenschutz from './components/legal/Datenschutz';
 import AGB from './components/legal/AGB';
 import CreatorVertrag from './components/legal/CreatorVertrag';
 import AdminDashboard from './pages/AdminDashboard';
+import SupportPage from './pages/SupportPage';
 
 function App() {
   const { isAuthenticated, isLoading, initialize, user } = useAuthStore();
@@ -68,60 +69,52 @@ function App() {
 
   const showOnboarding = !isAuthenticated || !hasCompletedOnboarding;
 
-  if (showOnboarding) {
-    // Zugriff auf Rechtstexte auch ohne Login ermöglichen
-    return (
-      <Router>
-        <Routes>
-          <Route path="/impressum" element={<Impressum />} />
-          <Route path="/datenschutz" element={<Datenschutz />} />
-          <Route path="/agb" element={<AGB />} />
-          <Route path="/creator-vertrag" element={<CreatorVertrag />} />
-          <Route path="*" element={
-            <>
-              <OnboardingFlow />
-              <Toaster />
-            </>
-          } />
-        </Routes>
-      </Router>
-    );
-  }
-
   return (
     <Router>
-      <AppShell>
+      {showOnboarding ? (
         <Routes>
-          <Route path="/" element={<Navigate to="/discover" replace />} />
-          <Route path="/discover" element={<DiscoveryFeed />} />
-          <Route path="/profile/:username" element={<CreatorProfile />} />
-          <Route path="/shop/:username" element={<CreatorShop />} />
-          <Route path="/feed" element={<SubscriberFeed />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/vault" element={<ContentVault />} />
-          <Route path="/post/new" element={<PostEditor />} />
-          <Route path="/messages" element={<Messages />} />
-          <Route path="/statistics" element={<Statistics />} />
-          <Route path="/payouts" element={<Payouts />} />
-          <Route path="/post/:postId" element={<PostPage />} />
-
-          <Route path="/live" element={<LiveStreamWrapper />} />
-          <Route path="/live/:username" element={<LiveStreamWrapper />} />
-
-          {/* Rechtliche Routen */}
           <Route path="/impressum" element={<Impressum />} />
           <Route path="/datenschutz" element={<Datenschutz />} />
           <Route path="/agb" element={<AGB />} />
           <Route path="/creator-vertrag" element={<CreatorVertrag />} />
-
-          {/* Admin Route */}
-          <Route path="/admin" element={<AdminDashboard />} />
-
-          <Route path="*" element={<Navigate to="/discover" replace />} />
+          <Route path="/support" element={<SupportPage />} />
+          <Route path="*" element={<OnboardingFlow />} />
         </Routes>
-      </AppShell>
+      ) : (
+        <AppShell>
+          <Routes>
+            <Route path="/" element={<Navigate to="/discover" replace />} />
+            <Route path="/discover" element={<DiscoveryFeed />} />
+            <Route path="/profile/:username" element={<CreatorProfile />} />
+            <Route path="/shop/:username" element={<CreatorShop />} />
+            <Route path="/feed" element={<SubscriberFeed />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/vault" element={<ContentVault />} />
+            <Route path="/post/new" element={<PostEditor />} />
+            <Route path="/messages" element={<Messages />} />
+            <Route path="/statistics" element={<Statistics />} />
+            <Route path="/payouts" element={<Payouts />} />
+            <Route path="/post/:postId" element={<PostPage />} />
+
+            <Route path="/live" element={<LiveStreamWrapper />} />
+            <Route path="/live/:username" element={<LiveStreamWrapper />} />
+
+            {/* Rechtliche Routen */}
+            <Route path="/impressum" element={<Impressum />} />
+            <Route path="/datenschutz" element={<Datenschutz />} />
+            <Route path="/agb" element={<AGB />} />
+            <Route path="/creator-vertrag" element={<CreatorVertrag />} />
+            <Route path="/support" element={<SupportPage />} />
+
+            {/* Admin Route */}
+            <Route path="/admin" element={<AdminDashboard />} />
+
+            <Route path="*" element={<Navigate to="/discover" replace />} />
+          </Routes>
+        </AppShell>
+      )}
       <Toaster />
     </Router>
   );

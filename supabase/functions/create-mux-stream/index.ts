@@ -1,5 +1,4 @@
 // supabase/functions/create-mux-stream/index.ts
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Mux from 'https://esm.sh/@mux/mux-node@8';
 // Mux-Client mit Ihren Secrets initialisieren
@@ -16,7 +15,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 // --- ENDE NEU ---
-serve(async (req)=>{
+Deno.serve(async (req)=>{
   // --- NEU: Preflight-Anfrage (OPTIONS) behandeln ---
   // Der Browser sendet dies automatisch VOR der POST-Anfrage
   if (req.method === 'OPTIONS') {

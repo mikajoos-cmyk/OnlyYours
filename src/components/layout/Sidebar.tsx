@@ -1,5 +1,5 @@
 // src/components/layout/Sidebar.tsx
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { HomeIcon, SearchIcon, PlusSquareIcon, MessageCircleIcon, BarChart3Icon, CompassIcon, FilmIcon, DollarSignIcon, TrendingUpIcon, UserIcon, ShieldCheckIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../stores/authStore';
@@ -80,11 +80,12 @@ export default function Sidebar({ isCreatorMode }: SidebarProps) {
       </nav>
 
       <div className="p-4 border-t border-border mt-auto flex-shrink-0">
-        <div className="flex justify-center gap-4 text-xs text-muted-foreground">
-          <a href="/impressum" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Impressum</a>
-          <a href="/agb" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">AGB</a>
-          <a href="/creator-vertrag" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Creator-Vertrag</a>
-          <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Datenschutz</a>
+        <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+          <Link to="/impressum" className="hover:text-foreground">Impressum</Link>
+          <Link to="/agb" className="hover:text-foreground">AGB</Link>
+          <Link to="/creator-vertrag" className="hover:text-foreground">Creator-Vertrag</Link>
+          <Link to="/datenschutz" className="hover:text-foreground">Datenschutz</Link>
+          <Link to="/support" className="hover:text-foreground">Support</Link>
         </div>
         <div className="text-center text-[10px] text-muted-foreground/50 mt-2">
           © 2026 OnlyYours

@@ -1,7 +1,6 @@
 // supabase/functions/mux-webhook-listener/index.ts
 // (Version 7 - Manuelle Signatur-Verifizierung, kein Mux-SDK-Import)
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 console.log('--- Mux Webhook Listener Function Initialized (Version 7 - Manuell) ---');
@@ -77,7 +76,7 @@ async function verifySignature(signatureHeader: string, rawBody: string, secret:
 // --- ENDE HELPER-FUNKTION ---
 
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   console.log(`--- Request received at: ${new Date().toISOString()} ---`);
 
   if (req.method === 'OPTIONS') {

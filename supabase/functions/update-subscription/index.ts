@@ -1,10 +1,10 @@
-import { serve } from "https://esm.sh/@std/http@0.177.0/server"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno'
+// ÄNDERUNG: Wir nutzen jetzt das offizielle NPM-Paket, um Netzwerkfehler zu vermeiden
+import Stripe from 'npm:stripe@^14.25.0'
 
+// ÄNDERUNG: 'httpClient' ist bei der npm-version nicht mehr nötig
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
   apiVersion: '2022-11-15',
-  httpClient: Stripe.createFetchHttpClient(),
 })
 
 const corsHeaders = {
@@ -12,7 +12,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -47,16 +47,12 @@ serve(async (req) => {
     if (!subData.stripe_subscription_id) throw new Error('Keine Stripe ID verknüpft');
 
     // 2. Den neuen Stripe Price finden
-    // Wir nutzen den lookup_key: "tier_{tierUUID}_{priceInCents}"
-    // Achtung: Wenn newTierId null ist (Basis-Abo ohne Tier), brauchen wir eine andere Logik
-    // oder einen "Basis-Preis". Hier nehme ich an, es gibt immer ein Tier oder Preis.
-    // Wenn newTierId null ist, nehmen wir an, es ist das Basis-Abo des Creators.
-
     let targetPriceId = '';
 
     if (newTierId) {
       // Price in Cents
       const priceInCents = Math.round(newPrice * 100);
+      // ACHTUNG: Stelle sicher, dass "lookup_key" in deinem Stripe Dashboard genau so erstellt wurde!
       const lookupKey = `tier_${newTierId}_${priceInCents}`;
 
       const prices = await stripe.prices.list({
@@ -67,15 +63,9 @@ serve(async (req) => {
       if (prices.data.length > 0) {
         targetPriceId = prices.data[0].id;
       } else {
-        // Fallback: Preis existiert in Stripe noch nicht -> Fehler oder erstellen?
-        // Wir werfen Fehler, da der Creator den Preis erstellt haben sollte
         throw new Error(`Preis nicht in Stripe gefunden (Key: ${lookupKey})`);
       }
     } else {
-      // Logik für Basis-Abo ohne Tier (falls das in deinem Modell existiert)
-      // Hier müsste man den Price anhand des Creators finden.
-      // Vereinfachung: Wir werfen Fehler, wenn kein Tier gewählt ist,
-      // es sei denn, du hast eine Logik für "Tier-loses" Abo.
       throw new Error("Tier ID wird für Wechsel benötigt.");
     }
 
@@ -91,7 +81,7 @@ serve(async (req) => {
             id: itemId,
             price: targetPriceId,
           }],
-          proration_behavior: 'create_prorations', // Berechnet Differenz (Guthaben/Nachzahlung)
+          proration_behavior: 'create_prorations',
         }
     );
 

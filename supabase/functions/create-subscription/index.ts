@@ -1,10 +1,8 @@
-import { serve } from "https://esm.sh/@std/http@0.177.0/server";
-import Stripe from "npm:stripe@^14.21.0";
+import Stripe from "npm:stripe@^14.25.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") as string, {
   apiVersion: "2023-10-16",
-  httpClient: Stripe.createFetchHttpClient(),
 });
 
 const corsHeaders = {
@@ -12,7 +10,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {

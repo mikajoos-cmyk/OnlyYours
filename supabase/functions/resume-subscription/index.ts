@@ -21,7 +21,6 @@ Deno.serve(async (req) => {
 
     const stripe = new Stripe(stripeKey, {
       apiVersion: '2023-10-16',
-      httpClient: Stripe.createFetchHttpClient(),
     })
 
     const supabaseClient = createClient(
