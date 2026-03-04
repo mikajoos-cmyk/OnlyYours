@@ -21,6 +21,7 @@ import Statistics from './components/creator/Statistics';
 import Payouts from './components/creator/Payouts';
 import ProfilePage from './components/profile/ProfilePage';
 import { Toaster } from './components/ui/toaster';
+import CookieBanner from './components/ui/CookieBanner';
 import PostPage from './components/fan/PostPage';
 import LiveStreamWrapper from './components/creator/LiveStreamWrapper';
 import Impressum from './components/legal/Impressum';
@@ -116,6 +117,7 @@ function App() {
         </AppShell>
       )}
       <Toaster />
+      <CookieBanner />
     </Router>
   );
 }

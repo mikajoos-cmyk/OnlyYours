@@ -1,11 +1,25 @@
 // src/services/stripeService.ts
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe, Stripe } from '@stripe/stripe-js/pure';
 
 const STRIPE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 
 if (!STRIPE_KEY) {
-    console.error("CRITICAL: VITE_STRIPE_PUBLISHABLE_KEY ist nicht in der .env Datei gesetzt!");
+  console.error("CRITICAL: VITE_STRIPE_PUBLISHABLE_KEY ist nicht in der .env Datei gesetzt!");
 }
 
-// Lädt Stripe asynchron. Wichtig: loadStripe darf nicht innerhalb einer Komponente aufgerufen werden.
-export const stripePromise = loadStripe(STRIPE_KEY || '');
+let stripePromise: Promise<Stripe | null> | null = null;
+
+// Diese Funktion lädt Stripe erst, wenn sie aufgerufen wird UND der Consent da ist
+export const getStripe = () => {
+  const hasConsent = localStorage.getItem('cookie-consent') === 'true';
+
+  // Wenn keine Zustimmung da ist, blockieren wir Stripe (geben null zurück)
+  if (!hasConsent) return null;
+
+  // Nur laden, wenn es noch nicht geladen wurde
+  if (!stripePromise && STRIPE_KEY) {
+    stripePromise = loadStripe(STRIPE_KEY);
+  }
+
+  return stripePromise;
+};

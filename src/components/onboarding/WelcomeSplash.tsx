@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Button } from '../ui/button';
+import { Link } from 'react-router-dom';
 
 interface WelcomeSplashProps {
   onComplete: () => void;
@@ -70,6 +71,19 @@ export default function WelcomeSplash({ onComplete }: WelcomeSplashProps) {
         >
           Jetzt entdecken
         </Button>
+      </motion.div>
+
+      {/* Rechtliche Links */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1, duration: 0.8 }}
+        className="absolute bottom-4 left-0 right-0 flex flex-wrap justify-center gap-4 text-[10px] md:text-xs text-secondary/60 z-10"
+      >
+        <Link to="/impressum" className="hover:text-secondary">Impressum</Link>
+        <Link to="/datenschutz" className="hover:text-secondary">Datenschutz</Link>
+        <Link to="/agb" className="hover:text-secondary">AGB</Link>
+        <Link to="/support" className="hover:text-secondary">Support</Link>
       </motion.div>
     </motion.div>
   );

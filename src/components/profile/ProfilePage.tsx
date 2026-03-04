@@ -3,7 +3,7 @@ import FanProfile from './FanProfile';
 import CreatorProfile from './CreatorProfile';
 import { useAppStore } from '../../stores/appStore';
 import { Button } from '../ui/button';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../hooks/use-toast';
 import {
@@ -16,7 +16,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../ui/alert-dialog';
-import { Loader2Icon } from 'lucide-react';
+import { Loader2Icon, ShieldIcon } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 
 import { supabase } from '../../lib/supabase';
 
@@ -105,8 +106,24 @@ export default function ProfilePage() {
 
           {currentRole === 'creator' ? <CreatorProfile /> : <FanProfile />}
 
-
-
+          {/* Sektion Rechtliches (Vor allem für Mobile wichtig) */}
+          <div className="mt-8 md:hidden">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-foreground flex items-center gap-2">
+                  <ShieldIcon className="w-5 h-5" /> Rechtliches
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  <Link to="/impressum" className="p-3 border border-border rounded-lg text-sm hover:bg-neutral transition-colors">Impressum</Link>
+                  <Link to="/datenschutz" className="p-3 border border-border rounded-lg text-sm hover:bg-neutral transition-colors">Datenschutz</Link>
+                  <Link to="/agb" className="p-3 border border-border rounded-lg text-sm hover:bg-neutral transition-colors">AGB</Link>
+                  <Link to="/support" className="p-3 border border-border rounded-lg text-sm hover:bg-neutral transition-colors">Support</Link>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
 

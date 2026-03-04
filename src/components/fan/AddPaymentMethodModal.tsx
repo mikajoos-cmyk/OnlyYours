@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog'; // DialogDescription importieren
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Elements } from '@stripe/react-stripe-js';
-import { stripePromise } from '../../services/stripeService';
+import { getStripe } from '../../services/stripeService';
 import { supabase } from '../../lib/supabase';
 import StripeSetupForm from './StripeSetupForm';
 import { useToast } from '../../hooks/use-toast';
@@ -20,13 +20,13 @@ export default function AddPaymentMethodModal({ isOpen, onClose, onSuccess }: Ad
   useEffect(() => {
     if (isOpen) {
       supabase.functions.invoke('create-setup-intent')
-        .then(({ data, error }) => {
-          if (data) setClientSecret(data.clientSecret);
-          if (error) {
-            console.error("Fehler beim Laden des Setup Intents:", error);
-            toast({ title: "Fehler", description: "Verbindung zu Stripe fehlgeschlagen.", variant: "destructive" });
-          }
-        });
+          .then(({ data, error }) => {
+            if (data) setClientSecret(data.clientSecret);
+            if (error) {
+              console.error("Fehler beim Laden des Setup Intents:", error);
+              toast({ title: "Fehler", description: "Verbindung zu Stripe fehlgeschlagen.", variant: "destructive" });
+            }
+          });
     }
   }, [isOpen]);
 
@@ -36,31 +36,43 @@ export default function AddPaymentMethodModal({ isOpen, onClose, onSuccess }: Ad
     onClose();
   };
 
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={cn(
-          "bg-card text-card-foreground border-border max-w-md max-h-[90vh] overflow-y-auto chat-messages-scrollbar"
-      )}>
-        <DialogHeader>
-          <DialogTitle>Neue Karte hinzufügen</DialogTitle>
-          {/* KORREKTUR: Description hinzugefügt */}
-          <DialogDescription className="text-muted-foreground">
-            Füge eine neue Kreditkarte für zukünftige Zahlungen hinzu.
-          </DialogDescription>
-        </DialogHeader>
+  const stripePromise = getStripe();
 
-        <div className="p-4">
+  // Wenn kein Cookie-Consent da ist
+  if (!stripePromise) {
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+          <DialogContent className="bg-card text-card-foreground border-border max-w-md p-6 text-center">
+            <p>Du musst den Cookies zustimmen, um Karten hinzuzufügen.</p>
+          </DialogContent>
+        </Dialog>
+    );
+  }
+
+  return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className={cn(
+            "bg-card text-card-foreground border-border max-w-md max-h-[90vh] overflow-y-auto chat-messages-scrollbar"
+        )}>
+          <DialogHeader>
+            <DialogTitle>Neue Karte hinzufügen</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Füge eine neue Kreditkarte für zukünftige Zahlungen hinzu.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="p-4">
             {clientSecret ? (
-            <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'night' } }}>
-                <StripeSetupForm onSuccess={handleSetupSuccess} />
-            </Elements>
+                <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'night' } }}>
+                  <StripeSetupForm onSuccess={handleSetupSuccess} />
+                </Elements>
             ) : (
-            <div className="flex justify-center py-8">
-                <p className="text-muted-foreground">Lade Formular...</p>
-            </div>
+                <div className="flex justify-center py-8">
+                  <p className="text-muted-foreground">Lade Formular...</p>
+                </div>
             )}
-        </div>
-      </DialogContent>
-    </Dialog>
+          </div>
+        </DialogContent>
+      </Dialog>
   );
 }

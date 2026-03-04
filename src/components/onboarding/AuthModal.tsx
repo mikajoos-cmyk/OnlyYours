@@ -396,6 +396,14 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
           </>
         )}
 
+        {/* Rechtliche Links am Ende des Modals */}
+        <div className="pt-4 mt-2 border-t border-border flex flex-wrap justify-center gap-x-4 gap-y-2 text-[10px] md:text-xs text-muted-foreground/60">
+          <Link to="/impressum" className="hover:text-secondary">Impressum</Link>
+          <Link to="/datenschutz" className="hover:text-secondary">Datenschutz</Link>
+          <Link to="/agb" className="hover:text-secondary">AGB</Link>
+          <Link to="/support" className="hover:text-secondary">Support</Link>
+        </div>
+
       </motion.div>
     </motion.div>
   );

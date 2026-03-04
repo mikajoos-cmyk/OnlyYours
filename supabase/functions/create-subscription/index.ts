@@ -124,6 +124,7 @@ Deno.serve(async (req) => {
     }
 
     // 4. Neues Abo erstellen (Fallback)
+    // 4. Neues Abo erstellen (Fallback)
     if (!isUpgradeOrReactivation) {
       const metadataObj = {
         fan_id: user.id,
@@ -145,6 +146,26 @@ Deno.serve(async (req) => {
       }
 
       stripeSubscription = await stripe.subscriptions.create(subscriptionParams);
+
+      // 🌟 NEU: Abo-ID sofort als Fallback in die Datenbank schreiben
+      const supabaseAdmin = createClient(
+          Deno.env.get("SUPABASE_URL") ?? "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      );
+
+      await supabaseAdmin.from("subscriptions").upsert({
+        fan_id: user.id,
+        creator_id: creatorId,
+        tier_id: tierId || null,
+        status: stripeSubscription.status === 'active' ? 'ACTIVE' : 'EXPIRED',
+        price: priceAmount / 100,
+        start_date: new Date(stripeSubscription.start_date * 1000).toISOString(),
+        end_date: new Date(stripeSubscription.current_period_end * 1000).toISOString(),
+        auto_renew: true,
+        stripe_subscription_id: stripeSubscription.id
+      }, {
+        onConflict: 'stripe_subscription_id'
+      });
     }
 
     // Response vorbereiten
