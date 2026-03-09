@@ -5,16 +5,20 @@ export default function Impressum() {
         <h1 className="text-3xl font-serif">Impressum</h1>
 
         <div className="space-y-4 text-muted-foreground">
-          <h2 className="text-xl font-medium text-foreground">Angaben gemäß § 5 TMG</h2>
+          <h2 className="text-xl font-medium text-foreground">Angaben gemäß § 5 DDG</h2>
           <p>
             OnlyYours UG (haftungsbeschränkt)<br />
-            Musterstraße 123<br />
-            12345 Berlin<br />
+            Hauptstr. 53<br />
+            78586 Deilingen<br />
             Deutschland
           </p>
 
           <h2 className="text-xl font-medium text-foreground">Vertreten durch</h2>
-          <p>Max Mustermann (Geschäftsführer)</p>
+          <p>
+            Konstantin Martin (Geschäftsführer & Inhaber)<br />
+            Hauptstr. 53<br />
+            78586 Deilingen
+          </p>
 
           <h2 className="text-xl font-medium text-foreground">Kontakt</h2>
           <p>
@@ -25,8 +29,9 @@ export default function Impressum() {
           <h2 className="text-xl font-medium text-foreground">Registereintrag</h2>
           <p>
             Eintragung im Handelsregister.<br />
-            Registergericht: Amtsgericht Berlin-Charlottenburg<br />
-            Registernummer: HRB 12345
+            Registergericht: Amtsgericht Stuttgart<br />
+            Registernummer: HRB 804226<br />
+            EUID: DEB2609.HRB804226
           </p>
 
           <h2 className="text-xl font-medium text-foreground">Umsatzsteuer-ID</h2>
@@ -35,16 +40,21 @@ export default function Impressum() {
             DE 123 456 789
           </p>
 
-          <h2 className="text-xl font-medium text-foreground">Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV</h2>
+          <h2 className="text-xl font-medium text-foreground">Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
           <p>
-            Max Mustermann<br />
-            Musterstraße 123<br />
-            12345 Berlin
+            Konstantin Martin<br />
+            Hauptstr. 53<br />
+            78586 Deilingen
           </p>
 
           <h2 className="text-xl font-medium text-foreground">Haftungsausschluss</h2>
           <p>
             Trotz sorgfältiger inhaltlicher Kontrolle übernehmen wir keine Haftung für die Inhalte externer Links. Für den Inhalt der verlinkten Seiten sind ausschließlich deren Betreiber verantwortlich.
+          </p>
+
+          <h2 className="text-xl font-medium text-foreground">Verbraucherstreitbeilegung/Universalschlichtungsstelle</h2>
+          <p>
+            Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.
           </p>
         </div>
       </div>

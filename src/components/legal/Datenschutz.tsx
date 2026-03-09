@@ -23,7 +23,8 @@ export default function Datenschutz() {
             <strong>Hinweis zur verantwortlichen Stelle:</strong><br />
             Die verantwortliche Stelle für die Datenverarbeitung auf dieser Website ist:<br />
             OnlyYours UG (haftungsbeschränkt)<br />
-            Musterstraße 123, 12345 Berlin<br />
+            Hauptstr. 53, 78586 Deilingen<br />
+            Inhaber: Konstantin Martin<br />
             E-Mail: support@onlyyours.app
           </p>
 
