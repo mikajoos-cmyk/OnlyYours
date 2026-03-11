@@ -4,7 +4,8 @@ import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Checkbox } from '../ui/checkbox';
-import { UploadIcon, Trash2Icon, VideoIcon, PencilIcon } from 'lucide-react';
+import { UploadIcon, Trash2Icon, VideoIcon, PencilIcon, ShieldAlertIcon } from 'lucide-react';
+import AppealModal from './AppealModal';
 import ProfilePostViewer, { PostData as ViewerPostData } from '../fan/ProfilePostViewer';
 import { useAuthStore } from '../../stores/authStore';
 import { postService, Post as ServicePostData } from '../../services/postService';
@@ -29,28 +30,30 @@ export default function ContentVault() {
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [selectedPostIndex, setSelectedPostIndex] = useState(0);
   const [vaultMode, setVaultMode] = useState<'posts' | 'products'>('posts');
+  const [isAppealModalOpen, setIsAppealModalOpen] = useState(false);
+  const [postToAppeal, setPostToAppeal] = useState<string | null>(null);
+
+  const fetchContent = async () => {
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const posts = await postService.getCreatorVaultPosts(user.id);
+      setAllPosts(posts || []);
+    } catch (err: any) {
+      setError('Fehler beim Laden der Inhalte.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
   useEffect(() => {
-    const fetchContent = async () => {
-      if (!user?.id) {
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-      try {
-        const posts = await postService.getCreatorVaultPosts(user.id);
-        setAllPosts(posts || []);
-      } catch (err: any) {
-        setError('Fehler beim Laden der Inhalte.');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchContent();
   }, [user?.id]);
 
@@ -73,7 +76,15 @@ export default function ContentVault() {
       case 'drafts':
         contentToShow = allPosts.filter(p =>
           !p.is_published &&
+          // @ts-ignore
+          p.moderation_status !== 'TAKEDOWN' &&
           (!p.scheduled_for || new Date(p.scheduled_for) <= now)
+        );
+        break;
+      case 'moderated':
+        contentToShow = allPosts.filter(p =>
+          // @ts-ignore
+          p.moderation_status === 'TAKEDOWN'
         );
         break;
       case 'all':
@@ -200,6 +211,9 @@ export default function ContentVault() {
                 <TabsTrigger value="drafts" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
                   Entwürfe
                 </TabsTrigger>
+                <TabsTrigger value="moderated" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex items-center gap-1.5">
+                  <ShieldAlertIcon className="w-4 h-4" /> Moderiert
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value={currentTab} className="mt-0">
@@ -233,6 +247,26 @@ export default function ContentVault() {
 
                         {post.mediaType === 'video' && (
                           <VideoIcon className="absolute top-2 left-10 w-5 h-5 text-white drop-shadow-lg" strokeWidth={2} />
+                        )}
+
+                        {/* @ts-ignore */}
+                        {post.moderation_status === 'TAKEDOWN' && (
+                          <div className="absolute inset-0 z-10 bg-black/70 flex flex-col items-center justify-center p-2 text-center" onClick={(e) => e.stopPropagation()}>
+                            <ShieldAlertIcon className="w-8 h-8 text-destructive mb-2" />
+                            <span className="text-[10px] font-bold text-white uppercase tracking-wider">Inhalt gesperrt</span>
+                            <Button 
+                              variant="link" 
+                              size="sm" 
+                              className="text-xs text-primary h-auto p-0 mt-1"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPostToAppeal(post.id);
+                                setIsAppealModalOpen(true);
+                              }}
+                            >
+                              Widerspruch einlegen
+                            </Button>
+                          </div>
                         )}
 
                         <div className="absolute top-2 left-2 z-10">
@@ -290,6 +324,14 @@ export default function ContentVault() {
           onClose={() => setIsViewerOpen(false)}
         />
       )}
+
+      <AppealModal 
+        isOpen={isAppealModalOpen}
+        onClose={() => setIsAppealModalOpen(false)}
+        postId={postToAppeal || ''}
+        creatorId={user?.id || ''}
+        onSuccess={fetchContent}
+      />
     </div>
   );
 }

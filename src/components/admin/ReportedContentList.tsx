@@ -7,6 +7,10 @@ import { Loader2Icon, Trash2Icon, CheckCircleIcon, ExternalLinkIcon, AlertTriang
 import { useToast } from '../../hooks/use-toast';
 import { adminService } from '../../services/adminService';
 
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
+import { Label } from '../ui/label';
+import { Textarea } from '../ui/textarea';
+
 interface Report {
     report_id: string;
     reason: string;
@@ -71,6 +75,43 @@ export default function ReportedContentList() {
         }
     };
 
+    const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+    const [resolutionReason, setResolutionReason] = useState('');
+    const [actionType, setActionType] = useState<'TAKEDOWN' | 'DISMISS' | null>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    const openActionDialog = (report: Report, type: 'TAKEDOWN' | 'DISMISS') => {
+        setSelectedReport(report);
+        setActionType(type);
+        setResolutionReason('');
+    };
+
+    const handleActionSubmit = async () => {
+        if (!selectedReport || !actionType || !resolutionReason.trim()) {
+            toast({ title: "Fehler", description: "Bitte gib eine Begründung an.", variant: "destructive" });
+            return;
+        }
+
+        setIsProcessing(true);
+        try {
+            if (actionType === 'TAKEDOWN') {
+                await adminService.takeDownPost(selectedReport.post_id, selectedReport.report_id, resolutionReason);
+                toast({ title: "Inhalt gesperrt", description: "Der Beitrag wurde entfernt und der Creator informiert." });
+                setReports(prev => prev.filter(r => r.post_id !== selectedReport.post_id));
+            } else {
+                await adminService.dismissReport(selectedReport.report_id, resolutionReason);
+                toast({ title: "Meldung abgelehnt", description: "Der Melder wurde über die Ablehnung informiert." });
+                setReports(prev => prev.filter(r => r.report_id !== selectedReport.report_id));
+            }
+            setSelectedReport(null);
+            setActionType(null);
+        } catch (err: any) {
+            toast({ title: "Fehler", description: err.message, variant: "destructive" });
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
     if (isLoading) return <div className="flex justify-center p-8"><Loader2Icon className="animate-spin w-8 h-8 text-secondary" /></div>;
 
     return (
@@ -92,11 +133,11 @@ export default function ReportedContentList() {
                                     </p>
                                 </div>
                                 <div className="flex gap-2">
-                                    <Button size="sm" variant="outline" onClick={() => handleDismissReport(report.report_id)} className="text-muted-foreground hover:text-foreground">
+                                    <Button size="sm" variant="outline" onClick={() => openActionDialog(report, 'DISMISS')} className="text-muted-foreground hover:text-foreground">
                                         <CheckCircleIcon className="w-4 h-4 mr-1" /> Ignorieren
                                     </Button>
-                                    <Button size="sm" variant="destructive" onClick={() => handleDeletePost(report.post_id, report.report_id)}>
-                                        <Trash2Icon className="w-4 h-4 mr-1" /> Löschen
+                                    <Button size="sm" variant="destructive" onClick={() => openActionDialog(report, 'TAKEDOWN')}>
+                                        <Trash2Icon className="w-4 h-4 mr-1" /> Sperren
                                     </Button>
                                 </div>
                             </div>
@@ -135,6 +176,41 @@ export default function ReportedContentList() {
                     </Card>
                 ))
             )}
+
+            {/* Moderations-Dialog */}
+            <Dialog open={!!selectedReport} onOpenChange={() => !isProcessing && setSelectedReport(null)}>
+                <DialogContent className="bg-card border-border text-foreground sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>{actionType === 'TAKEDOWN' ? 'Inhalt sperren' : 'Meldung ignorieren'}</DialogTitle>
+                        <DialogDescription>
+                            Bitte gib eine Begründung für diese Entscheidung an. Diese wird dem Melder {actionType === 'TAKEDOWN' ? 'und dem Creator' : ''} mitgeteilt (DSA-Pflicht).
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="reason">Begründung (Pflichtfeld)</Label>
+                            <Textarea
+                                id="reason"
+                                value={resolutionReason}
+                                onChange={(e) => setResolutionReason(e.target.value)}
+                                placeholder="z.B. Verstoß gegen Richtlinien bezüglich..."
+                                className="bg-background border-border min-h-[100px]"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setSelectedReport(null)} disabled={isProcessing} className="hover:bg-neutral text-foreground border-border">Abbrechen</Button>
+                        <Button
+                            onClick={handleActionSubmit}
+                            disabled={isProcessing || !resolutionReason.trim()}
+                            variant={actionType === 'TAKEDOWN' ? 'destructive' : 'default'}
+                        >
+                            {isProcessing && <Loader2Icon className="animate-spin h-4 w-4 mr-2" />}
+                            Entscheidung bestätigen
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

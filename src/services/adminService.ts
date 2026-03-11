@@ -56,16 +56,38 @@ export class AdminService {
         return data as AdminUser[];
     }
 
-    async deletePost(postId: string) {
-        const { error } = await supabase.from('posts').delete().eq('id', postId);
-        if (error) throw error;
+    async takeDownPost(postId: string, reportId: string, reason: string) {
+        // 1. Post auf TAKEDOWN setzen
+        const { error: postError } = await supabase
+            .from('posts')
+            .update({
+                // @ts-ignore
+                moderation_status: 'TAKEDOWN',
+                takedown_reason: reason
+            })
+            .eq('id', postId);
+        if (postError) throw postError;
+
+        // 2. Report auf RESOLVED_TAKEDOWN setzen
+        const { error: reportError } = await supabase
+            .from('content_reports')
+            .update({
+                // @ts-ignore
+                status: 'RESOLVED_TAKEDOWN',
+                resolution_reason: reason
+            })
+            .eq('id', reportId);
+        if (reportError) throw reportError;
     }
 
-    async dismissReport(reportId: string) {
+    async dismissReport(reportId: string, reason: string) {
         const { error } = await supabase
             .from('content_reports')
-            // @ts-ignore
-            .update({ status: 'DISMISSED' })
+            .update({
+                // @ts-ignore
+                status: 'RESOLVED_DISMISSED',
+                resolution_reason: reason
+            })
             .eq('id', reportId);
         if (error) throw error;
     }
