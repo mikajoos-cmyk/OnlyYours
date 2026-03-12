@@ -21,33 +21,54 @@ CREATE TABLE IF NOT EXISTS "public"."content_reports" (
     "reason" text NOT NULL,
     "description" text,
     "status" text DEFAULT 'PENDING',
+    "resolution_reason" text,
     "created_at" timestamptz DEFAULT now()
 );
+
+-- 3b. Ensure columns exist if table was already created
+ALTER TABLE "public"."content_reports" ADD COLUMN IF NOT EXISTS "resolution_reason" text;
+ALTER TABLE "public"."posts" ADD COLUMN IF NOT EXISTS "moderation_status" text DEFAULT 'ACTIVE';
+ALTER TABLE "public"."posts" ADD COLUMN IF NOT EXISTS "takedown_reason" text;
 
 -- Enable RLS
 ALTER TABLE "public"."content_reports" ENABLE ROW LEVEL SECURITY;
 
 -- Policies for content_reports
 -- Reporters can insert
-CREATE POLICY "Users can create reports" ON "public"."content_reports"
-    FOR INSERT TO authenticated
-    WITH CHECK (auth.uid() = reporter_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can create reports' AND tablename = 'content_reports') THEN
+        CREATE POLICY "Users can create reports" ON "public"."content_reports"
+            FOR INSERT TO authenticated
+            WITH CHECK (auth.uid() = reporter_id);
+    END IF;
+END $$;
 
 -- Admins can view all reports (assuming we check role in app or via another policy)
 -- Ideally, we'd have a function is_admin() but for now we'll allow authenticated to view their own or admins to view all.
 -- Simpler approach for MVP: Allow admins to view all.
-CREATE POLICY "Admins can view all reports" ON "public"."content_reports"
-    FOR SELECT TO authenticated
-    USING (
-        (SELECT role FROM public.users WHERE id = auth.uid()) = 'ADMIN'
-    );
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins can view all reports' AND tablename = 'content_reports') THEN
+        CREATE POLICY "Admins can view all reports" ON "public"."content_reports"
+            FOR SELECT TO authenticated
+            USING (
+                (SELECT role FROM public.users WHERE id = auth.uid()) = 'ADMIN'
+            );
+    END IF;
+END $$;
     
 -- Admins can update reports (e.g. status)
-CREATE POLICY "Admins can update reports" ON "public"."content_reports"
-    FOR UPDATE TO authenticated
-    USING (
-        (SELECT role FROM public.users WHERE id = auth.uid()) = 'ADMIN'
-    );
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Admins can update reports' AND tablename = 'content_reports') THEN
+        CREATE POLICY "Admins can update reports" ON "public"."content_reports"
+            FOR UPDATE TO authenticated
+            USING (
+                (SELECT role FROM public.users WHERE id = auth.uid()) = 'ADMIN'
+            );
+    END IF;
+END $$;
 
 -- 4. RPC: get_admin_stats
 CREATE OR REPLACE FUNCTION get_admin_stats()
@@ -102,6 +123,7 @@ END;
 $$;
 
 -- 5. RPC: get_admin_reports
+DROP FUNCTION IF EXISTS get_admin_reports();
 CREATE OR REPLACE FUNCTION get_admin_reports()
 RETURNS TABLE (
     report_id uuid,
@@ -112,7 +134,8 @@ RETURNS TABLE (
     reporter_name text,
     post_id uuid,
     post_caption text,
-    post_media_url text
+    post_media_url text,
+    post_media_type text
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -136,10 +159,32 @@ BEGIN
         u.display_name as reporter_name,
         p.id as post_id,
         p.caption as post_caption,
-        p.media_url as post_media_url
+        p.media_url as post_media_url,
+        p.media_type::text as post_media_type
     FROM public.content_reports cr
     LEFT JOIN public.users u ON cr.reporter_id = u.id
     LEFT JOIN public.posts p ON cr.post_id = p.id
     ORDER BY cr.created_at DESC;
 END;
 $$;
+
+-- 6. Trigger for Moderation Emails
+-- Note: This requires the HTTP extension to be enabled in Supabase and the Edge Function to be deployed.
+-- The actual webhook is usually configured in the Supabase Dashboard, 
+-- but we can document the intent here.
+
+/*
+-- SQL to enable the webhook manually if dashboard is not used:
+-- (Replace <PROJECT_ID> and <SERVICE_ROLE_KEY>)
+
+CREATE OR REPLACE TRIGGER on_report_update
+AFTER UPDATE ON public.content_reports
+FOR EACH ROW
+EXECUTE FUNCTION supabase_functions.http_request(
+  'https://<PROJECT_ID>.supabase.co/functions/v1/send-moderation-email',
+  'POST',
+  '{"Content-Type":"application/json", "Authorization":"Bearer <SERVICE_ROLE_KEY>"}',
+  '{}',
+  '1000'
+);
+*/

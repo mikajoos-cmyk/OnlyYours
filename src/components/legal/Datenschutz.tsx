@@ -35,6 +35,11 @@ export default function Datenschutz() {
           <p>
             <strong>Zahlungsverkehr:</strong> Zur Abwicklung von Zahlungen (Abonnements, Trinkgelder) nutzen wir den Zahlungsdienstleister Stripe. Ihre Zahlungsdaten werden direkt an Stripe übermittelt und nicht auf unseren Servern gespeichert.
           </p>
+
+          <h2 className="text-xl font-medium text-foreground">5. Identitätsprüfung (DSA-Compliance)</h2>
+          <p>
+            <strong>Stripe Identity:</strong> Um die Anforderungen des Digital Services Act (DSA) zu erfüllen und den Jugendschutz zu gewährleisten, sind Creator verpflichtet, ihre Identität zu verifizieren. Hierzu nutzen wir den Dienst <strong>Stripe Identity</strong>. Dabei werden Ihr Lichtbildausweis und ein Selfie direkt an Stripe übermittelt. Wir erhalten lediglich das Ergebnis der Prüfung sowie Ihre Stammdaten (Name, Adresse, Geburtsdatum) zur gesetzlich vorgeschriebenen Dokumentation. Eine Speicherung Ihrer Ausweiskopien auf unseren Servern findet nicht statt.
+          </p>
         </div>
       </div>
     </div>

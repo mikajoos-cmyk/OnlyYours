@@ -251,13 +251,14 @@ export default function ContentVault() {
 
                         {/* @ts-ignore */}
                         {post.moderation_status === 'TAKEDOWN' && (
-                          <div className="absolute inset-0 z-10 bg-black/70 flex flex-col items-center justify-center p-2 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="absolute inset-0 z-10 bg-black/80 flex flex-col items-center justify-center p-4 text-center" onClick={(e) => e.stopPropagation()}>
                             <ShieldAlertIcon className="w-8 h-8 text-destructive mb-2" />
-                            <span className="text-[10px] font-bold text-white uppercase tracking-wider">Inhalt gesperrt</span>
+                            <p className="text-white text-sm font-bold mb-1">Inhalt gesperrt</p>
+                            {/* @ts-ignore */}
+                            <p className="text-gray-300 text-xs mb-3">{post.takedown_reason || 'Verstoß gegen Richtlinien'}</p>
                             <Button 
-                              variant="link" 
                               size="sm" 
-                              className="text-xs text-primary h-auto p-0 mt-1"
+                              className="bg-primary text-primary-foreground hover:bg-primary/90"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setPostToAppeal(post.id);

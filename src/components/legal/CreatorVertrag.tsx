@@ -128,6 +128,7 @@ export default function CreatorVertrag() {
                         <ol className="list-decimal pl-5 space-y-2">
                             <li>Einnahmen werden dem Creator-Konto gutgeschrieben.</li>
                             <li>Auszahlungen erfolgen regelmäßig, in der Regel innerhalb von 2 Werktagen.</li>
+                            <li>Zwingende Voraussetzung für jede Auszahlung ist eine erfolgreich abgeschlossene Identitätsprüfung gemäß §4 Abs. 1.</li>
                             <li>Die Plattform kann:
                                 <ul className="list-disc pl-5 mt-1">
                                     <li>Mindestbeträge</li>

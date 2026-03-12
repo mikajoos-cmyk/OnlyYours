@@ -19,11 +19,19 @@ export interface AdminUser {
     role: 'FAN' | 'CREATOR' | 'ADMIN';
     country: string | null;
     birthdate: string | null;
-    is_banned: boolean; // <-- NEU
+    is_banned: boolean;
     created_at: string;
     updated_at: string;
+    last_seen: string | null;
     total_earnings: number;
     total_spent: number;
+    identity_verification_status?: 'none' | 'pending' | 'verified' | 'rejected';
+    external_verification_id?: string | null;
+    real_name?: string | null;
+    address_street?: string | null;
+    address_city?: string | null;
+    address_zip?: string | null;
+    address_country?: string | null;
 }
 
 export interface UserFilterOptions {

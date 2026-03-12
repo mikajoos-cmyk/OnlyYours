@@ -1,15 +1,18 @@
 // src/components/admin/ReportedContentList.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Loader2Icon, Trash2Icon, CheckCircleIcon, ExternalLinkIcon, AlertTriangleIcon } from 'lucide-react';
+import { Loader2Icon, Trash2Icon, CheckCircleIcon, ExternalLinkIcon, AlertTriangleIcon, FilterIcon } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { adminService } from '../../services/adminService';
+import { storageService } from '../../services/storageService';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
+import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
+import { Badge } from '../ui/badge';
 
 interface Report {
     report_id: string;
@@ -21,12 +24,21 @@ interface Report {
     post_id: string;
     post_caption: string;
     post_media_url: string;
+    post_media_type: string;
 }
 
 export default function ReportedContentList() {
     const [reports, setReports] = useState<Report[]>([]);
+    const [resolvedMediaUrls, setResolvedMediaUrls] = useState<Record<string, string>>({});
     const [isLoading, setIsLoading] = useState(true);
+    const [filterStatus, setFilterStatus] = useState<string>('PENDING');
     const { toast } = useToast();
+
+    // Gefilterte Berichte
+    const filteredReports = useMemo(() => {
+        if (filterStatus === 'ALL') return reports;
+        return reports.filter(r => r.status === filterStatus);
+    }, [reports, filterStatus]);
 
     // Reports laden (via RPC, da adminService.getReports() im Interface nicht explizit definiert war)
     const fetchReports = async () => {
@@ -34,7 +46,18 @@ export default function ReportedContentList() {
         try {
             const { data, error } = await supabase.rpc('get_admin_reports');
             if (error) throw error;
-            setReports(data as Report[]);
+            const reportData = data as Report[];
+            setReports(reportData);
+
+            // Medien-URLs auflösen (für private Buckets)
+            const urlMap: Record<string, string> = {};
+            await Promise.all(reportData.map(async (report) => {
+                if (report.post_media_url) {
+                    const resolved = await storageService.resolveImageUrl(report.post_media_url);
+                    urlMap[report.report_id] = resolved;
+                }
+            }));
+            setResolvedMediaUrls(urlMap);
         } catch (err: any) {
             console.error("Error fetching reports:", err);
             toast({ title: "Fehler", description: "Meldungen konnten nicht geladen werden.", variant: "destructive" });
@@ -80,6 +103,19 @@ export default function ReportedContentList() {
     const [actionType, setActionType] = useState<'TAKEDOWN' | 'DISMISS' | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
+    const getStatusBadge = (status: string) => {
+        switch (status) {
+            case 'PENDING':
+                return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">Ausstehend</Badge>;
+            case 'RESOLVED_TAKEDOWN':
+                return <Badge variant="destructive">Gesperrt</Badge>;
+            case 'RESOLVED_DISMISSED':
+                return <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">Abgelehnt</Badge>;
+            default:
+                return <Badge variant="secondary">{status}</Badge>;
+        }
+    };
+
     const openActionDialog = (report: Report, type: 'TAKEDOWN' | 'DISMISS') => {
         setSelectedReport(report);
         setActionType(type);
@@ -97,11 +133,21 @@ export default function ReportedContentList() {
             if (actionType === 'TAKEDOWN') {
                 await adminService.takeDownPost(selectedReport.post_id, selectedReport.report_id, resolutionReason);
                 toast({ title: "Inhalt gesperrt", description: "Der Beitrag wurde entfernt und der Creator informiert." });
-                setReports(prev => prev.filter(r => r.post_id !== selectedReport.post_id));
+                // Status lokal aktualisieren statt zu entfernen, damit es im Filter "Gesperrt" erscheint
+                setReports(prev => prev.map(r => 
+                    r.report_id === selectedReport.report_id 
+                    ? { ...r, status: 'RESOLVED_TAKEDOWN' } 
+                    : r
+                ));
             } else {
                 await adminService.dismissReport(selectedReport.report_id, resolutionReason);
                 toast({ title: "Meldung abgelehnt", description: "Der Melder wurde über die Ablehnung informiert." });
-                setReports(prev => prev.filter(r => r.report_id !== selectedReport.report_id));
+                // Status lokal aktualisieren
+                setReports(prev => prev.map(r => 
+                    r.report_id === selectedReport.report_id 
+                    ? { ...r, status: 'RESOLVED_DISMISSED' } 
+                    : r
+                ));
             }
             setSelectedReport(null);
             setActionType(null);
@@ -116,40 +162,64 @@ export default function ReportedContentList() {
 
     return (
         <div className="space-y-4">
-            {reports.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">Keine offenen Meldungen.</div>
+            <div className="flex items-center justify-between mb-6">
+                <Tabs value={filterStatus} onValueChange={setFilterStatus} className="w-full">
+                    <div className="flex items-center justify-between bg-neutral/10 p-1 rounded-lg">
+                        <TabsList className="bg-transparent border-none">
+                            <TabsTrigger value="PENDING" className="data-[state=active]:bg-background">Offen</TabsTrigger>
+                            <TabsTrigger value="RESOLVED_TAKEDOWN" className="data-[state=active]:bg-background">Gesperrt</TabsTrigger>
+                            <TabsTrigger value="RESOLVED_DISMISSED" className="data-[state=active]:bg-background">Abgelehnt</TabsTrigger>
+                            <TabsTrigger value="ALL" className="data-[state=active]:bg-background">Alle</TabsTrigger>
+                        </TabsList>
+                        <div className="px-3 flex items-center gap-2 text-xs text-muted-foreground">
+                            <FilterIcon className="w-3 h-3" />
+                            {filteredReports.length} Meldungen
+                        </div>
+                    </div>
+                </Tabs>
+            </div>
+
+            {filteredReports.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground bg-neutral/5 rounded-lg border border-dashed border-border">
+                    Keine Meldungen in dieser Kategorie gefunden.
+                </div>
             ) : (
-                reports.map((report) => (
+                filteredReports.map((report) => (
                     <Card key={report.report_id} className="bg-card border-border overflow-hidden">
                         <CardHeader className="pb-2 bg-neutral/10">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <CardTitle className="text-base flex items-center gap-2">
-                                        <AlertTriangleIcon className="w-4 h-4 text-destructive" />
-                                        {report.reason}
-                                    </CardTitle>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <CardTitle className="text-base flex items-center gap-2">
+                                            <AlertTriangleIcon className="w-4 h-4 text-destructive" />
+                                            {report.reason}
+                                        </CardTitle>
+                                        {getStatusBadge(report.status)}
+                                    </div>
                                     <p className="text-xs text-muted-foreground mt-1">
                                         Gemeldet von <span className="font-medium text-foreground">{report.reporter_name || 'Unbekannt'}</span> am {new Date(report.created_at).toLocaleDateString()}
                                     </p>
                                 </div>
-                                <div className="flex gap-2">
-                                    <Button size="sm" variant="outline" onClick={() => openActionDialog(report, 'DISMISS')} className="text-muted-foreground hover:text-foreground">
-                                        <CheckCircleIcon className="w-4 h-4 mr-1" /> Ignorieren
-                                    </Button>
-                                    <Button size="sm" variant="destructive" onClick={() => openActionDialog(report, 'TAKEDOWN')}>
-                                        <Trash2Icon className="w-4 h-4 mr-1" /> Sperren
-                                    </Button>
-                                </div>
+                                {report.status === 'PENDING' && (
+                                    <div className="flex gap-2">
+                                        <Button size="sm" variant="outline" onClick={() => openActionDialog(report, 'DISMISS')} className="text-muted-foreground hover:text-foreground">
+                                            <CheckCircleIcon className="w-4 h-4 mr-1" /> Ignorieren
+                                        </Button>
+                                        <Button size="sm" variant="destructive" onClick={() => openActionDialog(report, 'TAKEDOWN')}>
+                                            <Trash2Icon className="w-4 h-4 mr-1" /> Sperren
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                         </CardHeader>
                         <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4">
                             {/* Medien-Vorschau */}
                             <div className="aspect-square bg-neutral rounded-md overflow-hidden relative group">
                                 {report.post_media_url ? (
-                                    report.post_media_url.includes('.mp4') || report.post_media_url.includes('.mov') ? (
-                                        <video src={report.post_media_url} className="w-full h-full object-cover" controls />
+                                    report.post_media_type?.toUpperCase() === 'VIDEO' || report.post_media_url.includes('.mp4') || report.post_media_url.includes('.mov') ? (
+                                        <video src={resolvedMediaUrls[report.report_id] || report.post_media_url} className="w-full h-full object-cover" controls />
                                     ) : (
-                                        <img src={report.post_media_url} alt="Reported content" className="w-full h-full object-cover" />
+                                        <img src={resolvedMediaUrls[report.report_id] || report.post_media_url} alt="Reported content" className="w-full h-full object-cover" />
                                     )
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">Kein Medium</div>

@@ -29,6 +29,14 @@ export interface AuthUser {
   stripe_account_id?: string;
   stripe_onboarding_complete?: boolean;
   is_banned?: boolean;
+  identity_verification_status?: 'none' | 'pending' | 'verified' | 'rejected';
+  external_verification_id?: string | null;
+  real_name?: string | null;
+  address_street?: string | null;
+  address_city?: string | null;
+  address_zip?: string | null;
+  address_country?: string | null;
+  birthdate?: string | null;
 }
 
 export class AuthService {
@@ -263,6 +271,14 @@ export class AuthService {
       live_stream_requires_subscription: userData.live_stream_requires_subscription,
       stripe_account_id: userData.stripe_account_id,
       stripe_onboarding_complete: userData.stripe_onboarding_complete,
+      identity_verification_status: userData.identity_verification_status,
+      external_verification_id: userData.external_verification_id,
+      real_name: userData.real_name,
+      address_street: userData.address_street,
+      address_city: userData.address_city,
+      address_zip: userData.address_zip,
+      address_country: userData.address_country,
+      birthdate: userData.birthdate,
       // @ts-ignore
       is_banned: userData.is_banned
     };

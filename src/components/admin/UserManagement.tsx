@@ -160,6 +160,7 @@ export default function UserManagement() {
                 <th className="p-3 font-medium">Status</th>
                 {groupBy !== 'age' && <th className="p-3 font-medium hidden md:table-cell">Alter</th>}
                 {groupBy !== 'country' && <th className="p-3 font-medium hidden md:table-cell">Land</th>}
+                <th className="p-3 font-medium hidden sm:table-cell">Identität</th>
                 <th className="p-3 font-medium hidden sm:table-cell">Rolle</th>
                 <th className="p-3 font-medium hidden lg:table-cell">Beigetreten</th>
                 <th className="p-3 font-medium text-right">Einnahmen</th>
@@ -169,62 +170,114 @@ export default function UserManagement() {
     );
 
     const UserRow = ({ user }: { user: AdminUser }) => {
+        const [isExpanded, setIsExpanded] = useState(false);
         // --- AKTUALISIERT: Nutzt jetzt last_seen ---
         const active = isUserActive(user.last_seen);
         const age = calculateAge(user.birthdate);
 
         const statusText = active ? 'Aktiv' : 'Inaktiv';
-
-        // Optional: Falls du sehen willst, WANN sie zuletzt da waren, als Tooltip
         const lastSeenDate = user.last_seen ? new Date(user.last_seen).toLocaleString() : 'Nie';
+        const identityStatus = user.identity_verification_status || 'none';
 
         return (
-            <tr className={cn("border-b border-border/50 last:border-0 transition-colors", user.is_banned ? "bg-destructive/10 hover:bg-destructive/20" : "hover:bg-neutral/20")}>
-                <td className="p-3 pl-6 flex items-center gap-3">
-                    <Avatar className="w-8 h-8">
-                        <AvatarFallback>{user.display_name ? user.display_name.charAt(0) : '?'}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                        <div className="font-medium text-foreground flex items-center gap-2">
-                            {user.display_name}
-                            {user.is_banned && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">BANNED</Badge>}
+            <>
+                <tr 
+                    className={cn(
+                        "border-b border-border/50 last:border-0 transition-colors cursor-pointer", 
+                        user.is_banned ? "bg-destructive/10 hover:bg-destructive/20" : "hover:bg-neutral/20",
+                        isExpanded && "bg-neutral/10"
+                    )}
+                    onClick={() => setIsExpanded(!isExpanded)}
+                >
+                    <td className="p-3 pl-6 flex items-center gap-3">
+                        <Avatar className="w-8 h-8">
+                            <AvatarFallback>{user.display_name ? user.display_name.charAt(0) : '?'}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                            <div className="font-medium text-foreground flex items-center gap-2">
+                                {user.display_name}
+                                {user.is_banned && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">BANNED</Badge>}
+                            </div>
+                            <div className="text-xs text-muted-foreground">@{user.username}</div>
                         </div>
-                        <div className="text-xs text-muted-foreground">@{user.username}</div>
-                    </div>
-                </td>
-                <td className="p-3">
-                    <div className="flex items-center gap-1.5" title={`Zuletzt gesehen: ${lastSeenDate}`}>
-                        <div className={cn("w-2 h-2 rounded-full", active ? "bg-success" : "bg-muted-foreground/30")} />
-                        <span className={cn("text-xs", active ? "text-foreground" : "text-muted-foreground")}>
-                            {statusText}
-                        </span>
-                    </div>
-                </td>
-                {groupBy !== 'age' && <td className="p-3 hidden md:table-cell text-muted-foreground">{age > 0 ? age : '-'}</td>}
-                {groupBy !== 'country' && <td className="p-3 hidden md:table-cell text-muted-foreground">{user.country || '-'}</td>}
-                <td className="p-3 hidden sm:table-cell">
-                    <Badge variant={user.role === 'CREATOR' ? 'secondary' : user.role === 'ADMIN' ? 'default' : 'outline'} className="text-[10px] px-2 py-0">
-                        {user.role}
-                    </Badge>
-                </td>
-                <td className="p-3 text-muted-foreground hidden lg:table-cell text-xs">
-                    {new Date(user.created_at).toLocaleDateString()}
-                </td>
-                <td className="p-3 text-right font-mono text-success">
-                    {user.total_earnings > 0 ? formatCurrency(user.total_earnings) : '-'}
-                </td>
-                <td className="p-3 text-right pr-6">
-                    <Button
-                        variant={user.is_banned ? "outline" : "ghost"}
-                        size="sm"
-                        onClick={() => handleBanClick(user)}
-                        className={cn(user.is_banned ? "text-foreground border-border hover:bg-neutral" : "text-destructive hover:text-destructive hover:bg-destructive/10")}
-                    >
-                        {user.is_banned ? <CheckCircleIcon className="w-4 h-4 mr-1" /> : <BanIcon className="w-4 h-4 mr-1" />}
-                        {user.is_banned ? "Freigeben" : "Sperren"}
-                    </Button>
-                </td>
-            </tr>
+                    </td>
+                    <td className="p-3">
+                        <div className="flex items-center gap-1.5" title={`Zuletzt gesehen: ${lastSeenDate}`}>
+                            <div className={cn("w-2 h-2 rounded-full", active ? "bg-success" : "bg-muted-foreground/30")} />
+                            <span className={cn("text-xs", active ? "text-foreground" : "text-muted-foreground")}>
+                                {statusText}
+                            </span>
+                        </div>
+                    </td>
+                    {groupBy !== 'age' && <td className="p-3 hidden md:table-cell text-muted-foreground">{age > 0 ? age : '-'}</td>}
+                    {groupBy !== 'country' && <td className="p-3 hidden md:table-cell text-muted-foreground">{user.country || '-'}</td>}
+                    
+                    <td className="p-3 hidden sm:table-cell">
+                        {user.role === 'CREATOR' && (
+                            <Badge 
+                                variant={identityStatus === 'verified' ? 'success' : identityStatus === 'rejected' ? 'destructive' : 'outline'}
+                                className="text-[10px] px-2 py-0"
+                            >
+                                {identityStatus}
+                            </Badge>
+                        )}
+                    </td>
+
+                    <td className="p-3 hidden sm:table-cell">
+                        <Badge variant={user.role === 'CREATOR' ? 'secondary' : user.role === 'ADMIN' ? 'default' : 'outline'} className="text-[10px] px-2 py-0">
+                            {user.role}
+                        </Badge>
+                    </td>
+                    <td className="p-3 text-muted-foreground hidden lg:table-cell text-xs">
+                        {new Date(user.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="p-3 text-right font-mono text-success">
+                        {user.total_earnings > 0 ? formatCurrency(user.total_earnings) : '-'}
+                    </td>
+                    <td className="p-3 text-right pr-6">
+                        <Button
+                            variant={user.is_banned ? "outline" : "ghost"}
+                            size="sm"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleBanClick(user);
+                            }}
+                            className={cn(user.is_banned ? "text-foreground border-border hover:bg-neutral" : "text-destructive hover:text-destructive hover:bg-destructive/10")}
+                        >
+                            {user.is_banned ? <CheckCircleIcon className="w-4 h-4 mr-1" /> : <BanIcon className="w-4 h-4 mr-1" />}
+                            {user.is_banned ? "Freigeben" : "Sperren"}
+                        </Button>
+                    </td>
+                </tr>
+                {isExpanded && user.role === 'CREATOR' && (
+                    <tr className="bg-muted/5">
+                        <td colSpan={10} className="p-6 border-b border-border">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                                <div className="space-y-1">
+                                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Echter Name</p>
+                                    <p className="text-sm font-medium">{user.real_name || 'Nicht verifiziert'}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Adresse</p>
+                                    <p className="text-sm leading-relaxed">
+                                        {user.address_street || '-'}<br />
+                                        {user.address_zip} {user.address_city}<br />
+                                        {user.address_country}
+                                    </p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Geburtsdatum</p>
+                                    <p className="text-sm">{user.birthdate || '-'}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Externe ID (Stripe)</p>
+                                    <p className="text-[10px] font-mono break-all text-muted-foreground">{user.external_verification_id || '-'}</p>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                )}
+            </>
         );
     };
 
