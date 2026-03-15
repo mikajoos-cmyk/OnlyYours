@@ -76,12 +76,12 @@ export class AdminService {
             .eq('id', postId);
         if (postError) throw postError;
 
-        // 2. Report auf RESOLVED_TAKEDOWN setzen
+        // 2. Report auf resolved setzen (user_reports nutzt 'resolved')
         const { error: reportError } = await supabase
-            .from('content_reports')
+            .from('user_reports')
             .update({
                 // @ts-ignore
-                status: 'RESOLVED_TAKEDOWN',
+                status: 'resolved',
                 resolution_reason: reason
             })
             .eq('id', reportId);
@@ -90,24 +90,96 @@ export class AdminService {
 
     async dismissReport(reportId: string, reason: string) {
         const { error } = await supabase
-            .from('content_reports')
+            .from('user_reports')
             .update({
                 // @ts-ignore
-                status: 'RESOLVED_DISMISSED',
+                status: 'dismissed',
                 resolution_reason: reason
             })
             .eq('id', reportId);
         if (error) throw error;
     }
 
+    async suspendUser(userId: string, reportId: string, reason: string) {
+        // 1. User auf is_suspended setzen
+        const { error: userError } = await supabase
+            .from('users')
+            .update({
+                // @ts-ignore
+                is_suspended: true
+            })
+            .eq('id', userId);
+        if (userError) throw userError;
+
+        // 2. Report auf resolved setzen
+        const { error: reportError } = await supabase
+            .from('user_reports')
+            .update({
+                // @ts-ignore
+                status: 'resolved',
+                resolution_reason: reason
+            })
+            .eq('id', reportId);
+        if (reportError) throw reportError;
+    }
+
     // NEU: Ban Toggle
     async toggleUserBan(userId: string, banStatus: boolean) {
-        const { error } = await supabase.rpc('toggle_user_ban', {
-            user_id_input: userId,
-            ban_status: banStatus
-        });
-        if (error) throw error;
+    const { error } = await supabase.rpc('toggle_user_ban', {
+      user_id_input: userId,
+      ban_status: banStatus
+    });
+    if (error) throw error;
+  }
+
+  async getReportedMessageContext(messageId: string, conversationId: string) {
+    // 1. Gemeldete Nachricht finden
+    const { data: targetMessage, error: msgError } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('id', messageId)
+      .single();
+
+    if (msgError || !targetMessage) throw new Error('Nachricht nicht gefunden');
+
+    // 2. Genau 5 Nachrichten DAVOR holen
+    const { data: messagesBefore } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .lt('created_at', targetMessage.created_at)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    // 3. Genau 5 Nachrichten DANACH holen
+    const { data: messagesAfter } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .gt('created_at', targetMessage.created_at)
+      .order('created_at', { ascending: true })
+      .limit(5);
+
+    // 4. Array in chronologischer Reihenfolge zusammenbauen
+    const allMessages = [
+      ...(messagesBefore?.reverse() || []),
+      targetMessage,
+      ...(messagesAfter || [])
+    ];
+
+    // 5. DSGVO-Audit-Log schreiben (WICHTIG!)
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData.user) {
+      await supabase.from('admin_audit_logs').insert({
+        admin_user_id: userData.user.id,
+        action: 'read_chat_context',
+        entity_id: messageId,
+        details: { reason: 'Prüfung einer Meldung gem. DSA/DSGVO' }
+      });
     }
+
+    return allMessages;
+  }
 }
 
 export const adminService = new AdminService();

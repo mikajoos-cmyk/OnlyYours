@@ -29,6 +29,8 @@ export interface AuthUser {
   stripe_account_id?: string;
   stripe_onboarding_complete?: boolean;
   is_banned?: boolean;
+  is_suspended?: boolean;
+  has_pending_appeal?: boolean;
   identity_verification_status?: 'none' | 'pending' | 'verified' | 'rejected';
   external_verification_id?: string | null;
   real_name?: string | null;
@@ -280,7 +282,9 @@ export class AuthService {
       address_country: userData.address_country,
       birthdate: userData.birthdate,
       // @ts-ignore
-      is_banned: userData.is_banned
+      is_banned: userData.is_banned,
+      is_suspended: userData.is_suspended,
+      has_pending_appeal: userData.has_pending_appeal
     };
   }
 }

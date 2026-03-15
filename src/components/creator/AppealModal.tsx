@@ -1,84 +1,117 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
+import { supabase } from '../../lib/supabase';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { useToast } from '../../hooks/use-toast';
-import { supabase } from '../../lib/supabase';
-import { Loader2Icon } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 interface AppealModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    postId: string;
-    creatorId: string;
-    onSuccess?: () => void;
+  userId: string;
+  isOpen?: boolean;
+  onClose?: () => void;
+  postId?: string;
+  onSuccess?: () => void;
 }
 
-export default function AppealModal({ isOpen, onClose, postId, creatorId, onSuccess }: AppealModalProps) {
-    const { toast } = useToast();
-    const [reason, setReason] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
+export function AppealModal({ userId, isOpen: propIsOpen, onClose, postId, onSuccess }: AppealModalProps) {
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isOpen = propIsOpen !== undefined ? propIsOpen : internalIsOpen;
+  const setIsOpen = (val: boolean) => {
+    if (onClose && !val) onClose();
+    setInternalIsOpen(val);
+  };
+  
+  const [description, setDescription] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
 
-    const handleSubmit = async () => {
-        if (!reason.trim()) {
-            toast({ title: "Fehler", description: "Bitte gib eine Begründung für deinen Widerspruch an.", variant: "destructive" });
-            return;
-        }
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      if (postId) {
+        // Widerspruch für einen spezifischen Post
+        const { error } = await supabase
+          .from('content_reports')
+          .update({
+            appeal_status: 'pending',
+            appeal_description: description,
+            appealed_at: new Date().toISOString()
+          })
+          .eq('post_id', postId)
+          .eq('status', 'RESOLVED_TAKEDOWN')
+          .is('appeal_status', null);
+        
+        if (error) throw error;
+      } else {
+        // Widerspruch für Account-Sperrung
+        const { error } = await supabase
+          .from('user_reports')
+          .update({
+            appeal_status: 'pending',
+            appeal_description: description,
+            appealed_at: new Date().toISOString()
+          })
+          .eq('reported_id', userId)
+          .eq('status', 'resolved')
+          .is('appeal_status', null);
 
-        setIsSubmitting(true);
-        try {
-            const { error } = await supabase
-                .from('moderation_appeals')
-                .insert({
-                    post_id: postId,
-                    creator_id: creatorId,
-                    appeal_reason: reason,
-                    status: 'PENDING'
-                });
+        if (error) throw error;
+        await supabase.from('profiles').update({ has_pending_appeal: true }).eq('id', userId);
+      }
 
-            if (error) throw error;
+      toast({ title: 'Widerspruch eingereicht' });
+      setIsOpen(false);
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        window.location.reload();
+      }
+    } catch (error) {
+      toast({ title: 'Fehler', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-            toast({ title: "Widerspruch eingereicht", description: "Wir werden deinen Fall erneut prüfen." });
-            onSuccess?.();
-            onClose();
-        } catch (error: any) {
-            console.error("Appeal error:", error);
-            toast({ title: "Fehler", description: "Widerspruch konnte nicht gesendet werden.", variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+  const content = (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>{postId ? 'Widerspruch gegen Inhalts-Sperrung' : 'Widerspruch zur Account-Sperrung'}</DialogTitle>
+      </DialogHeader>
+      <div className="py-4">
+        <p className="text-sm text-gray-500 mb-4">
+          Bitte erkläre ausführlich, warum die Entscheidung aus deiner Sicht ungerechtfertigt ist. 
+          Unser Team wird den Fall daraufhin erneut prüfen.
+        </p>
+        <Textarea
+          placeholder="Deine Begründung..."
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={5}
+        />
+      </div>
+      <Button onClick={handleSubmit} disabled={!description || isSubmitting} className="w-full">
+        {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        Absenden
+      </Button>
+    </DialogContent>
+  );
 
+  if (propIsOpen !== undefined) {
     return (
-        <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="bg-card border-border text-foreground sm:max-w-[425px]">
-                <DialogHeader>
-                    <DialogTitle>Widerspruch einlegen</DialogTitle>
-                    <DialogDescription>
-                        Warum sollte dein Beitrag wieder freigeschaltet werden? Bitte erkläre uns, warum kein Richtlinienverstoß vorliegt.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                        <Label htmlFor="appeal-reason">Deine Begründung</Label>
-                        <Textarea
-                            id="appeal-reason"
-                            value={reason}
-                            onChange={(e) => setReason(e.target.value)}
-                            placeholder="Ich bin der Meinung, dass..."
-                            className="bg-background border-border min-h-[120px]"
-                        />
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={onClose} className="hover:bg-neutral text-foreground border-border">Abbrechen</Button>
-                    <Button onClick={handleSubmit} disabled={isSubmitting} className="bg-primary text-primary-foreground">
-                        {isSubmitting ? <Loader2Icon className="animate-spin h-4 w-4 mr-2" /> : null}
-                        Widerspruch senden
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+      <Dialog open={isOpen} onOpenChange={(val) => !val && onClose?.()}>
+        {content}
+      </Dialog>
     );
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button variant="default" className="w-full">Widerspruch einlegen</Button>
+      </DialogTrigger>
+      {content}
+    </Dialog>
+  );
 }

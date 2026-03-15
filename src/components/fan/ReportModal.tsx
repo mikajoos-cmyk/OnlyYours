@@ -1,51 +1,69 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
+import { supabase } from '../../lib/supabase';
+import { useAuthStore } from '../../stores/authStore';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useToast } from '../../hooks/use-toast';
-import { supabase } from '../../lib/supabase';
-import { useAuthStore } from '../../stores/authStore';
-import { Loader2Icon } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 interface ReportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  postId: string;
+  reportedId: string;
+  context?: {
+    messageId?: string;
+    postId?: string;
+    commentId?: string;
+  };
 }
 
-export default function ReportModal({ isOpen, onClose, postId }: ReportModalProps) {
+export default function ReportModal({ isOpen, onClose, reportedId, context }: ReportModalProps) {
   const { user } = useAuthStore();
   const { toast } = useToast();
-  const [reason, setReason] = useState('');
+  const [reason, setReason] = useState<string>('');
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
-    if (!reason) {
-      toast({ title: "Fehler", description: "Bitte wähle einen Grund aus.", variant: "destructive" });
-      return;
-    }
-
+    if (!user) return;
     setIsSubmitting(true);
+
     try {
-      const { error } = await supabase
-        .from('content_reports')
-        .insert({
-          reporter_id: user?.id,
-          post_id: postId,
-          reason: reason,
-          description: description
-        });
+      // 1. In Datenbank schreiben
+      const { error } = await supabase.from('user_reports').insert({
+        reporter_id: user.id,
+        reported_id: reportedId,
+        reason,
+        description,
+        related_message_id: context?.messageId,
+        related_post_id: context?.postId,
+        related_comment_id: context?.commentId,
+      });
 
       if (error) throw error;
 
-      toast({ title: "Meldung gesendet", description: "Wir werden den Inhalt prüfen." });
+      // 2. Eingangsbestätigung per E-Mail triggern
+      await supabase.functions.invoke('send-moderation-email', {
+        body: {
+          type: 'report_received',
+          email: user.email,
+          data: { reason }
+        }
+      });
+
+      toast({
+        title: 'Meldung eingegangen',
+        description: 'Wir haben deine Meldung erhalten und werden sie prüfen.',
+      });
       onClose();
-    } catch (error: any) {
-      console.error("Report error:", error);
-      toast({ title: "Fehler", description: "Meldung konnte nicht gesendet werden.", variant: "destructive" });
+    } catch (error) {
+      toast({
+        title: 'Fehler',
+        description: 'Meldung konnte nicht gesendet werden.',
+        variant: 'destructive',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -53,45 +71,32 @@ export default function ReportModal({ isOpen, onClose, postId }: ReportModalProp
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-card border-border text-foreground sm:max-w-[425px]">
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle>Inhalt melden</DialogTitle>
-          <DialogDescription>
-            Warum möchtest du diesen Inhalt melden?
-          </DialogDescription>
+          <DialogTitle>Inhalt / Nutzer melden</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="reason">Grund</Label>
-            <Select value={reason} onValueChange={setReason}>
-              <SelectTrigger className="bg-background border-border">
-                <SelectValue placeholder="Wähle einen Grund" />
-              </SelectTrigger>
-              <SelectContent className="bg-card text-foreground border-border">
-                <SelectItem value="spam">Spam oder Betrug</SelectItem>
-                <SelectItem value="nudity">Nacktheit oder sexuelle Handlungen (Unmarkiert)</SelectItem>
-                <SelectItem value="violence">Gewalt oder gefährliche Organisationen</SelectItem>
-                <SelectItem value="harassment">Mobbing oder Belästigung</SelectItem>
-                <SelectItem value="copyright">Urheberrechtsverletzung</SelectItem>
-                <SelectItem value="illegal">Illegale Waren oder Dienstleistungen</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="description">Beschreibung (optional)</Label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Weitere Details..."
-              className="bg-background border-border"
-            />
-          </div>
+        <div className="space-y-4 py-4">
+          <Select value={reason} onValueChange={setReason}>
+            <SelectTrigger><SelectValue placeholder="Grund auswählen" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="copyright">Urheberrechtsverletzung / Geklauter Content</SelectItem>
+              <SelectItem value="spam">Spam / Scam / Phishing</SelectItem>
+              <SelectItem value="harassment">Belästigung / Beleidigung</SelectItem>
+              <SelectItem value="underage">Minderjähriger Nutzer / Inhalt</SelectItem>
+              <SelectItem value="other">Sonstiges</SelectItem>
+            </SelectContent>
+          </Select>
+          <Textarea
+            placeholder="Zusätzliche Details (optional)..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={4}
+          />
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="hover:bg-neutral text-foreground border-border">Abbrechen</Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-            {isSubmitting ? <Loader2Icon className="animate-spin h-4 w-4 mr-2" /> : null}
+          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>Abbrechen</Button>
+          <Button onClick={handleSubmit} disabled={!reason || isSubmitting}>
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Melden
           </Button>
         </DialogFooter>

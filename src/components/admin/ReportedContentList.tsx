@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Loader2Icon, Trash2Icon, CheckCircleIcon, ExternalLinkIcon, AlertTriangleIcon, FilterIcon } from 'lucide-react';
+import { Loader2Icon, Trash2Icon, CheckCircleIcon, ExternalLinkIcon, AlertTriangleIcon, FilterIcon, UserXIcon, MessageSquareIcon } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { adminService } from '../../services/adminService';
 import { storageService } from '../../services/storageService';
@@ -21,17 +21,24 @@ interface Report {
     status: string;
     created_at: string;
     reporter_name: string;
-    post_id: string;
-    post_caption: string;
-    post_media_url: string;
-    post_media_type: string;
+    reported_user_id: string;
+    reported_user_name: string;
+    post_id: string | null;
+    post_caption: string | null;
+    post_media_url: string | null;
+    post_media_type: string | null;
+    message_id: string | null;
+    comment_id: string | null;
+    appeal_status: string | null;
+    appeal_description: string | null;
+    appealed_at: string | null;
 }
 
 export default function ReportedContentList() {
     const [reports, setReports] = useState<Report[]>([]);
     const [resolvedMediaUrls, setResolvedMediaUrls] = useState<Record<string, string>>({});
     const [isLoading, setIsLoading] = useState(true);
-    const [filterStatus, setFilterStatus] = useState<string>('PENDING');
+    const [filterStatus, setFilterStatus] = useState<string>('pending');
     const { toast } = useToast();
 
     // Gefilterte Berichte
@@ -40,7 +47,7 @@ export default function ReportedContentList() {
         return reports.filter(r => r.status === filterStatus);
     }, [reports, filterStatus]);
 
-    // Reports laden (via RPC, da adminService.getReports() im Interface nicht explizit definiert war)
+    // Reports laden
     const fetchReports = async () => {
         setIsLoading(true);
         try {
@@ -49,7 +56,7 @@ export default function ReportedContentList() {
             const reportData = data as Report[];
             setReports(reportData);
 
-            // Medien-URLs auflösen (für private Buckets)
+            // Medien-URLs auflösen
             const urlMap: Record<string, string> = {};
             await Promise.all(reportData.map(async (report) => {
                 if (report.post_media_url) {
@@ -70,53 +77,29 @@ export default function ReportedContentList() {
         fetchReports();
     }, []);
 
-    const handleDeletePost = async (postId: string, reportId: string) => {
-        if (!confirm("Möchtest du diesen Beitrag wirklich unwiderruflich löschen?")) return;
-
-        try {
-            await adminService.deletePost(postId);
-
-            toast({ title: "Gelöscht", description: "Beitrag wurde entfernt." });
-
-            // Lokales Update: Entferne alle Reports, die sich auf diesen Post beziehen
-            setReports(prev => prev.filter(r => r.post_id !== postId));
-        } catch (err: any) {
-            toast({ title: "Fehler", description: err.message, variant: "destructive" });
-        }
-    };
-
-    const handleDismissReport = async (reportId: string) => {
-        try {
-            await adminService.dismissReport(reportId);
-
-            toast({ title: "Ignoriert", description: "Meldung wurde als erledigt markiert." });
-
-            // Lokales Update
-            setReports(prev => prev.filter(r => r.report_id !== reportId));
-        } catch (err: any) {
-            toast({ title: "Fehler", description: err.message, variant: "destructive" });
-        }
-    };
-
     const [selectedReport, setSelectedReport] = useState<Report | null>(null);
     const [resolutionReason, setResolutionReason] = useState('');
-    const [actionType, setActionType] = useState<'TAKEDOWN' | 'DISMISS' | null>(null);
+    const [actionType, setActionType] = useState<'TAKEDOWN' | 'DISMISS' | 'SUSPEND' | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    const getStatusBadge = (status: string) => {
+    const getStatusBadge = (status: string, appealStatus?: string | null) => {
+        if (appealStatus === 'pending') {
+            return <Badge variant="outline" className="bg-orange-500/10 text-orange-500 border-orange-500/20">Widerspruch offen</Badge>;
+        }
+
         switch (status) {
-            case 'PENDING':
+            case 'pending':
                 return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">Ausstehend</Badge>;
-            case 'RESOLVED_TAKEDOWN':
-                return <Badge variant="destructive">Gesperrt</Badge>;
-            case 'RESOLVED_DISMISSED':
+            case 'resolved':
+                return <Badge variant="destructive">Erledigt / Sanktion</Badge>;
+            case 'dismissed':
                 return <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">Abgelehnt</Badge>;
             default:
                 return <Badge variant="secondary">{status}</Badge>;
         }
     };
 
-    const openActionDialog = (report: Report, type: 'TAKEDOWN' | 'DISMISS') => {
+    const openActionDialog = (report: Report, type: 'TAKEDOWN' | 'DISMISS' | 'SUSPEND') => {
         setSelectedReport(report);
         setActionType(type);
         setResolutionReason('');
@@ -130,25 +113,24 @@ export default function ReportedContentList() {
 
         setIsProcessing(true);
         try {
-            if (actionType === 'TAKEDOWN') {
+            if (actionType === 'TAKEDOWN' && selectedReport.post_id) {
                 await adminService.takeDownPost(selectedReport.post_id, selectedReport.report_id, resolutionReason);
-                toast({ title: "Inhalt gesperrt", description: "Der Beitrag wurde entfernt und der Creator informiert." });
-                // Status lokal aktualisieren statt zu entfernen, damit es im Filter "Gesperrt" erscheint
-                setReports(prev => prev.map(r => 
-                    r.report_id === selectedReport.report_id 
-                    ? { ...r, status: 'RESOLVED_TAKEDOWN' } 
-                    : r
-                ));
-            } else {
+                toast({ title: "Inhalt gesperrt", description: "Der Beitrag wurde entfernt." });
+            } else if (actionType === 'SUSPEND') {
+                await adminService.suspendUser(selectedReport.reported_user_id, selectedReport.report_id, resolutionReason);
+                toast({ title: "Nutzer gesperrt", description: "Der Account wurde vorübergehend gesperrt." });
+            } else if (actionType === 'DISMISS') {
                 await adminService.dismissReport(selectedReport.report_id, resolutionReason);
-                toast({ title: "Meldung abgelehnt", description: "Der Melder wurde über die Ablehnung informiert." });
-                // Status lokal aktualisieren
-                setReports(prev => prev.map(r => 
-                    r.report_id === selectedReport.report_id 
-                    ? { ...r, status: 'RESOLVED_DISMISSED' } 
-                    : r
-                ));
+                toast({ title: "Meldung abgelehnt", description: "Die Meldung wurde als unbegründet markiert." });
             }
+
+            // Lokales Update
+            setReports(prev => prev.map(r => 
+                r.report_id === selectedReport.report_id 
+                ? { ...r, status: actionType === 'DISMISS' ? 'dismissed' : 'resolved' } 
+                : r
+            ));
+
             setSelectedReport(null);
             setActionType(null);
         } catch (err: any) {
@@ -166,9 +148,9 @@ export default function ReportedContentList() {
                 <Tabs value={filterStatus} onValueChange={setFilterStatus} className="w-full">
                     <div className="flex items-center justify-between bg-neutral/10 p-1 rounded-lg">
                         <TabsList className="bg-transparent border-none">
-                            <TabsTrigger value="PENDING" className="data-[state=active]:bg-background">Offen</TabsTrigger>
-                            <TabsTrigger value="RESOLVED_TAKEDOWN" className="data-[state=active]:bg-background">Gesperrt</TabsTrigger>
-                            <TabsTrigger value="RESOLVED_DISMISSED" className="data-[state=active]:bg-background">Abgelehnt</TabsTrigger>
+                            <TabsTrigger value="pending" className="data-[state=active]:bg-background">Offen</TabsTrigger>
+                            <TabsTrigger value="resolved" className="data-[state=active]:bg-background">Sanktioniert</TabsTrigger>
+                            <TabsTrigger value="dismissed" className="data-[state=active]:bg-background">Abgelehnt</TabsTrigger>
                             <TabsTrigger value="ALL" className="data-[state=active]:bg-background">Alle</TabsTrigger>
                         </TabsList>
                         <div className="px-3 flex items-center gap-2 text-xs text-muted-foreground">
@@ -194,26 +176,31 @@ export default function ReportedContentList() {
                                             <AlertTriangleIcon className="w-4 h-4 text-destructive" />
                                             {report.reason}
                                         </CardTitle>
-                                        {getStatusBadge(report.status)}
+                                        {getStatusBadge(report.status, report.appeal_status)}
                                     </div>
                                     <p className="text-xs text-muted-foreground mt-1">
-                                        Gemeldet von <span className="font-medium text-foreground">{report.reporter_name || 'Unbekannt'}</span> am {new Date(report.created_at).toLocaleDateString()}
+                                        Gemeldet von <span className="font-medium text-foreground">{report.reporter_name || 'Unbekannt'}</span> gegen <span className="font-medium text-foreground">{report.reported_user_name || 'Unbekannt'}</span> am {new Date(report.created_at).toLocaleDateString()}
                                     </p>
                                 </div>
-                                {report.status === 'PENDING' && (
+                                {report.status === 'pending' && (
                                     <div className="flex gap-2">
                                         <Button size="sm" variant="outline" onClick={() => openActionDialog(report, 'DISMISS')} className="text-muted-foreground hover:text-foreground">
                                             <CheckCircleIcon className="w-4 h-4 mr-1" /> Ignorieren
                                         </Button>
-                                        <Button size="sm" variant="destructive" onClick={() => openActionDialog(report, 'TAKEDOWN')}>
-                                            <Trash2Icon className="w-4 h-4 mr-1" /> Sperren
+                                        {report.post_id && (
+                                            <Button size="sm" variant="outline" onClick={() => openActionDialog(report, 'TAKEDOWN')} className="text-orange-500 border-orange-500/20 hover:bg-orange-500/10">
+                                                <Trash2Icon className="w-4 h-4 mr-1" /> Post sperren
+                                            </Button>
+                                        )}
+                                        <Button size="sm" variant="destructive" onClick={() => openActionDialog(report, 'SUSPEND')}>
+                                            <UserXIcon className="w-4 h-4 mr-1" /> Account sperren
                                         </Button>
                                     </div>
                                 )}
                             </div>
                         </CardHeader>
                         <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4">
-                            {/* Medien-Vorschau */}
+                            {/* Medien-Vorschau oder Icon */}
                             <div className="aspect-square bg-neutral rounded-md overflow-hidden relative group">
                                 {report.post_media_url ? (
                                     report.post_media_type?.toUpperCase() === 'VIDEO' || report.post_media_url.includes('.mp4') || report.post_media_url.includes('.mov') ? (
@@ -221,14 +208,22 @@ export default function ReportedContentList() {
                                     ) : (
                                         <img src={resolvedMediaUrls[report.report_id] || report.post_media_url} alt="Reported content" className="w-full h-full object-cover" />
                                     )
+                                ) : report.message_id ? (
+                                    <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground text-xs p-2 text-center">
+                                        <MessageSquareIcon className="w-8 h-8 mb-2 opacity-20" />
+                                        Chat-Nachricht
+                                    </div>
                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">Kein Medium</div>
+                                    <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs p-2 text-center">
+                                        Profil / Nutzer
+                                    </div>
                                 )}
 
-                                {/* Link zum Post (nur wenn noch existent) */}
-                                <a href={`/post/${report.post_id}`} target="_blank" rel="noreferrer" className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white font-medium">
-                                    <ExternalLinkIcon className="w-5 h-5 mr-2" /> Öffnen
-                                </a>
+                                {report.post_id && (
+                                    <a href={`/post/${report.post_id}`} target="_blank" rel="noreferrer" className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white font-medium">
+                                        <ExternalLinkIcon className="w-5 h-5 mr-2" /> Post öffnen
+                                    </a>
+                                )}
                             </div>
 
                             {/* Details */}
@@ -237,10 +232,21 @@ export default function ReportedContentList() {
                                     <span className="text-xs font-bold uppercase text-muted-foreground block mb-1">Beschreibung des Melders</span>
                                     <p className="text-sm text-foreground bg-neutral/20 p-3 rounded">{report.description || 'Keine Beschreibung angegeben.'}</p>
                                 </div>
-                                <div>
-                                    <span className="text-xs font-bold uppercase text-muted-foreground block mb-1">Beitragstext</span>
-                                    <p className="text-sm text-muted-foreground line-clamp-3 italic">"{report.post_caption || 'Keine Caption'}"</p>
-                                </div>
+                                
+                                {report.post_caption && (
+                                    <div>
+                                        <span className="text-xs font-bold uppercase text-muted-foreground block mb-1">Beitragstext</span>
+                                        <p className="text-sm text-muted-foreground line-clamp-3 italic">"{report.post_caption}"</p>
+                                    </div>
+                                )}
+
+                                {report.appeal_status === 'pending' && (
+                                    <div className="bg-orange-500/10 border border-orange-500/20 p-3 rounded">
+                                        <span className="text-xs font-bold uppercase text-orange-500 block mb-1">Widerspruch des Nutzers</span>
+                                        <p className="text-sm text-foreground">{report.appeal_description}</p>
+                                        <p className="text-[10px] text-muted-foreground mt-2">Eingereicht am {new Date(report.appealed_at!).toLocaleString()}</p>
+                                    </div>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
@@ -251,9 +257,13 @@ export default function ReportedContentList() {
             <Dialog open={!!selectedReport} onOpenChange={() => !isProcessing && setSelectedReport(null)}>
                 <DialogContent className="bg-card border-border text-foreground sm:max-w-[425px]">
                     <DialogHeader>
-                        <DialogTitle>{actionType === 'TAKEDOWN' ? 'Inhalt sperren' : 'Meldung ignorieren'}</DialogTitle>
+                        <DialogTitle>
+                            {actionType === 'TAKEDOWN' ? 'Inhalt sperren' : 
+                             actionType === 'SUSPEND' ? 'Account sperren' : 
+                             'Meldung ignorieren'}
+                        </DialogTitle>
                         <DialogDescription>
-                            Bitte gib eine Begründung für diese Entscheidung an. Diese wird dem Melder {actionType === 'TAKEDOWN' ? 'und dem Creator' : ''} mitgeteilt (DSA-Pflicht).
+                            Bitte gib eine Begründung für diese Entscheidung an. Diese wird gemäß DSA dokumentiert.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
@@ -273,7 +283,7 @@ export default function ReportedContentList() {
                         <Button
                             onClick={handleActionSubmit}
                             disabled={isProcessing || !resolutionReason.trim()}
-                            variant={actionType === 'TAKEDOWN' ? 'destructive' : 'default'}
+                            variant={actionType === 'DISMISS' ? 'default' : 'destructive'}
                         >
                             {isProcessing && <Loader2Icon className="animate-spin h-4 w-4 mr-2" />}
                             Entscheidung bestätigen

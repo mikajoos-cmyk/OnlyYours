@@ -20,6 +20,7 @@ import Messages from './components/creator/Messages';
 import Statistics from './components/creator/Statistics';
 import Payouts from './components/creator/Payouts';
 import ProfilePage from './components/profile/ProfilePage';
+import { AppealModal } from './components/creator/AppealModal';
 import { Toaster } from './components/ui/toaster';
 import CookieBanner from './components/ui/CookieBanner';
 import PostPage from './components/fan/PostPage';
@@ -64,6 +65,33 @@ function App() {
     return (
       <div className="flex justify-center items-center min-h-screen bg-background">
         <p className="text-foreground">Laden...</p>
+      </div>
+    );
+  }
+
+  if (user?.is_suspended) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Account gesperrt</h1>
+          <p className="text-gray-600 mb-6">
+            Dein Account wurde wegen eines Verstoßes gegen unsere Richtlinien gesperrt.
+          </p>
+          
+          {/* Wir prüfen, ob es eine offene Meldung mit 'pending' appeal gibt */}
+          {!user.has_pending_appeal ? (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-500">
+                Wenn du glaubst, dass dies ein Fehler war, kannst du einmalig Widerspruch einlegen.
+              </p>
+              <AppealModal userId={user.id} />
+            </div>
+          ) : (
+            <div className="p-4 bg-yellow-50 text-yellow-800 rounded-lg border border-yellow-200">
+              Dein Widerspruch wird aktuell von unserem Team geprüft. Wir benachrichtigen dich per E-Mail.
+            </div>
+          )}
+        </div>
       </div>
     );
   }

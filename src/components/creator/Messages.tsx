@@ -4,11 +4,12 @@ import { Card } from '../ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
-import { SendIcon, CheckCheckIcon, ArrowLeftIcon, UserIcon, MessageCircleIcon, Send } from 'lucide-react';
+import { SendIcon, CheckCheckIcon, ArrowLeftIcon, UserIcon, MessageCircleIcon, Send, FlagIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { messageService, Message, Chat as ServiceChat } from '../../services/messageService';
 import { useAuthStore } from '../../stores/authStore';
 import MassMessageModal from './MassMessageModal';
+import ReportModal from '../fan/ReportModal';
 import { useAppStore } from '../../stores/appStore';
 import { cn } from '../../lib/utils';
 
@@ -43,6 +44,8 @@ export default function Messages() {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [showMassMessageModal, setShowMassMessageModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportContext, setReportContext] = useState<{ reportedId: string; messageId: string } | null>(null);
 
   // State für Tastatur-Erkennung, um Padding unten zu steuern
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
@@ -272,6 +275,14 @@ export default function Messages() {
     }
   };
 
+  const handleReportMessage = (msg: Message) => {
+    setReportContext({
+      reportedId: msg.senderId,
+      messageId: msg.id
+    });
+    setShowReportModal(true);
+  };
+
   return (
     <div className={cn(
       "flex flex-col h-full",
@@ -388,12 +399,22 @@ export default function Messages() {
                 <div className="space-y-4 flex flex-col pb-2">
                   {messages.map((msg) => (
                     <div key={msg.id} className={`flex ${msg.senderId === currentUser?.id ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[85%] lg:max-w-[65%] px-3 py-2 lg:px-4 lg:py-2 rounded-2xl ${msg.senderId === currentUser?.id ? 'bg-secondary text-secondary-foreground rounded-tr-none' : 'bg-card border border-border text-foreground rounded-tl-none'}`}>
+                      <div className={`group relative max-w-[85%] lg:max-w-[65%] px-3 py-2 lg:px-4 lg:py-2 rounded-2xl ${msg.senderId === currentUser?.id ? 'bg-secondary text-secondary-foreground rounded-tr-none' : 'bg-card border border-border text-foreground rounded-tl-none'}`}>
                         <p className="break-words whitespace-pre-wrap text-sm lg:text-base">{msg.content}</p>
                         <div className="flex items-center justify-end gap-1 mt-1 text-[10px] lg:text-xs opacity-70">
                           <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           {msg.senderId === currentUser?.id && <CheckCheckIcon className={`w-3 h-3 lg:w-4 lg:h-4 ${msg.isRead ? 'text-blue-600' : ''}`} strokeWidth={1.5} />}
                         </div>
+                        
+                        {msg.senderId !== currentUser?.id && (
+                          <button
+                            onClick={() => handleReportMessage(msg)}
+                            className="absolute -right-8 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Nachricht melden"
+                          >
+                            <FlagIcon className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -441,6 +462,17 @@ export default function Messages() {
         />
       )}
 
+      {showReportModal && reportContext && (
+        <ReportModal
+          isOpen={showReportModal}
+          onClose={() => {
+            setShowReportModal(false);
+            setReportContext(null);
+          }}
+          reportedId={reportContext.reportedId}
+          context={{ messageId: reportContext.messageId }}
+        />
+      )}
     </div>
   );
 }

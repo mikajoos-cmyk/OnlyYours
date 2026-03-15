@@ -4,10 +4,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { UsersIcon, GridIcon, VideoIcon, CheckIcon, LockIcon, MessageCircleIcon, HeartIcon, LayoutGrid, Image as ImageIcon, Film as FilmIcon, RadioIcon, SettingsIcon, ShoppingBagIcon } from 'lucide-react';
+import { UsersIcon, GridIcon, VideoIcon, CheckIcon, LockIcon, MessageCircleIcon, HeartIcon, LayoutGrid, Image as ImageIcon, Film as FilmIcon, RadioIcon, SettingsIcon, ShoppingBagIcon, FlagIcon } from 'lucide-react';
 import SubscriptionModal from './SubscriptionModal';
 import ProfilePostViewer from './ProfilePostViewer';
 import type { PostData as ViewerPostData } from './ProfilePostViewer';
+import ReportModal from './ReportModal';
 import { userService, UserProfile } from '../../services/userService';
 import { postService, Post as ServicePostData } from '../../services/postService';
 import { tierService, Tier } from '../../services/tierService';
@@ -46,6 +47,7 @@ export default function CreatorProfile() {
   const [subscriptionStatus, setSubscriptionStatus] = useState<'ACTIVE' | 'CANCELED' | null>(null);
 
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [selectedPostIndex, setSelectedPostIndex] = useState<number>(0);
   const [showPostFeed, setShowPostFeed] = useState(false);
 
@@ -377,7 +379,20 @@ export default function CreatorProfile() {
             <span className="text-muted-foreground">Follower</span>
           </div>
 
-          {renderSubscribeButton()}
+          <div className="flex items-center gap-4 mt-4">
+            {renderSubscribeButton()}
+            {!isOwnProfile && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowReportModal(true)}
+                className="text-muted-foreground hover:text-destructive transition-colors"
+                title="Profil melden"
+              >
+                <FlagIcon className="w-5 h-5" />
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="flex justify-center items-center gap-2 p-2 bg-card rounded-full shadow-lg mt-12 mb-2 border border-border flex-wrap">
@@ -524,6 +539,13 @@ export default function CreatorProfile() {
           onPaymentSuccess={handlePurchaseSuccess}
           creatorTiers={creatorTiers}
           onSubscribeClick={handleSubscribeClick}
+        />
+      )}
+      {showReportModal && (
+        <ReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          reportedId={creator.id}
         />
       )}
     </div>

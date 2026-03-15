@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
-import { SendIcon, XIcon } from 'lucide-react';
+import { SendIcon, XIcon, FlagIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { commentService, Comment } from '../../services/commentService';
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../hooks/use-toast';
 import { cn } from '../../lib/utils';
+import ReportModal from './ReportModal';
 
 interface CommentsSheetProps {
   isOpen: boolean;
@@ -27,6 +28,8 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
 
   // State zur Erkennung, ob die Tastatur offen ist (Fokus auf Input)
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportContext, setReportContext] = useState<{ reportedId: string; commentId: string } | null>(null);
 
   useEffect(() => {
     const handleFocus = (e: FocusEvent) => {
@@ -117,6 +120,14 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
     }
   };
 
+  const handleReportComment = (comment: Comment) => {
+    setReportContext({
+      reportedId: comment.userId,
+      commentId: comment.id
+    });
+    setShowReportModal(true);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -184,6 +195,15 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
                           <span className="text-xs text-muted-foreground">
                             {new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
+                          {currentUser?.id !== comment.userId && (
+                            <button
+                              onClick={() => handleReportComment(comment)}
+                              className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors"
+                            >
+                              <FlagIcon className="w-3 h-3" />
+                              Melden
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -222,6 +242,18 @@ export default function CommentsSheet({ isOpen, onClose, post, onCommentAdded }:
             </Button>
           </div>
         </div>
+
+        {showReportModal && reportContext && (
+          <ReportModal
+            isOpen={showReportModal}
+            onClose={() => {
+              setShowReportModal(false);
+              setReportContext(null);
+            }}
+            reportedId={reportContext.reportedId}
+            context={{ commentId: reportContext.commentId, postId: post?.id }}
+          />
+        )}
       </motion.div>
     </AnimatePresence>
   );

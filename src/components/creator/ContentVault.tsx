@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Checkbox } from '../ui/checkbox';
 import { UploadIcon, Trash2Icon, VideoIcon, PencilIcon, ShieldAlertIcon } from 'lucide-react';
-import AppealModal from './AppealModal';
+import { AppealModal } from './AppealModal';
 import ProfilePostViewer, { PostData as ViewerPostData } from '../fan/ProfilePostViewer';
 import { useAuthStore } from '../../stores/authStore';
 import { postService, Post as ServicePostData } from '../../services/postService';

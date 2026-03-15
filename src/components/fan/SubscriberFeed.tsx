@@ -581,7 +581,8 @@ export default function SubscriberFeed({
         <ReportModal
           isOpen={showReportModal}
           onClose={() => setShowReportModal(false)}
-          postId={currentPost.id}
+          reportedId={currentPost.creatorId}
+          context={{ postId: currentPost.id }}
         />
       )}
     </>
