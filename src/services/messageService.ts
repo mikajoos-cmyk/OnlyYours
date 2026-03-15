@@ -24,38 +24,36 @@ export interface Chat {
 
 export class MessageService {
 
-  // VERSCHLÜSSELT SENDEN via RPC
+  // UNVERSCHLÜSSELT SENDEN
   async sendMessage(receiverId: string, content: string): Promise<any> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Aufruf der sicheren RPC Funktion
-    const { data: messageId, error } = await supabase.rpc('send_encrypted_message', {
-      p_sender_id: user.id,
-      p_receiver_id: receiverId,
-      p_content: content
-    });
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        sender_id: user.id,
+        receiver_id: receiverId,
+        content: content,
+        is_read: false
+      })
+      .select()
+      .single();
 
     if (error) throw error;
-
-    // Fake-Objekt für sofortige UI-Updates zurückgeben
-    return {
-      id: messageId,
-      sender_id: user.id,
-      receiver_id: receiverId,
-      content: content,
-      is_read: false,
-      created_at: new Date().toISOString()
-    };
+    return data;
   }
 
-  // Willkommensnachricht (ebenfalls verschlüsselt via RPC)
+  // Willkommensnachricht (unverschlüsselt)
   async sendWelcomeMessage(creatorId: string, fanId: string, content: string): Promise<void> {
-    const { error } = await supabase.rpc('send_encrypted_message', {
-      p_sender_id: creatorId,
-      p_receiver_id: fanId,
-      p_content: content
-    });
+    const { error } = await supabase
+      .from('messages')
+      .insert({
+        sender_id: creatorId,
+        receiver_id: fanId,
+        content: content,
+        is_read: false
+      });
     if (error) console.error("Fehler beim Senden der Willkommensnachricht:", error);
   }
 
@@ -71,16 +69,19 @@ export class MessageService {
 
     const messageContent = `Vielen Dank für den Kauf von "${productTitle}"! 🎉\n\nBitte antworte mir hier mit deiner Lieferadresse (Name, Straße, PLZ, Ort), damit ich den Versand vorbereiten kann.`;
 
-    // Aufruf der SQL Funktion
-    const { error } = await (supabase.rpc as any)('send_automated_message', {
-      p_sender_id: creatorId,
-      p_receiver_id: fanId,
-      p_content: messageContent
-    });
+    // Direkter Insert statt RPC um Verschlüsselung zu vermeiden
+    const { error } = await supabase
+      .from('messages')
+      .insert({
+        sender_id: creatorId,
+        receiver_id: fanId,
+        content: messageContent,
+        is_read: false
+      });
 
     if (error) {
-      console.error('[MessageService] RPC Error send_automated_message:', error);
-      throw error; // Fehler werfen, damit das Frontend ihn sieht
+      console.error('[MessageService] Error sending automated message:', error);
+      throw error;
     }
 
     console.log('[MessageService] Automated message sent successfully.');

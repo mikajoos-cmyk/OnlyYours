@@ -36,7 +36,26 @@ serve(async (req) => {
     )
 
     try {
-        const { type, email, data } = await req.json();
+        const { type, email, userId, data } = await req.json();
+
+        let targetEmail = email;
+
+        // Falls keine Email aber eine userId da ist, Email via Admin SDK holen
+        if (!targetEmail && userId) {
+            const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
+            if (userError || !userData?.user?.email) {
+                console.error("User for email not found:", userError);
+            } else {
+                targetEmail = userData.user.email;
+            }
+        }
+
+        if (!targetEmail) {
+            return new Response(JSON.stringify({ error: "No recipient email found" }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                status: 400
+            });
+        }
 
         let subject = '';
         let htmlContent = '';
@@ -66,11 +85,19 @@ serve(async (req) => {
       <p>Du hast das Recht, gegen diese Entscheidung einmalig Widerspruch einzulegen. Logge dich dazu in die App ein und nutze das Formular auf dem Sperrbildschirm.</p>`;
                 break;
 
+            case 'content_moderated':
+                subject = 'Wichtige Information: Inhalt gesperrt';
+                htmlContent = `<p>Hallo,</p>
+      <p>einer deiner Beiträge wurde nach Prüfung durch unser Team gesperrt.</p>
+      <p><b>Grund:</b> Verstoß gegen unsere Richtlinien (${data.reason}).</p>
+      <p>Du hast das Recht, gegen diese Entscheidung einmalig Widerspruch einzulegen. Gehe dazu in deinen Content Vault unter den Tab "Moderiert".</p>`;
+                break;
+
             case 'appeal_decision':
                 subject = 'Entscheidung zu deinem Widerspruch';
                 htmlContent = `<p>Hallo,</p>
       <p>unser Team hat deinen Widerspruch geprüft.</p>
-      <p><b>Ergebnis:</b> ${data.appealStatus === 'accepted' ? 'Dein Account wurde wieder freigeschaltet.' : 'Die Sperrung bleibt bestehen.'}</p>
+      <p><b>Ergebnis:</b> ${data.appealStatus === 'accepted' ? 'Deinem Widerspruch wurde stattgegeben. Die entsprechende Sperrung wurde aufgehoben.' : 'Dein Widerspruch wurde abgelehnt. Die Sperrung bleibt bestehen.'}</p>
       <p><b>Begründung des Teams:</b> ${data.adminNotes}</p>`;
                 break;
 
@@ -83,7 +110,7 @@ serve(async (req) => {
 
         const emailToSend = {
             from: 'Only Yours Support <support@onlyyours.app>',
-            to: [email],
+            to: [targetEmail],
             subject: subject,
             html: `
             <div style="font-family: sans-serif; line-height: 1.5;">

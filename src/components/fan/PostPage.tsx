@@ -442,7 +442,8 @@ export default function PostPage() {
         <ReportModal
             isOpen={showReportModal}
             onClose={() => setShowReportModal(false)}
-            postId={post.id}
+            reportedId={post.creatorId}
+            context={{ postId: post.id }}
         />
       )}
     </>

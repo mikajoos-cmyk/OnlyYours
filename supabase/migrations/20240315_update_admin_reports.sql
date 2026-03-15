@@ -66,6 +66,7 @@ RETURNS TABLE (
     reporter_name text,
     reported_user_id uuid,
     reported_user_name text,
+    reported_username text,
     post_id uuid,
     post_caption text,
     post_media_url text,
@@ -74,7 +75,8 @@ RETURNS TABLE (
     comment_id uuid,
     appeal_status text,
     appeal_description text,
-    appealed_at timestamptz
+    appealed_at timestamptz,
+    conversation_id text -- Added for chat context
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -98,6 +100,7 @@ BEGIN
         u_reporter.display_name as reporter_name,
         ur.reported_id as reported_user_id,
         u_reported.display_name as reported_user_name,
+        u_reported.username as reported_username,
         ur.related_post_id as post_id,
         p.caption as post_caption,
         p.media_url as post_media_url,
@@ -106,7 +109,18 @@ BEGIN
         ur.related_comment_id as comment_id,
         ur.appeal_status,
         ur.appeal_description,
-        ur.appealed_at
+        ur.appealed_at,
+        -- Derive conversation_id for messages
+        CASE 
+            WHEN ur.related_message_id IS NOT NULL THEN
+                (SELECT 
+                    CASE 
+                        WHEN m.sender_id < m.receiver_id THEN m.sender_id || ':' || m.receiver_id
+                        ELSE m.receiver_id || ':' || m.sender_id
+                    END
+                 FROM public.messages m WHERE m.id = ur.related_message_id)
+            ELSE NULL
+        END as conversation_id
     FROM public.user_reports ur
     LEFT JOIN public.users u_reporter ON ur.reporter_id = u_reporter.id
     LEFT JOIN public.users u_reported ON ur.reported_id = u_reported.id

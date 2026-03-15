@@ -31,6 +31,7 @@ export interface AuthUser {
   is_banned?: boolean;
   is_suspended?: boolean;
   has_pending_appeal?: boolean;
+  appeal_status?: 'pending' | 'accepted' | 'rejected' | null;
   identity_verification_status?: 'none' | 'pending' | 'verified' | 'rejected';
   external_verification_id?: string | null;
   real_name?: string | null;
@@ -214,7 +215,19 @@ export class AuthService {
       total_earnings: decryptedEarnings
     };
 
-    return this.mapUserRowToAuthUser(safeUserData, freshUser.email);
+    // --- NEU: Appeal Status für Account-Sperrung laden ---
+    const { data: latestReport } = await supabase
+      .from('user_reports')
+      .select('appeal_status')
+      .eq('reported_id', freshUser.id)
+      .is('related_post_id', null)
+      .is('related_message_id', null)
+      .is('related_comment_id', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    return this.mapUserRowToAuthUser(safeUserData, freshUser.email, latestReport?.appeal_status);
   }
 
   async updateProfile(userId: string, updates: Partial<UserUpdate>) {
@@ -249,7 +262,7 @@ export class AuthService {
     });
   }
 
-  private mapUserRowToAuthUser(userData: any, email?: string): AuthUser {
+  private mapUserRowToAuthUser(userData: any, email?: string, appealStatus?: string | null): AuthUser {
     return {
       id: userData.id,
       name: userData.display_name,
@@ -284,7 +297,9 @@ export class AuthService {
       // @ts-ignore
       is_banned: userData.is_banned,
       is_suspended: userData.is_suspended,
-      has_pending_appeal: userData.has_pending_appeal
+      has_pending_appeal: userData.has_pending_appeal,
+      // @ts-ignore
+      appeal_status: appealStatus
     };
   }
 }

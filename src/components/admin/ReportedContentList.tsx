@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Loader2Icon, Trash2Icon, CheckCircleIcon, ExternalLinkIcon, AlertTriangleIcon, FilterIcon, UserXIcon, MessageSquareIcon } from 'lucide-react';
+import { Loader2Icon, Trash2Icon, CheckCircleIcon, ExternalLinkIcon, AlertTriangleIcon, FilterIcon, UserXIcon, MessageSquareIcon, XIcon } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { adminService } from '../../services/adminService';
 import { storageService } from '../../services/storageService';
@@ -13,6 +13,7 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { Badge } from '../ui/badge';
+import { cn } from '../../lib/utils';
 
 interface Report {
     report_id: string;
@@ -23,6 +24,7 @@ interface Report {
     reporter_name: string;
     reported_user_id: string;
     reported_user_name: string;
+    reported_username: string;
     post_id: string | null;
     post_caption: string | null;
     post_media_url: string | null;
@@ -32,6 +34,7 @@ interface Report {
     appeal_status: string | null;
     appeal_description: string | null;
     appealed_at: string | null;
+    conversation_id: string | null;
 }
 
 export default function ReportedContentList() {
@@ -44,6 +47,7 @@ export default function ReportedContentList() {
     // Gefilterte Berichte
     const filteredReports = useMemo(() => {
         if (filterStatus === 'ALL') return reports;
+        if (filterStatus === 'appeals') return reports.filter(r => r.appeal_status === 'pending');
         return reports.filter(r => r.status === filterStatus);
     }, [reports, filterStatus]);
 
@@ -78,9 +82,29 @@ export default function ReportedContentList() {
     }, []);
 
     const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+    const [previewReport, setPreviewReport] = useState<Report | null>(null);
+    const [previewData, setPreviewData] = useState<any>(null);
+    const [isPreviewLoading, setIsPreviewLoading] = useState(false);
     const [resolutionReason, setResolutionReason] = useState('');
-    const [actionType, setActionType] = useState<'TAKEDOWN' | 'DISMISS' | 'SUSPEND' | null>(null);
+    const [actionType, setActionType] = useState<'TAKEDOWN' | 'DISMISS' | 'SUSPEND' | 'ACCEPT_APPEAL' | 'REJECT_APPEAL' | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
+
+    const handlePreviewClick = async (report: Report) => {
+        if (!report.message_id || !report.conversation_id) return;
+
+        setPreviewReport(report);
+        setIsPreviewLoading(true);
+        setPreviewData(null);
+        try {
+            const context = await adminService.getReportedMessageContext(report.message_id, report.conversation_id);
+            setPreviewData(context);
+        } catch (err) {
+            console.error("Error loading preview:", err);
+            toast({ title: "Fehler", description: "Vorschau konnte nicht geladen werden.", variant: "destructive" });
+        } finally {
+            setIsPreviewLoading(false);
+        }
+    };
 
     const getStatusBadge = (status: string, appealStatus?: string | null) => {
         if (appealStatus === 'pending') {
@@ -99,7 +123,7 @@ export default function ReportedContentList() {
         }
     };
 
-    const openActionDialog = (report: Report, type: 'TAKEDOWN' | 'DISMISS' | 'SUSPEND') => {
+    const openActionDialog = (report: Report, type: 'TAKEDOWN' | 'DISMISS' | 'SUSPEND' | 'ACCEPT_APPEAL' | 'REJECT_APPEAL') => {
         setSelectedReport(report);
         setActionType(type);
         setResolutionReason('');
@@ -122,12 +146,24 @@ export default function ReportedContentList() {
             } else if (actionType === 'DISMISS') {
                 await adminService.dismissReport(selectedReport.report_id, resolutionReason);
                 toast({ title: "Meldung abgelehnt", description: "Die Meldung wurde als unbegründet markiert." });
+            } else if (actionType === 'ACCEPT_APPEAL') {
+                await adminService.handleAppeal(selectedReport.report_id, 'accepted', resolutionReason);
+                toast({ title: "Widerspruch stattgegeben", description: "Die Sanktion wurde aufgehoben." });
+            } else if (actionType === 'REJECT_APPEAL') {
+                await adminService.handleAppeal(selectedReport.report_id, 'rejected', resolutionReason);
+                toast({ title: "Widerspruch abgelehnt", description: "Die Sanktion bleibt bestehen." });
             }
 
             // Lokales Update
             setReports(prev => prev.map(r => 
                 r.report_id === selectedReport.report_id 
-                ? { ...r, status: actionType === 'DISMISS' ? 'dismissed' : 'resolved' } 
+                ? { 
+                    ...r, 
+                    status: (actionType === 'DISMISS') ? 'dismissed' : 
+                            (actionType === 'ACCEPT_APPEAL' || actionType === 'REJECT_APPEAL') ? r.status : 'resolved',
+                    appeal_status: actionType === 'ACCEPT_APPEAL' ? 'accepted' : 
+                                   actionType === 'REJECT_APPEAL' ? 'rejected' : r.appeal_status
+                  } 
                 : r
             ));
 
@@ -149,6 +185,7 @@ export default function ReportedContentList() {
                     <div className="flex items-center justify-between bg-neutral/10 p-1 rounded-lg">
                         <TabsList className="bg-transparent border-none">
                             <TabsTrigger value="pending" className="data-[state=active]:bg-background">Offen</TabsTrigger>
+                            <TabsTrigger value="appeals" className="data-[state=active]:bg-background">Widersprüche</TabsTrigger>
                             <TabsTrigger value="resolved" className="data-[state=active]:bg-background">Sanktioniert</TabsTrigger>
                             <TabsTrigger value="dismissed" className="data-[state=active]:bg-background">Abgelehnt</TabsTrigger>
                             <TabsTrigger value="ALL" className="data-[state=active]:bg-background">Alle</TabsTrigger>
@@ -197,6 +234,16 @@ export default function ReportedContentList() {
                                         </Button>
                                     </div>
                                 )}
+                                {report.appeal_status === 'pending' && (
+                                    <div className="flex gap-2">
+                                        <Button size="sm" variant="outline" onClick={() => openActionDialog(report, 'ACCEPT_APPEAL')} className="text-green-500 border-green-500/20 hover:bg-green-500/10">
+                                            <CheckCircleIcon className="w-4 h-4 mr-1" /> Widerspruch stattgeben
+                                        </Button>
+                                        <Button size="sm" variant="destructive" onClick={() => openActionDialog(report, 'REJECT_APPEAL')}>
+                                            <XIcon className="w-4 h-4 mr-1" /> Widerspruch ablehnen
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                         </CardHeader>
                         <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4">
@@ -220,9 +267,35 @@ export default function ReportedContentList() {
                                 )}
 
                                 {report.post_id && (
-                                    <a href={`/post/${report.post_id}`} target="_blank" rel="noreferrer" className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white font-medium">
-                                        <ExternalLinkIcon className="w-5 h-5 mr-2" /> Post öffnen
-                                    </a>
+                                    <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity gap-2">
+                                        <a 
+                                            href={`/post/${report.post_id}`} 
+                                            target="_blank" 
+                                            rel="noreferrer" 
+                                            className="bg-secondary text-secondary-foreground px-3 py-1.5 rounded-md text-sm font-medium flex items-center hover:bg-secondary/90 transition-colors"
+                                        >
+                                            <ExternalLinkIcon className="w-4 h-4 mr-2" /> In neuem Tab öffnen
+                                        </a>
+                                    </div>
+                                )}
+                                {!report.post_id && report.message_id && (
+                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Button size="sm" variant="secondary" onClick={() => handlePreviewClick(report)}>
+                                            <ExternalLinkIcon className="w-4 h-4 mr-2" /> Chat-Vorschau
+                                        </Button>
+                                    </div>
+                                )}
+                                {!report.post_id && !report.message_id && (
+                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <a 
+                                            href={`/profile/${report.reported_username}`} 
+                                            target="_blank" 
+                                            rel="noreferrer"
+                                            className="bg-secondary text-secondary-foreground px-3 py-1.5 rounded-md text-sm font-medium flex items-center hover:bg-secondary/90 transition-colors"
+                                        >
+                                            <ExternalLinkIcon className="w-4 h-4 mr-2" /> Zum Profil
+                                        </a>
+                                    </div>
                                 )}
                             </div>
 
@@ -253,6 +326,80 @@ export default function ReportedContentList() {
                 ))
             )}
 
+            {/* Vorschau-Dialog */}
+            <Dialog open={!!previewReport} onOpenChange={() => setPreviewReport(null)}>
+                <DialogContent className="bg-card border-border text-foreground max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Inhalts-Vorschau</DialogTitle>
+                        <DialogDescription>
+                            Genaue Prüfung des gemeldeten Inhalts.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {isPreviewLoading ? (
+                        <div className="flex justify-center py-12"><Loader2Icon className="animate-spin w-8 h-8 text-secondary" /></div>
+                    ) : (
+                        <div className="space-y-6 py-4">
+                            {/* CHAT VORSCHAU */}
+                            {previewReport?.message_id && Array.isArray(previewData) && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <Badge variant="outline">Chat-Kontext (11 Nachrichten)</Badge>
+                                        <span className="text-[10px] text-muted-foreground italic">
+                                            5 davor / 5 danach (DSGVO-konform)
+                                        </span>
+                                    </div>
+                                    
+                                    <div className="space-y-1 bg-neutral/5 p-4 rounded-xl border border-border">
+                                        {previewData.map((msg: any) => {
+                                            const isReportedUser = msg.sender_id === previewReport.reported_user_id;
+                                            const isTargetMessage = msg.id === previewReport.message_id;
+
+                                            return (
+                                                <div key={msg.id} className={cn(
+                                                    "flex w-full",
+                                                    isReportedUser ? "justify-start" : "justify-end"
+                                                )}>
+                                                    <div className={cn(
+                                                        "max-w-[85%] p-3 rounded-2xl mb-2",
+                                                        isReportedUser 
+                                                            ? "bg-neutral/20 text-foreground rounded-tl-none border border-border/50" 
+                                                            : "bg-secondary/10 text-foreground rounded-tr-none border border-secondary/20",
+                                                        isTargetMessage && "ring-2 ring-destructive border-destructive/50 bg-destructive/5 shadow-lg"
+                                                    )}>
+                                                        <div className="flex justify-between items-center gap-4 mb-1">
+                                                            <span className={cn(
+                                                                "font-bold text-[10px] uppercase tracking-wider",
+                                                                isReportedUser ? "text-destructive" : "text-secondary"
+                                                            )}>
+                                                                {msg.sender?.display_name || 'System'}
+                                                            </span>
+                                                            <span className="text-[9px] opacity-50">
+                                                                {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                                                        {isTargetMessage && (
+                                                            <div className="flex items-center gap-1 mt-2">
+                                                                <AlertTriangleIcon className="w-3 h-3 text-destructive" />
+                                                                <span className="text-[9px] text-destructive font-bold uppercase">Gemeldete Nachricht</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button onClick={() => setPreviewReport(null)}>Schließen</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             {/* Moderations-Dialog */}
             <Dialog open={!!selectedReport} onOpenChange={() => !isProcessing && setSelectedReport(null)}>
                 <DialogContent className="bg-card border-border text-foreground sm:max-w-[425px]">
@@ -260,6 +407,8 @@ export default function ReportedContentList() {
                         <DialogTitle>
                             {actionType === 'TAKEDOWN' ? 'Inhalt sperren' : 
                              actionType === 'SUSPEND' ? 'Account sperren' : 
+                             actionType === 'ACCEPT_APPEAL' ? 'Widerspruch stattgeben' :
+                             actionType === 'REJECT_APPEAL' ? 'Widerspruch ablehnen' :
                              'Meldung ignorieren'}
                         </DialogTitle>
                         <DialogDescription>
@@ -283,7 +432,7 @@ export default function ReportedContentList() {
                         <Button
                             onClick={handleActionSubmit}
                             disabled={isProcessing || !resolutionReason.trim()}
-                            variant={actionType === 'DISMISS' ? 'default' : 'destructive'}
+                            variant={(actionType === 'DISMISS' || actionType === 'ACCEPT_APPEAL') ? 'default' : 'destructive'}
                         >
                             {isProcessing && <Loader2Icon className="animate-spin h-4 w-4 mr-2" />}
                             Entscheidung bestätigen

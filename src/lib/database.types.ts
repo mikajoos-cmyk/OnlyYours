@@ -17,7 +17,7 @@ export type Database = {
           bio: string
           avatar_url: string | null
           banner_url: string | null
-          role: 'FAN' | 'CREATOR'
+          role: 'FAN' | 'CREATOR' | 'ADMIN'
           is_verified: boolean
           subscription_price: number
           followers_count: number
@@ -27,6 +27,9 @@ export type Database = {
           interests: string[] | null
           country: string | null
           welcome_message: string | null
+          is_suspended: boolean
+          has_pending_appeal: boolean
+          is_banned: boolean
         }
         Insert: {
           id: string
@@ -45,6 +48,9 @@ export type Database = {
           interests?: string[] | null
           country?: string | null
           welcome_message?: string | null
+          is_suspended?: boolean
+          has_pending_appeal?: boolean
+          is_banned?: boolean
         }
         Update: {
           id?: string
@@ -63,6 +69,9 @@ export type Database = {
           interests?: string[] | null
           country?: string | null
           welcome_message?: string | null
+          is_suspended?: boolean
+          has_pending_appeal?: boolean
+          is_banned?: boolean
         }
       }
       subscription_tiers: {
@@ -118,6 +127,8 @@ export type Database = {
           scheduled_for: string | null
           created_at: string
           updated_at: string
+          moderation_status: 'ACTIVE' | 'TAKEDOWN'
+          takedown_reason: string | null
         }
         Insert: {
           id?: string
@@ -136,6 +147,8 @@ export type Database = {
           scheduled_for?: string | null
           created_at?: string
           updated_at?: string
+          moderation_status?: 'ACTIVE' | 'TAKEDOWN'
+          takedown_reason?: string | null
         }
         Update: {
           id?: string
@@ -154,6 +167,8 @@ export type Database = {
           scheduled_for?: string | null
           created_at?: string
           updated_at?: string
+          moderation_status?: 'ACTIVE' | 'TAKEDOWN'
+          takedown_reason?: string | null
         }
       }
       subscriptions: {
@@ -394,6 +409,82 @@ export type Database = {
           reason?: string
           description?: string | null
           status?: string
+          created_at?: string
+        }
+      }
+      user_reports: {
+        Row: {
+          id: string
+          reporter_id: string | null
+          reported_id: string
+          reason: string
+          description: string | null
+          related_message_id: string | null
+          related_post_id: string | null
+          related_comment_id: string | null
+          status: 'pending' | 'resolved' | 'dismissed'
+          resolution_reason: string | null
+          appeal_status: 'pending' | 'accepted' | 'rejected' | null
+          appeal_description: string | null
+          appealed_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          reporter_id?: string | null
+          reported_id: string
+          reason: string
+          description?: string | null
+          related_message_id?: string | null
+          related_post_id?: string | null
+          related_comment_id?: string | null
+          status?: 'pending' | 'resolved' | 'dismissed'
+          resolution_reason?: string | null
+          appeal_status?: 'pending' | 'accepted' | 'rejected' | null
+          appeal_description?: string | null
+          appealed_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          reporter_id?: string | null
+          reported_id?: string
+          reason?: string
+          description?: string | null
+          related_message_id?: string | null
+          related_post_id?: string | null
+          related_comment_id?: string | null
+          status?: 'pending' | 'resolved' | 'dismissed'
+          resolution_reason?: string | null
+          appeal_status?: 'pending' | 'accepted' | 'rejected' | null
+          appeal_description?: string | null
+          appealed_at?: string | null
+          created_at?: string
+        }
+      }
+      admin_audit_logs: {
+        Row: {
+          id: string
+          admin_user_id: string | null
+          action: string
+          entity_id: string | null
+          details: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          admin_user_id?: string | null
+          action: string
+          entity_id?: string | null
+          details?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          admin_user_id?: string | null
+          action?: string
+          entity_id?: string | null
+          details?: Json
           created_at?: string
         }
       }

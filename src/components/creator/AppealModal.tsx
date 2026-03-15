@@ -32,14 +32,14 @@ export function AppealModal({ userId, isOpen: propIsOpen, onClose, postId, onSuc
       if (postId) {
         // Widerspruch für einen spezifischen Post
         const { error } = await supabase
-          .from('content_reports')
+          .from('user_reports')
           .update({
             appeal_status: 'pending',
             appeal_description: description,
             appealed_at: new Date().toISOString()
           })
-          .eq('post_id', postId)
-          .eq('status', 'RESOLVED_TAKEDOWN')
+          .eq('related_post_id', postId)
+          .eq('status', 'resolved')
           .is('appeal_status', null);
         
         if (error) throw error;
@@ -57,7 +57,7 @@ export function AppealModal({ userId, isOpen: propIsOpen, onClose, postId, onSuc
           .is('appeal_status', null);
 
         if (error) throw error;
-        await supabase.from('profiles').update({ has_pending_appeal: true }).eq('id', userId);
+        await supabase.from('users').update({ has_pending_appeal: true }).eq('id', userId);
       }
 
       toast({ title: 'Widerspruch eingereicht' });

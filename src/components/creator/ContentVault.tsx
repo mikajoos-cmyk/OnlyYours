@@ -4,6 +4,7 @@ import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Checkbox } from '../ui/checkbox';
+import { Badge } from '../ui/badge';
 import { UploadIcon, Trash2Icon, VideoIcon, PencilIcon, ShieldAlertIcon } from 'lucide-react';
 import { AppealModal } from './AppealModal';
 import ProfilePostViewer, { PostData as ViewerPostData } from '../fan/ProfilePostViewer';
@@ -65,11 +66,15 @@ export default function ContentVault() {
       case 'published':
         contentToShow = allPosts.filter(p =>
           p.is_published &&
+          // @ts-ignore
+          p.moderation_status !== 'TAKEDOWN' &&
           (!p.scheduled_for || new Date(p.scheduled_for) <= now)
         );
         break;
       case 'scheduled':
         contentToShow = allPosts.filter(p =>
+          // @ts-ignore
+          p.moderation_status !== 'TAKEDOWN' &&
           p.scheduled_for && new Date(p.scheduled_for) > now
         );
         break;
@@ -89,7 +94,10 @@ export default function ContentVault() {
         break;
       case 'all':
       default:
-        contentToShow = allPosts;
+        contentToShow = allPosts.filter(p => 
+           // @ts-ignore
+           p.moderation_status !== 'TAKEDOWN'
+        );
         break;
     }
     setFilteredContent(contentToShow);
@@ -256,17 +264,25 @@ export default function ContentVault() {
                             <p className="text-white text-sm font-bold mb-1">Inhalt gesperrt</p>
                             {/* @ts-ignore */}
                             <p className="text-gray-300 text-xs mb-3">{post.takedown_reason || 'Verstoß gegen Richtlinien'}</p>
-                            <Button 
-                              size="sm" 
-                              className="bg-primary text-primary-foreground hover:bg-primary/90"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPostToAppeal(post.id);
-                                setIsAppealModalOpen(true);
-                              }}
-                            >
-                              Widerspruch einlegen
-                            </Button>
+                            
+                            {/* @ts-ignore */}
+                            {post.appeal_status === 'pending' ? (
+                               <Badge className="bg-orange-500 text-white border-none">Widerspruch eingereicht</Badge>
+                            ) : /* @ts-ignore */ post.appeal_status === 'rejected' ? (
+                               <Badge variant="destructive">Widerspruch abgelehnt</Badge>
+                            ) : (
+                              <Button 
+                                size="sm" 
+                                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPostToAppeal(post.id);
+                                  setIsAppealModalOpen(true);
+                                }}
+                              >
+                                Widerspruch einlegen
+                              </Button>
+                            )}
                           </div>
                         )}
 

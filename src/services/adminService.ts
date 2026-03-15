@@ -86,6 +86,25 @@ export class AdminService {
             })
             .eq('id', reportId);
         if (reportError) throw reportError;
+
+        // 3. Audit Log
+        await this.writeAuditLog('takedown_post', postId, { reason, reportId });
+
+        // 4. E-Mail an den Creator
+        try {
+            const { data: postData } = await supabase.from('posts').select('creator_id').eq('id', postId).single();
+            if (postData?.creator_id) {
+                await supabase.functions.invoke('send-moderation-email', {
+                    body: {
+                        type: 'content_moderated',
+                        userId: postData.creator_id,
+                        data: { reason }
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn('Could not send content moderated email:', e);
+        }
     }
 
     async dismissReport(reportId: string, reason: string) {
@@ -98,6 +117,82 @@ export class AdminService {
             })
             .eq('id', reportId);
         if (error) throw error;
+
+        // Audit Log
+        await this.writeAuditLog('dismiss_report', reportId, { reason });
+    }
+
+    async handleAppeal(reportId: string, decision: 'accepted' | 'rejected', adminNotes: string) {
+        // 1. Report abrufen, um zu wissen was gemeldet wurde
+        const { data: report, error: getError } = await supabase
+            .from('user_reports')
+            .select('*')
+            .eq('id', reportId)
+            .single();
+        if (getError) throw getError;
+
+        // 2. Status aktualisieren
+        const { error: reportError } = await supabase
+            .from('user_reports')
+            .update({
+                // @ts-ignore
+                appeal_status: decision,
+                resolution_reason: adminNotes
+            })
+            .eq('id', reportId);
+        if (reportError) throw reportError;
+
+        // 3. Wenn akzeptiert: Sperren aufheben
+        if (decision === 'accepted') {
+            if (report.related_post_id) {
+                await supabase
+                    .from('posts')
+                    .update({
+                        // @ts-ignore
+                        moderation_status: 'ACTIVE'
+                    })
+                    .eq('id', report.related_post_id);
+            } else if (report.reported_id) {
+                // Wenn keine Inhalts-ID vorhanden, war es eine Account-Sperrung
+                if (!report.related_message_id && !report.related_comment_id) {
+                    await supabase
+                        .from('users')
+                        .update({
+                            // @ts-ignore
+                            is_suspended: false,
+                            has_pending_appeal: false
+                        })
+                        .eq('id', report.reported_id);
+                }
+            }
+        } else {
+            // Wenn abgelehnt: pending flag entfernen (bei Account-Sperre)
+            if (report.reported_id && !report.related_post_id && !report.related_message_id && !report.related_comment_id) {
+                await supabase
+                    .from('users')
+                    .update({
+                        // @ts-ignore
+                        has_pending_appeal: false
+                    })
+                    .eq('id', report.reported_id);
+            }
+        }
+
+        // 4. Audit Log
+        await this.writeAuditLog('handle_appeal', reportId, { decision, adminNotes });
+
+        // 5. E-Mail senden
+        try {
+            await supabase.functions.invoke('send-moderation-email', {
+                body: {
+                    type: 'appeal_decision',
+                    userId: report.reported_id,
+                    data: { appealStatus: decision, adminNotes }
+                }
+            });
+        } catch (e) {
+            console.warn('Could not send appeal decision email:', e);
+        }
     }
 
     async suspendUser(userId: string, reportId: string, reason: string) {
@@ -121,6 +216,40 @@ export class AdminService {
             })
             .eq('id', reportId);
         if (reportError) throw reportError;
+
+        // 3. Audit Log
+        await this.writeAuditLog('suspend_user', userId, { reason, reportId });
+
+        // 4. E-Mail an den Nutzer
+        try {
+            await supabase.functions.invoke('send-moderation-email', {
+                body: {
+                    type: 'account_suspended',
+                    userId: userId,
+                    data: { reason }
+                }
+            });
+        } catch (e) {
+            console.warn('Could not send account suspended email:', e);
+        }
+    }
+
+    // Hilfsmethode für Audit-Logs
+    private async writeAuditLog(action: string, entityId: string, details: any) {
+        try {
+            const { data: userData } = await supabase.auth.getUser();
+            if (userData.user) {
+                await supabase.from('admin_audit_logs').insert({
+                    admin_user_id: userData.user.id,
+                    action,
+                    entity_id: entityId,
+                    details
+                });
+            }
+        } catch (e) {
+            console.warn('Could not write audit log:', e);
+            // Wir werfen hier keinen Fehler, damit die Hauptaktion nicht fehlschlägt
+        }
     }
 
     // NEU: Ban Toggle
@@ -135,8 +264,12 @@ export class AdminService {
   async getReportedMessageContext(messageId: string, conversationId: string) {
     // 1. Gemeldete Nachricht finden
     const { data: targetMessage, error: msgError } = await supabase
-      .from('messages')
-      .select('*')
+      .from('decrypted_messages')
+      .select(`
+        *,
+        sender:users!sender_id(id, display_name, avatar_url),
+        receiver:users!receiver_id(id, display_name, avatar_url)
+      `)
       .eq('id', messageId)
       .single();
 
@@ -144,18 +277,27 @@ export class AdminService {
 
     // 2. Genau 5 Nachrichten DAVOR holen
     const { data: messagesBefore } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', conversationId)
+      .from('decrypted_messages')
+      .select(`
+        *,
+        sender:users!sender_id(id, display_name, avatar_url),
+        receiver:users!receiver_id(id, display_name, avatar_url)
+      `)
+      // Wir simulieren hier die Conversation-ID Logik da die Spalte fehlt
+      .or(`and(sender_id.eq.${targetMessage.sender_id},receiver_id.eq.${targetMessage.receiver_id}),and(sender_id.eq.${targetMessage.receiver_id},receiver_id.eq.${targetMessage.sender_id})`)
       .lt('created_at', targetMessage.created_at)
       .order('created_at', { ascending: false })
       .limit(5);
 
     // 3. Genau 5 Nachrichten DANACH holen
     const { data: messagesAfter } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', conversationId)
+      .from('decrypted_messages')
+      .select(`
+        *,
+        sender:users!sender_id(id, display_name, avatar_url),
+        receiver:users!receiver_id(id, display_name, avatar_url)
+      `)
+      .or(`and(sender_id.eq.${targetMessage.sender_id},receiver_id.eq.${targetMessage.receiver_id}),and(sender_id.eq.${targetMessage.receiver_id},receiver_id.eq.${targetMessage.sender_id})`)
       .gt('created_at', targetMessage.created_at)
       .order('created_at', { ascending: true })
       .limit(5);
@@ -168,17 +310,35 @@ export class AdminService {
     ];
 
     // 5. DSGVO-Audit-Log schreiben (WICHTIG!)
-    const { data: userData } = await supabase.auth.getUser();
-    if (userData.user) {
-      await supabase.from('admin_audit_logs').insert({
-        admin_user_id: userData.user.id,
-        action: 'read_chat_context',
-        entity_id: messageId,
-        details: { reason: 'Prüfung einer Meldung gem. DSA/DSGVO' }
-      });
-    }
+    await this.writeAuditLog('read_chat_context', messageId, { reason: 'Prüfung einer Meldung gem. DSA/DSGVO' });
 
     return allMessages;
+  }
+
+  async getReportedCommentContext(commentId: string) {
+    const { data: comment, error } = await supabase
+      .from('comments')
+      .select(`
+        *,
+        user:users!user_id(id, display_name, avatar_url),
+        post:posts!post_id(*)
+      `)
+      .eq('id', commentId)
+      .single();
+    
+    if (error) throw error;
+    return comment;
+  }
+
+  async getReportedProfileContext(userId: string) {
+    const { data: profile, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    
+    if (error) throw error;
+    return profile;
   }
 }
 

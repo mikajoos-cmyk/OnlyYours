@@ -78,17 +78,21 @@ function App() {
             Dein Account wurde wegen eines Verstoßes gegen unsere Richtlinien gesperrt.
           </p>
           
-          {/* Wir prüfen, ob es eine offene Meldung mit 'pending' appeal gibt */}
-          {!user.has_pending_appeal ? (
+          {/* Wir prüfen den Status des Widerspruchs */}
+          {user.appeal_status === 'pending' ? (
+            <div className="p-4 bg-yellow-50 text-yellow-800 rounded-lg border border-yellow-200">
+              Dein Widerspruch wird aktuell von unserem Team geprüft. Wir benachrichtigen dich per E-Mail.
+            </div>
+          ) : user.appeal_status === 'rejected' ? (
+            <div className="p-4 bg-red-50 text-red-800 rounded-lg border border-red-200">
+              Dein Widerspruch wurde abgelehnt. Die Sperrung bleibt bestehen.
+            </div>
+          ) : (
             <div className="space-y-4">
               <p className="text-sm text-gray-500">
                 Wenn du glaubst, dass dies ein Fehler war, kannst du einmalig Widerspruch einlegen.
               </p>
               <AppealModal userId={user.id} />
-            </div>
-          ) : (
-            <div className="p-4 bg-yellow-50 text-yellow-800 rounded-lg border border-yellow-200">
-              Dein Widerspruch wird aktuell von unserem Team geprüft. Wir benachrichtigen dich per E-Mail.
             </div>
           )}
         </div>

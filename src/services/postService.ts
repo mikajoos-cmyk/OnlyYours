@@ -32,6 +32,9 @@ export interface Post {
   created_at: string;
   price: number;
   tier_id: string | null;
+  moderation_status?: 'ACTIVE' | 'TAKEDOWN';
+  takedown_reason?: string | null;
+  appeal_status?: 'pending' | 'accepted' | 'rejected' | null;
 }
 
 export class PostService {
@@ -145,6 +148,7 @@ export class PostService {
           )
         `)
         .eq('is_published', true)
+        .eq('moderation_status', 'ACTIVE')
         .or('scheduled_for.is.null,scheduled_for.lte.now()')
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
@@ -200,6 +204,7 @@ export class PostService {
       `)
       .in('creator_id', creatorIds)
       .eq('is_published', true)
+      .eq('moderation_status', 'ACTIVE')
       .or('scheduled_for.is.null,scheduled_for.lte.now()')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
@@ -235,6 +240,7 @@ export class PostService {
       `)
       .eq('creator_id', creatorId)
       .eq('is_published', true)
+      .eq('moderation_status', 'ACTIVE')
       .or('scheduled_for.is.null,scheduled_for.lte.now()')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
@@ -324,6 +330,9 @@ export class PostService {
           bio,
           followers_count,
           subscription_price
+        ),
+        user_reports:user_reports!related_post_id (
+          appeal_status
         )
       `)
       .eq('creator_id', creatorId)
@@ -515,6 +524,9 @@ export class PostService {
       created_at: post.created_at,
       price: post.price,
       tier_id: post.tier_id,
+      moderation_status: post.moderation_status,
+      takedown_reason: post.takedown_reason,
+      appeal_status: post.user_reports?.find((r: any) => r.appeal_status !== null)?.appeal_status || null,
     })));
   }
 }

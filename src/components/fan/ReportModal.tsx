@@ -36,10 +36,10 @@ export default function ReportModal({ isOpen, onClose, reportedId, context }: Re
         reporter_id: user.id,
         reported_id: reportedId,
         reason,
-        description,
-        related_message_id: context?.messageId,
-        related_post_id: context?.postId,
-        related_comment_id: context?.commentId,
+        description: description || null,
+        related_message_id: context?.messageId || null,
+        related_post_id: context?.postId || null,
+        related_comment_id: context?.commentId || null,
       });
 
       if (error) throw error;

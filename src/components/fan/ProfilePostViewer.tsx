@@ -315,7 +315,8 @@ export default function ProfilePostViewer({
         <ReportModal
           isOpen={showReportModal}
           onClose={() => setShowReportModal(false)}
-          postId={currentPost.id}
+          reportedId={currentPost.creatorId}
+          context={{ postId: currentPost.id }}
         />
       )}
     </>
