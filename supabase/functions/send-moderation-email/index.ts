@@ -36,7 +36,11 @@ serve(async (req) => {
     )
 
     try {
-        const { type, email, userId, data } = await req.json();
+        const payload = await req.json();
+        const { type, email, userId, data } = payload;
+        
+        console.log("Incoming request payload:", JSON.stringify(payload, null, 2));
+        console.log(`Processing email type: ${type} for user: ${userId || 'N/A'} (email: ${email || 'N/A'})`);
 
         let targetEmail = email;
 
@@ -44,13 +48,15 @@ serve(async (req) => {
         if (!targetEmail && userId) {
             const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
             if (userError || !userData?.user?.email) {
-                console.error("User for email not found:", userError);
+                console.error("User for email not found via userId:", userId, "Error:", userError);
             } else {
                 targetEmail = userData.user.email;
+                console.log(`Found email via userId: ${targetEmail}`);
             }
         }
 
         if (!targetEmail) {
+            console.warn("No recipient email found after processing.");
             return new Response(JSON.stringify({ error: "No recipient email found" }), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
                 status: 400
@@ -85,6 +91,13 @@ serve(async (req) => {
       <p>Du hast das Recht, gegen diese Entscheidung einmalig Widerspruch einzulegen. Logge dich dazu in die App ein und nutze das Formular auf dem Sperrbildschirm.</p>`;
                 break;
 
+            case 'account_unsuspended':
+                subject = 'Wichtige Information: Dein Account wurde entsperrt';
+                htmlContent = `<p>Hallo,</p>
+      <p>dein Account wurde nach einer internen Prüfung wieder freigeschaltet.</p>
+      <p>Du kannst dich ab sofort wieder ganz normal einloggen und alle Funktionen von Only Yours nutzen.</p>`;
+                break;
+
             case 'content_moderated':
                 subject = 'Wichtige Information: Inhalt gesperrt';
                 htmlContent = `<p>Hallo,</p>
@@ -102,14 +115,17 @@ serve(async (req) => {
                 break;
 
             default:
+                console.error(`Unknown email type: ${type}`);
                 return new Response(JSON.stringify({ error: "Unknown email type" }), {
                     headers: { ...corsHeaders, "Content-Type": "application/json" },
                     status: 400
                 });
         }
 
+        console.log(`Prepared email for ${targetEmail} with subject: "${subject}"`);
+
         const emailToSend = {
-            from: 'Only Yours Support <support@onlyyours.app>',
+            from: 'Only Yours Support <support@onlyyours.net>',
             to: [targetEmail],
             subject: subject,
             html: `
@@ -120,6 +136,7 @@ serve(async (req) => {
             </div>`
         };
 
+        console.log("Sending request to Resend API...");
         const response = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
@@ -129,7 +146,23 @@ serve(async (req) => {
             body: JSON.stringify(emailToSend)
         });
 
-        return new Response(JSON.stringify({ message: "E-Mail versendet" }), {
+        const resData = await response.json().catch(() => ({}));
+        console.log(`Resend API status: ${response.status}`);
+        console.log("Resend API response:", JSON.stringify(resData, null, 2));
+
+        if (!response.ok) {
+            console.error("Failed to send email via Resend.");
+            return new Response(JSON.stringify({ 
+                error: "Resend API error", 
+                details: resData,
+                status: response.status 
+            }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                status: response.status
+            });
+        }
+
+        return new Response(JSON.stringify({ message: "E-Mail versendet", resendId: resData.id }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 200
         })

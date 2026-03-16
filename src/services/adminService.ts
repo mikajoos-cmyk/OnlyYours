@@ -91,7 +91,10 @@ export class AdminService {
         // 3. Audit Log
         await this.writeAuditLog('takedown_post', postId, { reason, reportId });
 
-        // 4. E-Mail an den Creator
+        // 4. Melder informieren
+        await this.notifyReporter(reportId);
+
+        // 5. E-Mail an den Creator
         try {
             const { data: postData } = await supabase.from('posts').select('creator_id').eq('id', postId).single();
             if (postData?.creator_id) {
@@ -121,6 +124,9 @@ export class AdminService {
 
         // Audit Log
         await this.writeAuditLog('dismiss_report', reportId, { reason });
+
+        // Melder informieren
+        await this.notifyReporter(reportId);
     }
 
     async handleAppeal(reportId: string, decision: 'accepted' | 'rejected', adminNotes: string) {
@@ -182,7 +188,10 @@ export class AdminService {
         // 4. Audit Log
         await this.writeAuditLog('handle_appeal', reportId, { decision, adminNotes });
 
-        // 5. E-Mail senden
+        // 5. Melder informieren (wenn die Sanktion aufgehoben wurde oder bestätigt wurde)
+        await this.notifyReporter(reportId);
+
+        // 6. E-Mail an den Gemeldeten senden
         try {
             await supabase.functions.invoke('send-moderation-email', {
                 body: {
@@ -218,10 +227,13 @@ export class AdminService {
             .eq('id', reportId);
         if (reportError) throw reportError;
 
-        // 3. Audit Log
+        // 3. Melder informieren
+        await this.notifyReporter(reportId);
+
+        // 4. Audit Log
         await this.writeAuditLog('suspend_user', userId, { reason, reportId });
 
-        // 4. E-Mail an den Nutzer
+        // 5. E-Mail an den Nutzer
         try {
             await supabase.functions.invoke('send-moderation-email', {
                 body: {
@@ -287,6 +299,9 @@ export class AdminService {
           .eq('id', existingReport.id);
         
         if (updateError) throw updateError;
+        
+        // Melder informieren
+        await this.notifyReporter(existingReport.id);
       } else {
         const { error: insertError } = await supabase
           .from('user_reports')
@@ -329,6 +344,18 @@ export class AdminService {
           });
       } catch (e) {
           console.warn('Could not send account suspended email:', e);
+      }
+    } else {
+      // E-Mail senden wenn entsperrt
+      try {
+          await supabase.functions.invoke('send-moderation-email', {
+              body: {
+                  type: 'account_unsuspended',
+                  userId: userId
+              }
+          });
+      } catch (e) {
+          console.warn('Could not send account unsuspended email:', e);
       }
     }
   }
@@ -411,6 +438,29 @@ export class AdminService {
     
     if (error) throw error;
     return profile;
+  }
+
+  // Melder informieren, dass Maßnahmen ergriffen wurden
+  private async notifyReporter(reportId: string) {
+    try {
+        const { data: report } = await supabase
+            .from('user_reports')
+            .select('reporter_id')
+            .eq('id', reportId)
+            .single();
+
+        if (report?.reporter_id) {
+            await supabase.functions.invoke('send-moderation-email', {
+                body: {
+                    type: 'report_resolved',
+                    userId: report.reporter_id,
+                    data: {}
+                }
+            });
+        }
+    } catch (e) {
+        console.warn('Could not notify reporter:', e);
+    }
   }
 }
 
