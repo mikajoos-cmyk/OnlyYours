@@ -20,6 +20,7 @@ export interface AdminUser {
     country: string | null;
     birthdate: string | null;
     is_banned: boolean;
+    is_suspended: boolean;
     created_at: string;
     updated_at: string;
     last_seen: string | null;
@@ -259,6 +260,77 @@ export class AdminService {
       ban_status: banStatus
     });
     if (error) throw error;
+  }
+
+  async toggleUserSuspension(userId: string, suspensionStatus: boolean, reason?: string) {
+    if (suspensionStatus) {
+      const { data: { user: adminUser } } = await supabase.auth.getUser();
+      
+      // Wenn wir sperren, suchen wir nach einem bestehenden Report oder erstellen einen Fallback-Report für den Grund
+      const { data: existingReport } = await supabase
+        .from('user_reports')
+        .select('id')
+        .eq('reported_id', userId)
+        .is('related_post_id', null)
+        .is('related_message_id', null)
+        .is('related_comment_id', null)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (existingReport) {
+        const { error: updateError } = await supabase
+          .from('user_reports')
+          .update({
+            status: 'resolved',
+            resolution_reason: reason || 'Konto durch Administrator gesperrt'
+          })
+          .eq('id', existingReport.id);
+        
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from('user_reports')
+          .insert({
+            reporter_id: adminUser?.id,
+            reported_id: userId,
+            reason: 'admin_manual',
+            description: 'Manuelle Sperrung durch Admin im Benutzer-Management',
+            status: 'resolved',
+            resolution_reason: reason || 'Konto durch Administrator gesperrt'
+          });
+        
+        if (insertError) throw insertError;
+      }
+    }
+
+    const { error } = await supabase
+        .from('users')
+        .update({
+            // @ts-ignore
+            is_suspended: suspensionStatus,
+            has_pending_appeal: false
+        })
+        .eq('id', userId);
+    
+    if (error) throw error;
+
+    // Audit Log
+    await this.writeAuditLog('toggle_user_suspension', userId, { suspensionStatus, reason });
+
+    // E-Mail senden wenn gesperrt
+    if (suspensionStatus) {
+      try {
+          await supabase.functions.invoke('send-moderation-email', {
+              body: {
+                  type: 'account_suspended',
+                  userId: userId,
+                  data: { reason: reason || 'Verstoß gegen Richtlinien' }
+              }
+          });
+      } catch (e) {
+          console.warn('Could not send account suspended email:', e);
+      }
+    }
   }
 
   async getReportedMessageContext(messageId: string, conversationId: string) {

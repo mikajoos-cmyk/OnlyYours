@@ -78,14 +78,27 @@ function App() {
             Dein Account wurde wegen eines Verstoßes gegen unsere Richtlinien gesperrt.
           </p>
           
+          {user.suspension_reason && (
+            <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg text-left">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Grund der Sperrung:</p>
+              <p className="text-gray-700 italic">"{user.suspension_reason}"</p>
+            </div>
+          )}
+          
           {/* Wir prüfen den Status des Widerspruchs */}
           {user.appeal_status === 'pending' ? (
-            <div className="p-4 bg-yellow-50 text-yellow-800 rounded-lg border border-yellow-200">
-              Dein Widerspruch wird aktuell von unserem Team geprüft. Wir benachrichtigen dich per E-Mail.
+            <div className="space-y-4">
+              <div className="p-4 bg-yellow-50 text-yellow-800 rounded-lg border border-yellow-200 text-sm">
+                Dein Widerspruch wird aktuell von unserem Team geprüft. Wir benachrichtigen dich per E-Mail.
+              </div>
+              <AppealModal userId={user.id} appealStatus="pending" />
             </div>
           ) : user.appeal_status === 'rejected' ? (
-            <div className="p-4 bg-red-50 text-red-800 rounded-lg border border-red-200">
-              Dein Widerspruch wurde abgelehnt. Die Sperrung bleibt bestehen.
+            <div className="space-y-4">
+              <div className="p-4 bg-red-50 text-red-800 rounded-lg border border-red-200 text-sm">
+                Dein Widerspruch wurde abgelehnt. Die Sperrung bleibt bestehen.
+              </div>
+              <AppealModal userId={user.id} appealStatus="rejected" />
             </div>
           ) : (
             <div className="space-y-4">

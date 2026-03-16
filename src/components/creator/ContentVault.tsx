@@ -346,7 +346,7 @@ export default function ContentVault() {
         isOpen={isAppealModalOpen}
         onClose={() => setIsAppealModalOpen(false)}
         postId={postToAppeal || ''}
-        creatorId={user?.id || ''}
+        userId={user?.id || ''}
         onSuccess={fetchContent}
       />
     </div>

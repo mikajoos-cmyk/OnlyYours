@@ -21,6 +21,7 @@ export interface UserProfile {
   is_live: boolean;
   live_stream_tier_id: string | null;
   live_stream_requires_subscription: boolean | null;
+  is_suspended?: boolean;
 }
 
 export class UserService {
@@ -31,7 +32,7 @@ export class UserService {
 
     const { data: { user: currentUser } } = await supabase.auth.getUser();
 
-    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription';
+    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription, is_suspended';
 
     const { data, error } = await supabase
       .from('users')
@@ -43,8 +44,8 @@ export class UserService {
       console.error("Supabase error in getUserByUsername:", error);
       throw error;
     }
-    if (!data) {
-      console.log("No user found for username:", normalizedUsername);
+    if (!data || (data.is_suspended && currentUser?.id !== data.id)) {
+      console.log("No user found or user suspended for username:", normalizedUsername);
       return null;
     }
 
@@ -69,6 +70,8 @@ export class UserService {
   }
 
   async getUserById(userId: string): Promise<UserProfile | null> {
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+
     const { data, error } = await supabase
       .from('users')
       .select('*')
@@ -76,7 +79,7 @@ export class UserService {
       .maybeSingle();
 
     if (error) throw error;
-    if (!data) return null;
+    if (!data || (data.is_suspended && currentUser?.id !== data.id)) return null;
 
     return this.mapToUserProfile(data);
   }
@@ -85,12 +88,13 @@ export class UserService {
     const cleanedQuery = query.toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
     if (!cleanedQuery) return [];
 
-    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription';
+    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription, is_suspended';
 
     let queryBuilder = supabase
       .from('users')
       .select(publicSelect)
       .in('role', ['CREATOR', 'ADMIN'])
+      .eq('is_suspended', false)
       .or(
         `username.ilike.%${cleanedQuery}%,` +
         `display_name.ilike.%${cleanedQuery}%,` +
@@ -110,13 +114,14 @@ export class UserService {
   }
 
   async getLiveCreators(limit: number = 50) {
-    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription';
+    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription, is_suspended';
 
     const { data, error } = await supabase
       .from('users')
       .select(publicSelect)
       .eq('role', 'CREATOR')
       .eq('is_live', true)
+      .eq('is_suspended', false)
       .order('followers_count', { ascending: false })
       .limit(limit);
 
@@ -129,12 +134,13 @@ export class UserService {
   }
 
   async getTopCreators(limit: number = 20) {
-    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription';
+    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription, is_suspended';
 
     const { data, error } = await supabase
       .from('users')
       .select(publicSelect)
       .eq('role', 'CREATOR')
+      .eq('is_suspended', false)
       .order('followers_count', { ascending: false })
       .limit(limit);
 
@@ -188,6 +194,7 @@ export class UserService {
       is_live: data.is_live || false,
       live_stream_tier_id: data.live_stream_tier_id || null,
       live_stream_requires_subscription: data.live_stream_requires_subscription === null ? true : data.live_stream_requires_subscription,
+      is_suspended: data.is_suspended || false,
     };
   }
 }

@@ -66,9 +66,10 @@ export default function UserManagement() {
 
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
-    const [banDialogOpen, setBanDialogOpen] = useState(false);
-    const [userToBan, setUserToBan] = useState<AdminUser | null>(null);
-    const [isProcessingBan, setIsProcessingBan] = useState(false);
+    const [userToProcess, setUserToProcess] = useState<AdminUser | null>(null);
+    const [suspensionDialogOpen, setSuspensionDialogOpen] = useState(false);
+    const [suspensionReason, setSuspensionReason] = useState('');
+    const [isProcessing, setIsProcessing] = useState(false);
 
     useEffect(() => {
         const fetchUsers = async () => {
@@ -93,30 +94,32 @@ export default function UserManagement() {
         return () => clearTimeout(timer);
     }, [search, roleFilter]);
 
-    const handleBanClick = (user: AdminUser) => {
-        setUserToBan(user);
-        setBanDialogOpen(true);
+    const handleSuspensionClick = (user: AdminUser) => {
+        setUserToProcess(user);
+        setSuspensionReason('');
+        setSuspensionDialogOpen(true);
     };
 
-    const confirmBan = async () => {
-        if (!userToBan) return;
-        setIsProcessingBan(true);
+    const confirmSuspension = async () => {
+        if (!userToProcess) return;
+        setIsProcessing(true);
         try {
-            const newStatus = !userToBan.is_banned;
-            await adminService.toggleUserBan(userToBan.id, newStatus);
+            const newStatus = !userToProcess.is_suspended;
+            await adminService.toggleUserSuspension(userToProcess.id, newStatus, suspensionReason);
 
-            setUsers(prev => prev.map(u => u.id === userToBan.id ? { ...u, is_banned: newStatus } : u));
+            setUsers(prev => prev.map(u => u.id === userToProcess.id ? { ...u, is_suspended: newStatus } : u));
 
             toast({
-                title: newStatus ? "Nutzer gesperrt" : "Sperre aufgehoben",
-                description: `${userToBan.username} wurde ${newStatus ? 'gesperrt' : 'entsperrt'}.`
+                title: newStatus ? "Nutzer gesperrt" : "Nutzer entsperrt",
+                description: `${userToProcess.username} wurde ${newStatus ? 'gesperrt' : 'entsperrt'}.`
             });
-            setBanDialogOpen(false);
+            setSuspensionDialogOpen(false);
         } catch (error: any) {
             toast({ title: "Fehler", description: error.message, variant: "destructive" });
         } finally {
-            setIsProcessingBan(false);
-            setUserToBan(null);
+            setIsProcessing(false);
+            setUserToProcess(null);
+            setSuspensionReason('');
         }
     };
 
@@ -196,6 +199,7 @@ export default function UserManagement() {
                         <div>
                             <div className="font-medium text-foreground flex items-center gap-2">
                                 {user.display_name}
+                                {user.is_suspended && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4 bg-orange-600">SUSPENDED</Badge>}
                                 {user.is_banned && <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">BANNED</Badge>}
                             </div>
                             <div className="text-xs text-muted-foreground">@{user.username}</div>
@@ -235,18 +239,37 @@ export default function UserManagement() {
                         {user.total_earnings > 0 ? formatCurrency(user.total_earnings) : '-'}
                     </td>
                     <td className="p-3 text-right pr-6">
-                        <Button
-                            variant={user.is_banned ? "outline" : "ghost"}
-                            size="sm"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleBanClick(user);
-                            }}
-                            className={cn(user.is_banned ? "text-foreground border-border hover:bg-neutral" : "text-destructive hover:text-destructive hover:bg-destructive/10")}
-                        >
-                            {user.is_banned ? <CheckCircleIcon className="w-4 h-4 mr-1" /> : <BanIcon className="w-4 h-4 mr-1" />}
-                            {user.is_banned ? "Freigeben" : "Sperren"}
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                            {user.is_suspended ? (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSuspensionClick(user);
+                                    }}
+                                    className="text-foreground border-border hover:bg-neutral"
+                                >
+                                    <CheckCircleIcon className="w-4 h-4 mr-1" />
+                                    Entsperren
+                                </Button>
+                            ) : (
+                                <div className="flex items-center gap-1">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleSuspensionClick(user);
+                                        }}
+                                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    >
+                                        <BanIcon className="w-4 h-4 mr-1" />
+                                        Sperren
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
                     </td>
                 </tr>
                 {isExpanded && user.role === 'CREATOR' && (
@@ -390,29 +413,42 @@ export default function UserManagement() {
                 </div>
             )}
 
-            {/* Ban Confirmation Dialog */}
-            <AlertDialog open={banDialogOpen} onOpenChange={setBanDialogOpen}>
+            {/* Suspension Confirmation Dialog */}
+            <AlertDialog open={suspensionDialogOpen} onOpenChange={setSuspensionDialogOpen}>
                 <AlertDialogContent className="bg-card border-border">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2 text-foreground">
-                            {userToBan?.is_banned ? <CheckCircleIcon className="text-success" /> : <AlertTriangleIcon className="text-destructive" />}
-                            {userToBan?.is_banned ? "Benutzer entsperren?" : "Benutzer sperren?"}
+                            {userToProcess?.is_suspended ? <CheckCircleIcon className="text-success" /> : <AlertTriangleIcon className="text-destructive" />}
+                            {userToProcess?.is_suspended ? "Benutzer entsperren?" : "Benutzer sperren?"}
                         </AlertDialogTitle>
-                        <AlertDialogDescription>
-                            {userToBan?.is_banned
-                                ? `Möchtest du die Sperre für ${userToBan.username} wirklich aufheben? Der Nutzer kann sich danach wieder einloggen.`
-                                : `Möchtest du ${userToBan?.username} wirklich sperren? Der Nutzer wird sofort ausgeloggt und kann sich nicht mehr anmelden.`
+                        <AlertDialogDescription asChild>
+                            {userToProcess?.is_suspended
+                                ? <div>Möchtest du die Sperrung für {userToProcess.username} wirklich aufheben?</div>
+                                : (
+                                    <div className="space-y-4 pt-2">
+                                        <p>Möchtest du {userToProcess?.username} wirklich sperren? Der Nutzer sieht beim Login einen Sperrbildschirm.</p>
+                                        <div className="space-y-1.5 text-left">
+                                            <label className="text-xs font-bold text-muted-foreground uppercase">Grund der Sperrung (für den Nutzer sichtbar):</label>
+                                            <Input 
+                                                placeholder="z.B. Verstoß gegen Richtlinie X..." 
+                                                value={suspensionReason}
+                                                onChange={(e) => setSuspensionReason(e.target.value)}
+                                                className="bg-background border-border"
+                                            />
+                                        </div>
+                                    </div>
+                                )
                             }
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel className="bg-background text-foreground border-border hover:bg-neutral">Abbrechen</AlertDialogCancel>
                         <AlertDialogAction
-                            onClick={confirmBan}
-                            className={cn(userToBan?.is_banned ? "bg-success hover:bg-success/90" : "bg-destructive hover:bg-destructive/90")}
-                            disabled={isProcessingBan}
+                            onClick={confirmSuspension}
+                            className={cn(userToProcess?.is_suspended ? "bg-success hover:bg-success/90" : "bg-destructive hover:bg-destructive/90")}
+                            disabled={isProcessing}
                         >
-                            {isProcessingBan ? <Loader2Icon className="w-4 h-4 animate-spin" /> : (userToBan?.is_banned ? "Entsperren" : "Sperren")}
+                            {isProcessing ? <Loader2Icon className="w-4 h-4 animate-spin" /> : (userToProcess?.is_suspended ? "Entsperren" : "Sperren")}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

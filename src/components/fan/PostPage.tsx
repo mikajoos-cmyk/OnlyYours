@@ -52,7 +52,7 @@ export default function PostPage() {
       try {
         const fetchedPost = await postService.getPostById(postId);
         if (!fetchedPost) {
-          setError('Post nicht gefunden oder nicht verfügbar.');
+          setError('Dieser Beitrag existiert nicht mehr.');
         } else {
           setPost(fetchedPost);
         }

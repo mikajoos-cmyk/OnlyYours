@@ -12,9 +12,10 @@ interface AppealModalProps {
   onClose?: () => void;
   postId?: string;
   onSuccess?: () => void;
+  appealStatus?: 'pending' | 'accepted' | 'rejected' | null;
 }
 
-export function AppealModal({ userId, isOpen: propIsOpen, onClose, postId, onSuccess }: AppealModalProps) {
+export function AppealModal({ userId, isOpen: propIsOpen, onClose, postId, onSuccess, appealStatus }: AppealModalProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = propIsOpen !== undefined ? propIsOpen : internalIsOpen;
   const setIsOpen = (val: boolean) => {
@@ -26,37 +27,105 @@ export function AppealModal({ userId, isOpen: propIsOpen, onClose, postId, onSuc
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
+  const getButtonText = () => {
+    if (appealStatus === 'pending') return 'Widerspruch eingelegt';
+    if (appealStatus === 'rejected') return 'Abgelehnt';
+    return 'Widerspruch einlegen';
+  };
+
+  const isButtonDisabled = !!appealStatus;
+
   const handleSubmit = async () => {
+    if (isButtonDisabled) return;
     setIsSubmitting(true);
     try {
       if (postId) {
         // Widerspruch für einen spezifischen Post
-        const { error } = await supabase
+        const { data: existingReport, error: fetchError } = await supabase
           .from('user_reports')
-          .update({
-            appeal_status: 'pending',
-            appeal_description: description,
-            appealed_at: new Date().toISOString()
-          })
+          .select('id')
           .eq('related_post_id', postId)
           .eq('status', 'resolved')
-          .is('appeal_status', null);
-        
-        if (error) throw error;
+          .is('appeal_status', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (fetchError) throw fetchError;
+
+        if (!existingReport) {
+          // Fallback: Wenn kein Report da ist, erstellen wir einen "Selbst-Report" als Platzhalter für den Widerspruch
+          // Dies kann passieren, wenn ein Admin manuell gesperrt hat ohne Report-Eintrag
+          const { error: insertError } = await supabase
+            .from('user_reports')
+            .insert({
+              reporter_id: userId, // In diesem Fall ist der User selbst der "Reporter" seines Widerspruchs
+              reported_id: userId,
+              reason: 'appeal_fallback',
+              description: 'Manueller Widerspruch gegen Inhalts-Sperrung',
+              related_post_id: postId,
+              status: 'resolved',
+              appeal_status: 'pending',
+              appeal_description: description,
+              appealed_at: new Date().toISOString()
+            });
+          if (insertError) throw insertError;
+        } else {
+          const { error } = await supabase
+            .from('user_reports')
+            .update({
+              appeal_status: 'pending',
+              appeal_description: description,
+              appealed_at: new Date().toISOString()
+            })
+            .eq('id', existingReport.id);
+          
+          if (error) throw error;
+        }
       } else {
         // Widerspruch für Account-Sperrung
-        const { error } = await supabase
+        const { data: existingReport, error: fetchError } = await supabase
           .from('user_reports')
-          .update({
-            appeal_status: 'pending',
-            appeal_description: description,
-            appealed_at: new Date().toISOString()
-          })
+          .select('id')
           .eq('reported_id', userId)
+          .is('related_post_id', null)
+          .is('related_message_id', null)
+          .is('related_comment_id', null)
           .eq('status', 'resolved')
-          .is('appeal_status', null);
+          .is('appeal_status', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-        if (error) throw error;
+        if (fetchError) throw fetchError;
+
+        if (!existingReport) {
+          // Fallback: Wenn kein Report da ist
+          const { error: insertError } = await supabase
+            .from('user_reports')
+            .insert({
+              reporter_id: userId,
+              reported_id: userId,
+              reason: 'appeal_fallback',
+              description: 'Manueller Widerspruch gegen Account-Sperrung',
+              status: 'resolved',
+              appeal_status: 'pending',
+              appeal_description: description,
+              appealed_at: new Date().toISOString()
+            });
+          if (insertError) throw insertError;
+        } else {
+          const { error } = await supabase
+            .from('user_reports')
+            .update({
+              appeal_status: 'pending',
+              appeal_description: description,
+              appealed_at: new Date().toISOString()
+            })
+            .eq('id', existingReport.id);
+
+          if (error) throw error;
+        }
         await supabase.from('users').update({ has_pending_appeal: true }).eq('id', userId);
       }
 
@@ -109,9 +178,11 @@ export function AppealModal({ userId, isOpen: propIsOpen, onClose, postId, onSuc
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="default" className="w-full">Widerspruch einlegen</Button>
+        <Button variant="default" className="w-full" disabled={isButtonDisabled}>
+          {getButtonText()}
+        </Button>
       </DialogTrigger>
-      {content}
+      {!isButtonDisabled && content}
     </Dialog>
   );
 }

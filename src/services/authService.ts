@@ -30,6 +30,7 @@ export interface AuthUser {
   stripe_onboarding_complete?: boolean;
   is_banned?: boolean;
   is_suspended?: boolean;
+  suspension_reason?: string | null;
   has_pending_appeal?: boolean;
   appeal_status?: 'pending' | 'accepted' | 'rejected' | null;
   identity_verification_status?: 'none' | 'pending' | 'verified' | 'rejected';
@@ -215,10 +216,10 @@ export class AuthService {
       total_earnings: decryptedEarnings
     };
 
-    // --- NEU: Appeal Status für Account-Sperrung laden ---
+    // --- NEU: Appeal Status & Sperrgrund für Account-Sperrung laden ---
     const { data: latestReport } = await supabase
       .from('user_reports')
-      .select('appeal_status')
+      .select('appeal_status, resolution_reason, created_at')
       .eq('reported_id', freshUser.id)
       .is('related_post_id', null)
       .is('related_message_id', null)
@@ -227,7 +228,7 @@ export class AuthService {
       .limit(1)
       .maybeSingle();
 
-    return this.mapUserRowToAuthUser(safeUserData, freshUser.email, latestReport?.appeal_status);
+    return this.mapUserRowToAuthUser(safeUserData, freshUser.email, latestReport?.appeal_status, latestReport?.resolution_reason);
   }
 
   async updateProfile(userId: string, updates: Partial<UserUpdate>) {
@@ -262,7 +263,7 @@ export class AuthService {
     });
   }
 
-  private mapUserRowToAuthUser(userData: any, email?: string, appealStatus?: string | null): AuthUser {
+  private mapUserRowToAuthUser(userData: any, email?: string, appealStatus?: string | null, suspensionReason?: string | null): AuthUser {
     return {
       id: userData.id,
       name: userData.display_name,
@@ -297,6 +298,7 @@ export class AuthService {
       // @ts-ignore
       is_banned: userData.is_banned,
       is_suspended: userData.is_suspended,
+      suspension_reason: suspensionReason,
       has_pending_appeal: userData.has_pending_appeal,
       // @ts-ignore
       appeal_status: appealStatus

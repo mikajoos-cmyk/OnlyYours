@@ -114,14 +114,15 @@ export class PostService {
                 is_verified,
                 bio,
                 followers_count,
-                subscription_price
+                subscription_price,
+                is_suspended
               )
             `)
             .in('id', postIds);
 
           if (!richError && richPosts) {
             const sortMap = new Map((data as any[]).map((p: any, index: number) => [p.id, index]));
-            posts = (richPosts as any[]).sort((a: any, b: any) => {
+            posts = (richPosts as any[]).filter((p: any) => !p.creator?.is_suspended).sort((a: any, b: any) => {
               return (sortMap.get(a.id) || 0) - (sortMap.get(b.id) || 0);
             });
           } else {
@@ -144,8 +145,9 @@ export class PostService {
             is_verified,
             bio,
             followers_count,
-            subscription_price
-          )
+            subscription_price,
+            is_suspended
+          ) StandardPosts
         `)
         .eq('is_published', true)
         .eq('moderation_status', 'ACTIVE')
@@ -153,7 +155,7 @@ export class PostService {
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 
-      posts = standardPosts as any[] || [];
+      posts = (standardPosts as any[] || []).filter((p: any) => !p.creator?.is_suspended);
       error = standardError;
     }
 
@@ -199,8 +201,9 @@ export class PostService {
           is_verified,
           bio,
           followers_count,
-          subscription_price
-        )
+          subscription_price,
+          is_suspended
+        ) SubscriberFeed
       `)
       .in('creator_id', creatorIds)
       .eq('is_published', true)
@@ -209,17 +212,19 @@ export class PostService {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
+    const filteredPosts = (posts as any[] || []).filter((p: any) => !p.creator?.is_suspended);
+    
     if (error) throw error;
 
     const { data: likes } = await supabase
       .from('likes')
       .select('post_id')
       .eq('user_id', user.id)
-      .in('post_id', (posts as any[] || []).map((p: any) => p.id));
+      .in('post_id', filteredPosts.map((p: any) => p.id));
 
     const userLikes = new Set(likes?.map((l: any) => l.post_id) || []);
 
-    return await this.mapPostsToFrontend(posts as any[] || [], userLikes);
+    return await this.mapPostsToFrontend(filteredPosts, userLikes);
   }
 
   async getCreatorPosts(creatorId: string, limit: number = 20, offset: number = 0) {
@@ -277,7 +282,8 @@ export class PostService {
           is_verified,
           bio,
           followers_count,
-          subscription_price
+          subscription_price,
+          is_suspended
         )
       `)
       .eq('id', postId)
@@ -293,6 +299,11 @@ export class PostService {
     }
 
     const { data: { user } } = await supabase.auth.getUser();
+    
+    // Check if creator is suspended
+    if ((post as any).creator?.is_suspended && user?.id !== (post as any).creator_id) {
+      return null;
+    }
     const userId = user?.id;
     let userLikes: Set<string> = new Set();
 

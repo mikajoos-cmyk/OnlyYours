@@ -96,15 +96,23 @@ export class MessageService {
       .from('decrypted_messages') // Nutzt den View!
       .select(`
         *,
-        sender:users!sender_id ( id, display_name, avatar_url, is_verified ),
-        receiver:users!receiver_id ( id, display_name, avatar_url, is_verified )
+        sender:users!sender_id ( id, display_name, avatar_url, is_verified, is_suspended ),
+        receiver:users!receiver_id ( id, display_name, avatar_url, is_verified, is_suspended )
       `)
       .or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`)
       .order('created_at', { ascending: true })
       .range(offset, offset + limit - 1);
 
     if (error) throw error;
-    return this.mapMessagesToFrontend(messages || []);
+
+    // Filter messages where the OTHER user is suspended (not the current user)
+    const filteredMessages = (messages || []).filter((msg: any) => {
+      const isOtherSender = msg.sender_id === otherUserId;
+      const otherUser = isOtherSender ? msg.sender : msg.receiver;
+      return !otherUser?.is_suspended || otherUserId === user.id; // Allow self-messages if any
+    });
+
+    return this.mapMessagesToFrontend(filteredMessages);
   }
 
   // Chat-Liste via View (für entschlüsselte Vorschau 'lastMessage')
@@ -116,8 +124,8 @@ export class MessageService {
       .from('decrypted_messages')
       .select(`
         *,
-        sender:users!sender_id ( id, display_name, avatar_url ),
-        receiver:users!receiver_id ( id, display_name, avatar_url )
+        sender:users!sender_id ( id, display_name, avatar_url, is_suspended ),
+        receiver:users!receiver_id ( id, display_name, avatar_url, is_suspended )
       `)
       .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
       .order('created_at', { ascending: false });
@@ -130,7 +138,7 @@ export class MessageService {
       const otherUserId = isReceived ? message.sender_id : message.receiver_id;
       const otherUser = isReceived ? message.sender : message.receiver;
 
-      if (!chatsMap.has(otherUserId) && otherUser) {
+      if (!chatsMap.has(otherUserId) && otherUser && !otherUser.is_suspended) {
         // Ungelesene Nachrichten zählen (auf der echten Tabelle effizienter)
         const { count: unreadCount } = await supabase
           .from('messages')

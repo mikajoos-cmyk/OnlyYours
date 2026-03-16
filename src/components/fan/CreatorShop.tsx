@@ -115,7 +115,9 @@ export default function CreatorShop() {
     };
 
     if (loading) return <div className="flex justify-center p-12"><Loader2Icon className="animate-spin" /></div>;
-    if (!creator) return <div>Creator nicht gefunden.</div>;
+    if (!creator || (creator.is_suspended && currentUser?.id !== creator.id)) {
+        return <div className="min-h-screen flex items-center justify-center">Dieser Creator existiert nicht mehr.</div>;
+    }
 
     return (
         <div className="min-h-screen bg-background p-4 md:p-8">

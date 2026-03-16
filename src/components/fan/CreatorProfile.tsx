@@ -75,8 +75,8 @@ export default function CreatorProfile() {
 
       try {
         const profile = await userService.getUserByUsername(username);
-        if (!profile) {
-          setError('Benutzer nicht gefunden.');
+        if (!profile || (profile.is_suspended && currentUser?.id !== profile.id)) {
+          setError('Dieser Creator existiert nicht mehr.');
           setIsLoadingProfile(false);
           return;
         }
