@@ -12,6 +12,7 @@ import { subscriptionService } from '../../services/subscriptionService';
 import { useToast } from '../../hooks/use-toast';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import { cn } from '../../lib/utils';
+import AgeGate from './AgeGate';
 
 interface ModalTier {
   id: string;
@@ -190,107 +191,111 @@ export default function SubscriptionModal({
           </DialogTitle>
         </DialogHeader>
 
-        {combinedTiers.length === 0 ? (
-          <p className="text-muted-foreground py-8 text-center">
-            Dieser Creator bietet derzeit keine Abonnements an.
-          </p>
-        ) : (
-          <RadioGroup value={selectedTierId} onValueChange={setSelectedTierId} className="space-y-4">
-            {combinedTiers.map((tier) => (
-              <div
-                key={tier.id}
-                className={cn(
-                  "relative rounded-lg border-2 p-6 cursor-pointer transition-all",
-                  selectedTierId === tier.id ? 'border-secondary bg-secondary/10' : 'border-border hover:border-secondary/50',
-                  tier.isCurrent ? 'opacity-70 cursor-default border-success/30 bg-success/5' : '',
-                  tier.isCanceled ? 'border-warning/50 bg-warning/5' : ''
-                )}
-                onClick={() => !tier.isCurrent && setSelectedTierId(tier.id)}
-              >
-                <div className="flex items-start gap-4">
-                  <RadioGroupItem
-                    value={tier.id}
-                    id={tier.id}
-                    className="mt-1"
-                    disabled={tier.isCurrent}
-                  />
-                  <Label htmlFor={tier.id} className={cn("flex-1", !tier.isCurrent && "cursor-pointer")}>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-xl font-serif text-foreground">{tier.name}</h3>
-                            {tier.isCurrent && (
-                              <span className="bg-success/20 text-success text-xs px-2 py-1 rounded-full font-sans uppercase tracking-wider flex items-center gap-1">
-                                <CheckIcon className="w-3 h-3" /> Aktiv
-                              </span>
-                            )}
-                            {tier.isCanceled && (
-                              <span className="bg-warning/20 text-warning text-xs px-2 py-1 rounded-full font-sans uppercase tracking-wider flex items-center gap-1">
-                                <AlertCircleIcon className="w-3 h-3" /> Läuft aus
-                              </span>
-                            )}
-                            {tier.isUpgrade && (
-                              <span className="bg-secondary/20 text-secondary text-xs px-2 py-1 rounded-full font-sans uppercase tracking-wider flex items-center gap-1">
-                                <ArrowUpCircleIcon className="w-3 h-3" /> Upgrade
-                              </span>
-                            )}
+        <AgeGate>
+          {combinedTiers.length === 0 ? (
+            <p className="text-muted-foreground py-8 text-center">
+              Dieser Creator bietet derzeit keine Abonnements an.
+            </p>
+          ) : (
+            <>
+              <RadioGroup value={selectedTierId} onValueChange={setSelectedTierId} className="space-y-4">
+                {combinedTiers.map((tier) => (
+                  <div
+                    key={tier.id}
+                    className={cn(
+                      "relative rounded-lg border-2 p-6 cursor-pointer transition-all",
+                      selectedTierId === tier.id ? 'border-secondary bg-secondary/10' : 'border-border hover:border-secondary/50',
+                      tier.isCurrent ? 'opacity-70 cursor-default border-success/30 bg-success/5' : '',
+                      tier.isCanceled ? 'border-warning/50 bg-warning/5' : ''
+                    )}
+                    onClick={() => !tier.isCurrent && setSelectedTierId(tier.id)}
+                  >
+                    <div className="flex items-start gap-4">
+                      <RadioGroupItem
+                        value={tier.id}
+                        id={tier.id}
+                        className="mt-1"
+                        disabled={tier.isCurrent}
+                      />
+                      <Label htmlFor={tier.id} className={cn("flex-1", !tier.isCurrent && "cursor-pointer")}>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex flex-col">
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-xl font-serif text-foreground">{tier.name}</h3>
+                                {tier.isCurrent && (
+                                  <span className="bg-success/20 text-success text-xs px-2 py-1 rounded-full font-sans uppercase tracking-wider flex items-center gap-1">
+                                    <CheckIcon className="w-3 h-3" /> Aktiv
+                                  </span>
+                                )}
+                                {tier.isCanceled && (
+                                  <span className="bg-warning/20 text-warning text-xs px-2 py-1 rounded-full font-sans uppercase tracking-wider flex items-center gap-1">
+                                    <AlertCircleIcon className="w-3 h-3" /> Läuft aus
+                                  </span>
+                                )}
+                                {tier.isUpgrade && (
+                                  <span className="bg-secondary/20 text-secondary text-xs px-2 py-1 rounded-full font-sans uppercase tracking-wider flex items-center gap-1">
+                                    <ArrowUpCircleIcon className="w-3 h-3" /> Upgrade
+                                  </span>
+                                )}
+                              </div>
+                              {tier.isCanceled && activeSub?.endDate && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Zugriff bis: {new Date(activeSub.endDate).toLocaleDateString()}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="text-right">
+                              {tier.isUpgrade ? (
+                                <>
+                                  <span className="text-2xl font-serif text-secondary">
+                                    {tier.upgradePrice.toFixed(2)}€
+                                  </span>
+                                  <p className="text-xs text-muted-foreground">
+                                    (+ {tier.upgradePrice.toFixed(2)}€ Differenz)
+                                  </p>
+                                </>
+                              ) : (
+                                <span className="text-2xl font-serif text-secondary">
+                                  {tier.price.toFixed(2)}€<span className="text-sm text-muted-foreground">/Monat</span>
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          {tier.isCanceled && activeSub?.endDate && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Zugriff bis: {new Date(activeSub.endDate).toLocaleDateString()}
+
+                          <ul className="space-y-2">
+                            {tier.benefits.map((benefit, index) => (
+                              <li key={index} className="flex items-start gap-2 text-foreground">
+                                <CheckIcon className="w-5 h-5 text-secondary flex-shrink-0 mt-0.5" strokeWidth={2} />
+                                <span>{String(benefit)}</span>
+                              </li>
+                            ))}
+                          </ul>
+
+                          {tier.isDowngrade && (
+                            <p className="text-xs text-warning mt-2">
+                              Hinweis: Dies ist eine niedrigere Stufe. Änderungen werden am Ende des laufenden Abrechnungszeitraums wirksam.
                             </p>
                           )}
                         </div>
-
-                        <div className="text-right">
-                          {tier.isUpgrade ? (
-                            <>
-                              <span className="text-2xl font-serif text-secondary">
-                                {tier.upgradePrice.toFixed(2)}€
-                              </span>
-                              <p className="text-xs text-muted-foreground">
-                                (+ {tier.upgradePrice.toFixed(2)}€ Differenz)
-                              </p>
-                            </>
-                          ) : (
-                            <span className="text-2xl font-serif text-secondary">
-                              {tier.price.toFixed(2)}€<span className="text-sm text-muted-foreground">/Monat</span>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <ul className="space-y-2">
-                        {tier.benefits.map((benefit, index) => (
-                          <li key={index} className="flex items-start gap-2 text-foreground">
-                            <CheckIcon className="w-5 h-5 text-secondary flex-shrink-0 mt-0.5" strokeWidth={2} />
-                            <span>{String(benefit)}</span>
-                          </li>
-                        ))}
-                      </ul>
-
-                      {tier.isDowngrade && (
-                        <p className="text-xs text-warning mt-2">
-                          Hinweis: Dies ist eine niedrigere Stufe. Änderungen werden am Ende des laufenden Abrechnungszeitraums wirksam.
-                        </p>
-                      )}
+                      </Label>
                     </div>
-                  </Label>
-                </div>
-              </div>
-            ))}
-          </RadioGroup>
-        )}
+                  </div>
+                ))}
+              </RadioGroup>
 
-        <Button
-          onClick={handleProceed}
-          className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90 py-6 text-base font-normal"
-          disabled={combinedTiers.length === 0 || !selectedTierData || selectedTierData.isCurrent}
-        >
-          {selectedTierData?.isCanceled && <RefreshCwIcon className="w-4 h-4 mr-2" />}
-          {getButtonText()}
-        </Button>
+              <Button
+                onClick={handleProceed}
+                className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90 py-6 text-base font-normal mt-6"
+                disabled={combinedTiers.length === 0 || !selectedTierData || selectedTierData.isCurrent}
+              >
+                {selectedTierData?.isCanceled && <RefreshCwIcon className="w-4 h-4 mr-2" />}
+                {getButtonText()}
+              </Button>
+            </>
+          )}
+        </AgeGate>
       </DialogContent>
     </Dialog>
   );

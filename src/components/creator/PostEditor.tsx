@@ -8,9 +8,9 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 // --- PlusIcon hinzugefügt ---
-import { UploadIcon, CalendarIcon, Loader2Icon, Trash2Icon, XIcon, LockIcon, GlobeIcon, PlusIcon } from 'lucide-react';
+import { UploadIcon, CalendarIcon, Loader2Icon, Trash2Icon, XIcon, LockIcon, GlobeIcon, PlusIcon, ShieldAlertIcon } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { storageService } from '../../services/storageService';
 import { postService } from '../../services/postService';
@@ -24,11 +24,15 @@ import { tierService, Tier } from '../../services/tierService';
 import { SecureMedia } from '../ui/SecureMedia';
 import ProductManager from './ProductManager';
 import { ShoppingBagIcon, FileTextIcon } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 export default function PostEditor() {
   const { user } = useAuthStore();
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // Prüfen, ob der Creator vollständig verifiziert ist
+  const isVerified = user?.identity_verification_status === 'verified';
 
   const [searchParams] = useSearchParams();
   const editId = searchParams.get('edit');
@@ -314,6 +318,24 @@ export default function PostEditor() {
       });
     }
   };
+
+  if (!isVerified) {
+    return (
+      <div className="min-h-screen py-8 px-4">
+        <Alert variant="destructive" className="max-w-2xl mx-auto mt-8">
+          <ShieldAlertIcon className="h-4 w-4" />
+          <AlertTitle>Verifizierung erforderlich</AlertTitle>
+          <AlertDescription>
+            Um Beiträge zu veröffentlichen oder live zu gehen, musst du deine Identität und dein Alter verifizieren (gesetzliche Vorgabe).
+            <br className="my-2" />
+            <Link to="/onboarding/identity" className="underline font-bold">
+              Jetzt Verifizierung abschließen
+            </Link>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen py-8 px-4">

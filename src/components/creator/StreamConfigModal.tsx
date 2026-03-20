@@ -12,11 +12,12 @@ import {
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Loader2Icon, LockIcon, UsersIcon, RadioIcon, GlobeIcon } from 'lucide-react'; // GlobeIcon hinzugefügt
+import { Loader2Icon, LockIcon, UsersIcon, RadioIcon, GlobeIcon, ShieldAlertIcon } from 'lucide-react'; // GlobeIcon hinzugefügt
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../hooks/use-toast';
 import { tierService, Tier } from '../../services/tierService';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 interface StreamConfigModalProps {
   isOpen: boolean;
@@ -34,6 +35,8 @@ export default function StreamConfigModal({ isOpen, onClose }: StreamConfigModal
 
   // 'public', 'all_subs', oder eine Tier-UUID
   const [selectedAccessLevel, setSelectedAccessLevel] = useState<string>('all_subs');
+
+  const isVerified = user?.identity_verification_status === 'verified';
 
   // Lade Tiers, wenn das Modal geöffnet wird
   useEffect(() => {
@@ -104,44 +107,58 @@ export default function StreamConfigModal({ isOpen, onClose }: StreamConfigModal
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="stream-access" className="text-foreground">
-              Wer kann zusehen?
-            </Label>
-            <Select
-              value={selectedAccessLevel}
-              onValueChange={setSelectedAccessLevel}
-              disabled={loadingTiers || isStartingStream}
-            >
-              <SelectTrigger className="bg-background text-foreground border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-card text-foreground border-border">
-                {/* NEUE OPTION: Öffentlch */}
-                <SelectItem value="public">
-                  <div className="flex items-center gap-2">
-                    <GlobeIcon className="w-4 h-4" />
-                    Öffentlich (Jeder)
-                  </div>
-                </SelectItem>
-                <SelectItem value="all_subs">
-                  <div className="flex items-center gap-2">
-                    <UsersIcon className="w-4 h-4" />
-                    Alle Abonnenten
-                  </div>
-                </SelectItem>
-                {tiers.map((tier) => (
-                  <SelectItem key={tier.id} value={tier.id}>
+          {!isVerified ? (
+            <Alert variant="destructive">
+              <ShieldAlertIcon className="h-4 w-4" />
+              <AlertTitle>Verifizierung erforderlich</AlertTitle>
+              <AlertDescription>
+                Um live zu gehen, musst du deine Identität verifizieren.
+                <br className="my-2" />
+                <Link to="/onboarding/identity" className="underline font-bold">
+                  Jetzt Verifizierung abschließen
+                </Link>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="stream-access" className="text-foreground">
+                Wer kann zusehen?
+              </Label>
+              <Select
+                value={selectedAccessLevel}
+                onValueChange={setSelectedAccessLevel}
+                disabled={loadingTiers || isStartingStream}
+              >
+                <SelectTrigger className="bg-background text-foreground border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-card text-foreground border-border">
+                  {/* NEUE OPTION: Öffentlch */}
+                  <SelectItem value="public">
                     <div className="flex items-center gap-2">
-                      <LockIcon className="w-4 h-4" />
-                      Nur {tier.name} (Stufe)
+                      <GlobeIcon className="w-4 h-4" />
+                      Öffentlich (Jeder)
                     </div>
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {loadingTiers && <p className="text-xs text-muted-foreground">Lade Abo-Stufen...</p>}
-          </div>
+                  <SelectItem value="all_subs">
+                    <div className="flex items-center gap-2">
+                      <UsersIcon className="w-4 h-4" />
+                      Alle Abonnenten
+                    </div>
+                  </SelectItem>
+                  {tiers.map((tier) => (
+                    <SelectItem key={tier.id} value={tier.id}>
+                      <div className="flex items-center gap-2">
+                        <LockIcon className="w-4 h-4" />
+                        Nur {tier.name} (Stufe)
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {loadingTiers && <p className="text-xs text-muted-foreground">Lade Abo-Stufen...</p>}
+            </div>
+          )}
         </div>
         <DialogFooter>
           <DialogClose asChild>
@@ -157,7 +174,7 @@ export default function StreamConfigModal({ isOpen, onClose }: StreamConfigModal
           <Button
             type="button"
             onClick={handleStartStream}
-            disabled={loadingTiers || isStartingStream}
+            disabled={loadingTiers || isStartingStream || !isVerified}
             className="bg-secondary text-secondary-foreground hover:bg-secondary/90"
           >
             {isStartingStream ? (

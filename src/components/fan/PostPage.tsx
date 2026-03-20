@@ -17,6 +17,7 @@ import SubscriptionModal from './SubscriptionModal';
 import TipModal from './TipModal';
 import ReportModal from './ReportModal'; // <-- NEU
 import { SecureMedia } from '../ui/SecureMedia';
+import AgeGate from './AgeGate';
 
 type PostData = ServicePostData;
 
@@ -249,37 +250,41 @@ export default function PostPage() {
           </div>
 
           {!hasAccess && (
-            <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8">
-              <LockIcon className="w-16 h-16 text-foreground" />
-              {canPpv && (
-                <Button
-                  className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6 w-full max-w-sm"
-                  onClick={handlePpvClick}
-                >
-                  {`Beitrag für ${post.price.toFixed(2)}€ freischalten`}
-                </Button>
-              )}
-              {canPpv && canSubscribe && (
-                 <div className="relative w-full max-w-sm">
-                  <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
-                  <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">ODER</span></div>
-                </div>
-              )}
-              {canSubscribe && (
-                <Button
-                  variant={canPpv ? "outline" : "secondary"}
-                  className={cn(
-                      "text-lg px-8 py-6 w-full max-w-sm",
-                      canPpv
+            <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-4 cursor-default p-8 overflow-y-auto">
+              <AgeGate>
+                <div className="flex flex-col items-center justify-center gap-4 w-full">
+                  <LockIcon className="w-16 h-16 text-foreground" />
+                  {canPpv && (
+                    <Button
+                      className="bg-secondary text-secondary-foreground hover:bg-secondary/90 text-lg px-8 py-6 w-full max-w-sm"
+                      onClick={handlePpvClick}
+                    >
+                      {`Beitrag für ${post.price.toFixed(2)}€ freischalten`}
+                    </Button>
+                  )}
+                  {canPpv && canSubscribe && (
+                    <div className="relative w-full max-w-sm">
+                      <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+                      <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">ODER</span></div>
+                    </div>
+                  )}
+                  {canSubscribe && (
+                    <Button
+                      variant={canPpv ? "outline" : "secondary"}
+                      className={cn(
+                        "text-lg px-8 py-6 w-full max-w-sm",
+                        canPpv
                           ? "bg-transparent border-secondary text-secondary hover:bg-secondary/10 hover:text-secondary"
                           : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                      )}
+                      onClick={handleSubscribeClick}
+                    >
+                      <UserCheckIcon className="w-5 h-5 mr-2" />
+                      {subscribeText}
+                    </Button>
                   )}
-                  onClick={handleSubscribeClick}
-                >
-                  <UserCheckIcon className="w-5 h-5 mr-2" />
-                  {subscribeText}
-                </Button>
-              )}
+                </div>
+              </AgeGate>
             </div>
           )}
 

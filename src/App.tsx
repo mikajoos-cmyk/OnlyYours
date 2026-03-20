@@ -24,6 +24,7 @@ import { AppealModal } from './components/creator/AppealModal';
 import { Toaster } from './components/ui/toaster';
 import CookieBanner from './components/ui/CookieBanner';
 import PostPage from './components/fan/PostPage';
+import AgeGate from './components/fan/AgeGate';
 import LiveStreamWrapper from './components/creator/LiveStreamWrapper';
 import Impressum from './components/legal/Impressum';
 import Datenschutz from './components/legal/Datenschutz';
@@ -130,22 +131,22 @@ function App() {
         <AppShell>
           <Routes>
             <Route path="/" element={<Navigate to="/discover" replace />} />
-            <Route path="/discover" element={<DiscoveryFeed />} />
+            <Route path="/discover" element={<AgeGate><DiscoveryFeed /></AgeGate>} />
             <Route path="/profile/:username" element={<CreatorProfile />} />
-            <Route path="/shop/:username" element={<CreatorShop />} />
-            <Route path="/feed" element={<SubscriberFeed />} />
-            <Route path="/search" element={<SearchPage />} />
+            <Route path="/shop/:username" element={<AgeGate><CreatorShop /></AgeGate>} />
+            <Route path="/feed" element={<AgeGate><SubscriberFeed /></AgeGate>} />
+            <Route path="/search" element={<AgeGate><SearchPage /></AgeGate>} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/vault" element={<ContentVault />} />
             <Route path="/post/new" element={<PostEditor />} />
-            <Route path="/messages" element={<Messages />} />
+            <Route path="/messages" element={<AgeGate><Messages /></AgeGate>} />
             <Route path="/statistics" element={<Statistics />} />
             <Route path="/payouts" element={<Payouts />} />
-            <Route path="/post/:postId" element={<PostPage />} />
+            <Route path="/post/:postId" element={<AgeGate><PostPage /></AgeGate>} />
 
-            <Route path="/live" element={<LiveStreamWrapper />} />
-            <Route path="/live/:username" element={<LiveStreamWrapper />} />
+            <Route path="/live" element={<AgeGate><LiveStreamWrapper /></AgeGate>} />
+            <Route path="/live/:username" element={<AgeGate><LiveStreamWrapper /></AgeGate>} />
 
             {/* Rechtliche Routen */}
             <Route path="/impressum" element={<Impressum />} />

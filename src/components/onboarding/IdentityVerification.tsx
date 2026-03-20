@@ -56,9 +56,9 @@ export default function IdentityVerification({ onComplete }: IdentityVerificatio
         </div>
 
         <div className="space-y-2">
-          <h2 className="text-2xl font-bold text-foreground">Identität verifizieren</h2>
+          <h2 className="text-2xl font-bold text-foreground">Identität & Alter bestätigen</h2>
           <p className="text-muted-foreground text-sm">
-            Um als Creator auf OnlyYours aktiv zu sein, müssen wir Ihre Identität gemäß DSA (Digital Services Act) prüfen.
+            Um die gesetzlichen Vorgaben (Jugendschutz) zu erfüllen, leiten wir dich kurz zu unserem Partner Yoti weiter. Halte deinen Ausweis bereit.
           </p>
         </div>
 
@@ -111,7 +111,7 @@ export default function IdentityVerification({ onComplete }: IdentityVerificatio
           )}
           
           <p className="text-[10px] text-muted-foreground">
-            Wir nutzen <strong>Stripe Identity</strong> für eine sichere Abwicklung. Ihre Ausweisdaten werden nicht auf unseren Servern gespeichert.
+            Wir nutzen <strong>Yoti</strong> für eine sichere Abwicklung. Ihre Ausweisdaten werden nicht auf unseren Servern gespeichert.
           </p>
         </div>
       </div>
