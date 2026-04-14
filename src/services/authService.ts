@@ -41,6 +41,8 @@ export interface AuthUser {
   address_zip?: string | null;
   address_country?: string | null;
   birthdate?: string | null;
+  email_notifications_enabled?: boolean;
+  allow_direct_messages?: boolean;
 }
 
 export class AuthService {
@@ -301,7 +303,9 @@ export class AuthService {
       suspension_reason: suspensionReason,
       has_pending_appeal: userData.has_pending_appeal,
       // @ts-ignore
-      appeal_status: appealStatus
+      appeal_status: appealStatus,
+      email_notifications_enabled: userData.email_notifications_enabled,
+      allow_direct_messages: userData.allow_direct_messages
     };
   }
 }

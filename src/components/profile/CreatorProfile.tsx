@@ -64,6 +64,7 @@ export default function CreatorProfile() {
 
   // States für Formular "Kommunikation"
   const [welcomeMessage, setWelcomeMessage] = useState(user?.welcomeMessage || '');
+  const [allowDMs, setAllowDMs] = useState(user?.allow_direct_messages ?? true);
 
   // Daten synchronisieren, wenn sich der User im Store ändert
   useEffect(() => {
@@ -72,6 +73,7 @@ export default function CreatorProfile() {
       setUsername(user.username || '');
       setBio(user.bio || '');
       setWelcomeMessage(user.welcomeMessage || '');
+      setAllowDMs(user.allow_direct_messages ?? true);
       setProfileHashtags(user.profileHashtags || []);
     }
   }, [user]);
@@ -211,9 +213,10 @@ export default function CreatorProfile() {
     setIsCommunicationLoading(true);
     try {
       await updateProfile({
-        welcome_message: welcomeMessage
+        welcome_message: welcomeMessage,
+        allow_direct_messages: allowDMs
       });
-      toast({ title: "Willkommensnachricht gespeichert!" });
+      toast({ title: "Kommunikationseinstellungen gespeichert!" });
     } catch (error: any) {
       toast({ title: "Speichern fehlgeschlagen", description: error.message, variant: "destructive" });
     } finally {
@@ -620,10 +623,23 @@ export default function CreatorProfile() {
                       Diese Nachricht wird automatisch an jeden neuen Abonnenten gesendet (gilt für alle Stufen).
                     </p>
                   </div>
+
+                  <div className="flex items-center justify-between py-4 border-t border-border mt-6">
+                    <div className="space-y-0.5">
+                      <Label className="text-base text-foreground">Direktnachrichten erlauben</Label>
+                      <p className="text-sm text-muted-foreground">Fans können dir über dein Profil private Nachrichten senden.</p>
+                    </div>
+                    <Switch 
+                      checked={allowDMs} 
+                      onCheckedChange={setAllowDMs}
+                      disabled={isCommunicationLoading}
+                    />
+                  </div>
+
                   <Button
                     type="submit"
                     className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
-                    disabled={isCommunicationLoading || welcomeMessage === (user?.welcomeMessage || '')}
+                    disabled={isCommunicationLoading || (welcomeMessage === (user?.welcomeMessage || '') && allowDMs === (user?.allow_direct_messages ?? true))}
                   >
                     {isCommunicationLoading && <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />}
                     Änderungen speichern

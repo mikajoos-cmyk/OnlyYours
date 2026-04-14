@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { UsersIcon, GridIcon, VideoIcon, CheckIcon, LockIcon, MessageCircleIcon, HeartIcon, LayoutGrid, Image as ImageIcon, Film as FilmIcon, RadioIcon, SettingsIcon, ShoppingBagIcon, FlagIcon } from 'lucide-react';
+import { UsersIcon, GridIcon, VideoIcon, CheckIcon, LockIcon, MessageCircleIcon, HeartIcon, LayoutGrid, Image as ImageIcon, Film as FilmIcon, RadioIcon, SettingsIcon, ShoppingBagIcon, FlagIcon, Loader2Icon } from 'lucide-react';
 import SubscriptionModal from './SubscriptionModal';
 import ProfilePostViewer from './ProfilePostViewer';
 import type { PostData as ViewerPostData } from './ProfilePostViewer';
@@ -12,6 +12,7 @@ import ReportModal from './ReportModal';
 import { userService, UserProfile } from '../../services/userService';
 import { postService, Post as ServicePostData } from '../../services/postService';
 import { tierService, Tier } from '../../services/tierService';
+import { followerService } from '../../services/followerService';
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../hooks/use-toast';
 import { cn } from '../../lib/utils';
@@ -45,6 +46,8 @@ export default function CreatorProfile() {
   const [error, setError] = useState<string | null>(null);
 
   const [subscriptionStatus, setSubscriptionStatus] = useState<'ACTIVE' | 'CANCELED' | null>(null);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
 
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -81,6 +84,12 @@ export default function CreatorProfile() {
           return;
         }
         setCreator(profile);
+
+        if (currentUser && currentUser.id !== profile.id) {
+          followerService.isFollowing(profile.id, currentUser.id)
+            .then(setIsFollowing)
+            .catch(err => console.error("Error checking follow status:", err));
+        }
 
         const tiers = await tierService.getCreatorTiers(profile.id);
         setCreatorTiers(tiers.sort((a, b) => a.price - b.price) || []);
@@ -144,6 +153,31 @@ export default function CreatorProfile() {
     setTimeout(() => {
       setShowSubscriptionModal(true);
     }, 150);
+  };
+
+  const handleFollowToggle = async () => {
+    if (!currentUser || !creator) {
+      toast({ title: "Bitte anmelden", description: "Du musst angemeldet sein, um jemandem zu folgen.", variant: "destructive" });
+      return;
+    }
+
+    setIsFollowLoading(true);
+    try {
+      if (isFollowing) {
+        await followerService.unfollowCreator(creator.id, currentUser.id);
+        setIsFollowing(false);
+        toast({ title: "Erfolg", description: `Du folgst ${creator.display_name} nicht mehr.` });
+      } else {
+        await followerService.followCreator(creator.id, currentUser.id);
+        setIsFollowing(true);
+        toast({ title: "Erfolg", description: `Du folgst nun ${creator.display_name}.` });
+      }
+    } catch (err: any) {
+      console.error("Error toggling follow:", err);
+      toast({ title: "Fehler", description: "Follow-Status konnte nicht aktualisiert werden.", variant: "destructive" });
+    } finally {
+      setIsFollowLoading(false);
+    }
   };
 
   const handlePostClick = (index: number, hasAccess: boolean) => {
@@ -331,7 +365,22 @@ export default function CreatorProfile() {
 
     return (
       <div className="mt-8 flex flex-col items-center">
-        {subscribeButton}
+        <div className="flex flex-col md:flex-row items-center gap-4">
+          {subscribeButton}
+          {!isOwnProfile && (
+            <Button
+              onClick={handleFollowToggle}
+              disabled={isFollowLoading}
+              variant={isFollowing ? "outline" : "secondary"}
+              className={cn(
+                "font-normal transition-colors duration-200 min-w-[150px] text-lg py-6 px-10 rounded-full shadow-lg",
+                isFollowing ? "border-2 border-secondary text-secondary hover:bg-secondary/10" : ""
+              )}
+            >
+              {isFollowLoading ? <Loader2Icon className="w-5 h-5 animate-spin" /> : (isFollowing ? 'Gefolgt' : 'Folgen')}
+            </Button>
+          )}
+        </div>
 
         {!isOwnProfile && (
           <Button
@@ -379,8 +428,20 @@ export default function CreatorProfile() {
             <span className="text-muted-foreground">Follower</span>
           </div>
 
-          <div className="flex items-center gap-4 mt-4">
+          <div className="flex flex-wrap items-center justify-center gap-4 mt-4">
             {renderSubscribeButton()}
+            
+            {!isOwnProfile && creator.allow_direct_messages && (
+              <Button 
+                variant="outline" 
+                className="font-normal text-lg py-6 px-10 rounded-full shadow-lg border-2 border-border hover:bg-neutral"
+                onClick={() => navigate(`/messages?to=${creator.id}`)}
+              >
+                <MessageCircleIcon className="w-5 h-5 mr-2" />
+                Nachricht senden
+              </Button>
+            )}
+
             {!isOwnProfile && (
               <Button
                 variant="ghost"

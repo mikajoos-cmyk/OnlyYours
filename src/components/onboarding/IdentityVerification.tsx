@@ -1,41 +1,32 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ShieldCheckIcon, AlertCircleIcon, Loader2Icon, ExternalLinkIcon } from 'lucide-react';
+import { ShieldCheckIcon, AlertCircleIcon, Loader2Icon } from 'lucide-react';
 import { Button } from '../ui/button';
-import { useAuthStore } from '../../stores/authStore';
 import { supabase } from '../../lib/supabase';
-import { useToast } from '../../hooks/use-toast';
+import { useAuthStore } from '../../stores/authStore';
 
-interface IdentityVerificationProps {
-  onComplete: () => void;
-}
-
-export default function IdentityVerification({ onComplete }: IdentityVerificationProps) {
+export default function IdentityVerification() {
   const { user } = useAuthStore();
-  const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const startVerification = async () => {
-    setIsLoading(true);
+    setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-verification-session');
-      
+      const { data, error } = await supabase.functions.invoke('create-verification-session', {
+        body: { userId: user?.id, type: 'creator' }
+      });
+
       if (error) throw error;
-      
-      if (data?.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error('Keine Verifizierungs-URL erhalten');
+
+      // Leitet den Nutzer zum KJM-konformen Flow des Anbieters weiter
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl;
       }
     } catch (err: any) {
-      console.error('Verification error:', err);
-      toast({
-        title: 'Fehler',
-        description: err.message || 'Verifizierung konnte nicht gestartet werden.',
-        variant: 'destructive',
-      });
+      console.error("Fehler beim Starten der Verifizierung:", err);
+      alert("Fehler: " + err.message);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -58,7 +49,7 @@ export default function IdentityVerification({ onComplete }: IdentityVerificatio
         <div className="space-y-2">
           <h2 className="text-2xl font-bold text-foreground">Identität & Alter bestätigen</h2>
           <p className="text-muted-foreground text-sm">
-            Um die gesetzlichen Vorgaben (Jugendschutz) zu erfüllen, leiten wir dich kurz zu unserem Partner Yoti weiter. Halte deinen Ausweis bereit.
+            Um den deutschen Jugendschutzrichtlinien (KJM) zu entsprechen, müssen wir dich kurz verifizieren. Halte deine Kamera bereit.
           </p>
         </div>
 
@@ -90,15 +81,15 @@ export default function IdentityVerification({ onComplete }: IdentityVerificatio
           {status !== 'pending' ? (
             <Button
               onClick={startVerification}
-              disabled={isLoading}
+              disabled={loading}
               className="w-full h-12 text-lg font-semibold"
             >
-              {isLoading ? (
+              {loading ? (
                 <Loader2Icon className="w-5 h-5 animate-spin mr-2" />
               ) : (
-                <ExternalLinkIcon className="w-5 h-5 mr-2" />
+                null
               )}
-              Jetzt verifizieren
+              {loading ? 'Sitzung wird erstellt...' : 'Verifizierung starten'}
             </Button>
           ) : (
              <Button
@@ -111,7 +102,7 @@ export default function IdentityVerification({ onComplete }: IdentityVerificatio
           )}
           
           <p className="text-[10px] text-muted-foreground">
-            Wir nutzen <strong>Yoti</strong> für eine sichere Abwicklung. Ihre Ausweisdaten werden nicht auf unseren Servern gespeichert.
+            Wir nutzen einen sicheren Drittanbieter für die Verifizierung. Ihre Ausweisdaten werden nicht auf unseren Servern gespeichert.
           </p>
         </div>
       </div>

@@ -149,189 +149,191 @@ export default function ContentVault() {
   };
 
   return (
-    <div className="flex flex-col h-full py-8 px-4">
-      <div className="max-w-6xl mx-auto w-full space-y-8 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-serif text-foreground">Content Vault</h1>
-          <div className="flex bg-card border border-border rounded-lg p-1">
-            <Button
-              variant={vaultMode === 'posts' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setVaultMode('posts')}
-              className="rounded-md"
-            >
-              Beiträge
-            </Button>
-            <Button
-              variant={vaultMode === 'products' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setVaultMode('products')}
-              className="rounded-md"
-            >
-              Shop-Produkte
-            </Button>
+    <div className="flex flex-col h-full overflow-y-auto chat-messages-scrollbar">
+      <div className="flex-1 py-8 px-4">
+        <div className="max-w-6xl mx-auto w-full space-y-8 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-serif text-foreground">Content Vault</h1>
+            <div className="flex bg-card border border-border rounded-lg p-1">
+              <Button
+                variant={vaultMode === 'posts' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setVaultMode('posts')}
+                className="rounded-md"
+              >
+                Beiträge
+              </Button>
+              <Button
+                variant={vaultMode === 'products' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setVaultMode('products')}
+                className="rounded-md"
+              >
+                Shop-Produkte
+              </Button>
+            </div>
           </div>
-        </div>
 
-        {vaultMode === 'posts' && (
-          <div className="flex flex-col space-y-8">
-            <Button
-              className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal w-fit"
-              onClick={() => navigate('/post/new')}
-            >
-              <UploadIcon className="w-5 h-5 mr-2" strokeWidth={1.5} />
-              Hochladen
-            </Button>
+          {vaultMode === 'posts' && (
+            <div className="flex flex-col space-y-8">
+              <Button
+                className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal w-fit"
+                onClick={() => navigate('/post/new')}
+              >
+                <UploadIcon className="w-5 h-5 mr-2" strokeWidth={1.5} />
+                Hochladen
+              </Button>
 
-            {/* Auswahl-Aktionen-Leiste */}
-            {selectedItems.length > 0 && (
-              <Card className="bg-card border-border p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-foreground">
-                    {selectedItems.length} Element(e) ausgewählt
-                  </span>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      className="bg-background text-destructive border-border hover:bg-neutral font-normal"
-                      onClick={handleDeleteSelected}
-                      disabled={loading}
-                    >
-                      <Trash2Icon className="w-5 h-5 mr-2" strokeWidth={1.5} />
-                      Löschen
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            <Tabs defaultValue="all" onValueChange={setCurrentTab} className="w-full">
-              <TabsList className="bg-card border border-border w-full md:w-auto mb-8">
-                <TabsTrigger value="all" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
-                  Alle
-                </TabsTrigger>
-                <TabsTrigger value="published" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
-                  Veröffentlicht
-                </TabsTrigger>
-                <TabsTrigger value="scheduled" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
-                  Geplant
-                </TabsTrigger>
-                <TabsTrigger value="drafts" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
-                  Entwürfe
-                </TabsTrigger>
-                <TabsTrigger value="moderated" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex items-center gap-1.5">
-                  <ShieldAlertIcon className="w-4 h-4" /> Moderiert
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value={currentTab} className="mt-0">
-                {loading && <p className="text-center text-muted-foreground py-10">Inhalte werden geladen...</p>}
-                {error && <p className="text-destructive text-center py-10">{error}</p>}
-                {!loading && !error && filteredContent.length === 0 && (
-                  <p className="text-center text-muted-foreground py-10">Keine Inhalte in dieser Kategorie gefunden.</p>
-                )}
-                {!loading && !error && (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-20">
-                    {filteredContent.map((post, index) => (
-                      <div
-                        key={post.id}
-                        className="relative group rounded-lg overflow-hidden cursor-pointer bg-neutral aspect-square"
-                        onClick={(e) => {
-                          if (e.target instanceof HTMLElement && e.target.closest('[role="checkbox"]')) {
-                            return;
-                          }
-                          handlePostClick(index);
-                        }}
+              {/* Auswahl-Aktionen-Leiste */}
+              {selectedItems.length > 0 && (
+                <Card className="bg-card border-border p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-foreground">
+                      {selectedItems.length} Element(e) ausgewählt
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="bg-background text-destructive border-border hover:bg-neutral font-normal"
+                        onClick={handleDeleteSelected}
+                        disabled={loading}
                       >
-                        <SecureMedia
-                          path={post.thumbnail_url || post.mediaUrl}
-                          type={post.mediaType}
-                          alt=""
-                          className="w-full h-full object-cover"
-                          muted
-                          loop
-                          playsInline
-                        />
+                        <Trash2Icon className="w-5 h-5 mr-2" strokeWidth={1.5} />
+                        Löschen
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              )}
 
-                        {post.mediaType === 'video' && (
-                          <VideoIcon className="absolute top-2 left-10 w-5 h-5 text-white drop-shadow-lg" strokeWidth={2} />
-                        )}
+              <Tabs defaultValue="all" onValueChange={setCurrentTab} className="w-full">
+                <TabsList className="bg-card border border-border w-full md:w-auto mb-8">
+                  <TabsTrigger value="all" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
+                    Alle
+                  </TabsTrigger>
+                  <TabsTrigger value="published" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
+                    Veröffentlicht
+                  </TabsTrigger>
+                  <TabsTrigger value="scheduled" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
+                    Geplant
+                  </TabsTrigger>
+                  <TabsTrigger value="drafts" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground">
+                    Entwürfe
+                  </TabsTrigger>
+                  <TabsTrigger value="moderated" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex items-center gap-1.5">
+                    <ShieldAlertIcon className="w-4 h-4" /> Moderiert
+                  </TabsTrigger>
+                </TabsList>
 
-                        {/* @ts-ignore */}
-                        {post.moderation_status === 'TAKEDOWN' && (
-                          <div className="absolute inset-0 z-10 bg-black/80 flex flex-col items-center justify-center p-4 text-center" onClick={(e) => e.stopPropagation()}>
-                            <ShieldAlertIcon className="w-8 h-8 text-destructive mb-2" />
-                            <p className="text-white text-sm font-bold mb-1">Inhalt gesperrt</p>
-                            {/* @ts-ignore */}
-                            <p className="text-gray-300 text-xs mb-3">{post.takedown_reason || 'Verstoß gegen Richtlinien'}</p>
-                            
-                            {/* @ts-ignore */}
-                            {post.appeal_status === 'pending' ? (
-                               <Badge className="bg-orange-500 text-white border-none">Widerspruch eingereicht</Badge>
-                            ) : /* @ts-ignore */ post.appeal_status === 'rejected' ? (
-                               <Badge variant="destructive">Widerspruch abgelehnt</Badge>
-                            ) : (
-                              <Button 
-                                size="sm" 
-                                className="bg-primary text-primary-foreground hover:bg-primary/90"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPostToAppeal(post.id);
-                                  setIsAppealModalOpen(true);
-                                }}
-                              >
-                                Widerspruch einlegen
-                              </Button>
+                <TabsContent value={currentTab} className="mt-0">
+                  {loading && <p className="text-center text-muted-foreground py-10">Inhalte werden geladen...</p>}
+                  {error && <p className="text-destructive text-center py-10">{error}</p>}
+                  {!loading && !error && filteredContent.length === 0 && (
+                    <p className="text-center text-muted-foreground py-10">Keine Inhalte in dieser Kategorie gefunden.</p>
+                  )}
+                  {!loading && !error && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-20">
+                      {filteredContent.map((post, index) => (
+                        <div
+                          key={post.id}
+                          className="relative group rounded-lg overflow-hidden cursor-pointer bg-neutral aspect-square"
+                          onClick={(e) => {
+                            if (e.target instanceof HTMLElement && e.target.closest('[role="checkbox"]')) {
+                              return;
+                            }
+                            handlePostClick(index);
+                          }}
+                        >
+                          <SecureMedia
+                            path={post.thumbnail_url || post.mediaUrl}
+                            type={post.mediaType}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            muted
+                            loop
+                            playsInline
+                          />
+
+                          {post.mediaType === 'video' && (
+                            <VideoIcon className="absolute top-2 left-10 w-5 h-5 text-white drop-shadow-lg" strokeWidth={2} />
+                          )}
+
+                          {/* @ts-ignore */}
+                          {post.moderation_status === 'TAKEDOWN' && (
+                            <div className="absolute inset-0 z-10 bg-black/80 flex flex-col items-center justify-center p-4 text-center" onClick={(e) => e.stopPropagation()}>
+                              <ShieldAlertIcon className="w-8 h-8 text-destructive mb-2" />
+                              <p className="text-white text-sm font-bold mb-1">Inhalt gesperrt</p>
+                              {/* @ts-ignore */}
+                              <p className="text-gray-300 text-xs mb-3">{post.takedown_reason || 'Verstoß gegen Richtlinien'}</p>
+                              
+                              {/* @ts-ignore */}
+                              {post.appeal_status === 'pending' ? (
+                                <Badge className="bg-orange-500 text-white border-none">Widerspruch eingereicht</Badge>
+                              ) : /* @ts-ignore */ post.appeal_status === 'rejected' ? (
+                                <Badge variant="destructive">Widerspruch abgelehnt</Badge>
+                              ) : (
+                                <Button 
+                                  size="sm" 
+                                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPostToAppeal(post.id);
+                                    setIsAppealModalOpen(true);
+                                  }}
+                                >
+                                  Widerspruch einlegen
+                                </Button>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="absolute top-2 left-2 z-10">
+                            <Checkbox
+                              checked={selectedItems.includes(post.id)}
+                              onCheckedChange={() => toggleSelection(post.id)}
+                              className="w-6 h-6 bg-black/50 border-white/50 text-secondary data-[state=checked]:bg-secondary data-[state=checked]:border-secondary"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+
+                          <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="secondary"
+                              size="icon"
+                              className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 border-none text-white"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/post/new?edit=${post.id}`);
+                              }}
+                            >
+                              <PencilIcon className="w-4 h-4" />
+                            </Button>
+                          </div>
+
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                            <span className="text-xs text-white/90 block">{new Date(post.created_at).toLocaleDateString()}</span>
+                            {!post.is_published && post.scheduled_for && new Date(post.scheduled_for) > new Date() && (
+                              <span className="text-xs text-yellow-400 font-medium block">Geplant</span>
+                            )}
+                            {!post.is_published && (!post.scheduled_for || new Date(post.scheduled_for) <= new Date()) && (
+                              <span className="text-xs text-gray-400 font-medium block">Entwurf</span>
                             )}
                           </div>
-                        )}
-
-                        <div className="absolute top-2 left-2 z-10">
-                          <Checkbox
-                            checked={selectedItems.includes(post.id)}
-                            onCheckedChange={() => toggleSelection(post.id)}
-                            className="w-6 h-6 bg-black/50 border-white/50 text-secondary data-[state=checked]:bg-secondary data-[state=checked]:border-secondary"
-                            onClick={(e) => e.stopPropagation()}
-                          />
                         </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
 
-                        <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button
-                            variant="secondary"
-                            size="icon"
-                            className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 border-none text-white"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/post/new?edit=${post.id}`);
-                            }}
-                          >
-                            <PencilIcon className="w-4 h-4" />
-                          </Button>
-                        </div>
-
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                          <span className="text-xs text-white/90 block">{new Date(post.created_at).toLocaleDateString()}</span>
-                          {!post.is_published && post.scheduled_for && new Date(post.scheduled_for) > new Date() && (
-                            <span className="text-xs text-yellow-400 font-medium block">Geplant</span>
-                          )}
-                          {!post.is_published && (!post.scheduled_for || new Date(post.scheduled_for) <= new Date()) && (
-                            <span className="text-xs text-gray-400 font-medium block">Entwurf</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-            </Tabs>
-          </div>
-        )}
-
-        {vaultMode === 'products' && (
-          <div className="pb-20">
-            <ProductManager showOnly="list" />
-          </div>
-        )}
+          {vaultMode === 'products' && (
+            <div className="pb-20">
+              <ProductManager showOnly="list" />
+            </div>
+          )}
+        </div>
       </div>
 
       {isViewerOpen && (
@@ -349,6 +351,9 @@ export default function ContentVault() {
         userId={user?.id || ''}
         onSuccess={fetchContent}
       />
+
+      {/* Spacer for bottom nav on mobile */}
+      <div className="h-20 md:hidden" />
     </div>
   );
 }

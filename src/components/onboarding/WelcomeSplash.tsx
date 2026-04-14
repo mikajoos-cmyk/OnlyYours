@@ -83,6 +83,7 @@ export default function WelcomeSplash({ onComplete }: WelcomeSplashProps) {
         <Link to="/impressum" className="hover:text-secondary">Impressum</Link>
         <Link to="/datenschutz" className="hover:text-secondary">Datenschutz</Link>
         <Link to="/agb" className="hover:text-secondary">AGB</Link>
+        <Link to="/creator-vertrag" className="hover:text-secondary">Creator Vertrag</Link>
         <Link to="/support" className="hover:text-secondary">Support</Link>
       </motion.div>
     </motion.div>

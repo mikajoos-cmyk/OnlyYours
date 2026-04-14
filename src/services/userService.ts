@@ -22,6 +22,7 @@ export interface UserProfile {
   live_stream_tier_id: string | null;
   live_stream_requires_subscription: boolean | null;
   is_suspended?: boolean;
+  allow_direct_messages?: boolean;
 }
 
 export class UserService {
@@ -32,7 +33,7 @@ export class UserService {
 
     const { data: { user: currentUser } } = await supabase.auth.getUser();
 
-    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription, is_suspended';
+    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription, is_suspended, allow_direct_messages';
 
     const { data, error } = await supabase
       .from('users')
@@ -88,7 +89,7 @@ export class UserService {
     const cleanedQuery = query.toLowerCase().replace(/[^a-zA-Z0-9_]/g, '');
     if (!cleanedQuery) return [];
 
-    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription, is_suspended';
+    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription, is_suspended, allow_direct_messages';
 
     let queryBuilder = supabase
       .from('users')
@@ -114,7 +115,7 @@ export class UserService {
   }
 
   async getLiveCreators(limit: number = 50) {
-    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription, is_suspended';
+    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription, is_suspended, allow_direct_messages';
 
     const { data, error } = await supabase
       .from('users')
@@ -134,7 +135,7 @@ export class UserService {
   }
 
   async getTopCreators(limit: number = 20) {
-    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription, is_suspended';
+    const publicSelect = 'id, username, display_name, bio, avatar_url, banner_url, role, is_verified, followers_count, created_at, profile_hashtags, mux_playback_id, is_live, live_stream_tier_id, live_stream_requires_subscription, is_suspended, allow_direct_messages';
 
     const { data, error } = await supabase
       .from('users')
@@ -195,6 +196,7 @@ export class UserService {
       live_stream_tier_id: data.live_stream_tier_id || null,
       live_stream_requires_subscription: data.live_stream_requires_subscription === null ? true : data.live_stream_requires_subscription,
       is_suspended: data.is_suspended || false,
+      allow_direct_messages: data.allow_direct_messages ?? true,
     };
   }
 }

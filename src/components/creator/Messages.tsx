@@ -5,13 +5,15 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { SendIcon, CheckCheckIcon, ArrowLeftIcon, UserIcon, MessageCircleIcon, Send, FlagIcon } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { messageService, Message, Chat as ServiceChat } from '../../services/messageService';
 import { useAuthStore } from '../../stores/authStore';
 import MassMessageModal from './MassMessageModal';
 import ReportModal from '../fan/ReportModal';
 import { useAppStore } from '../../stores/appStore';
 import { cn } from '../../lib/utils';
+import { userService } from '../../services/userService';
+import { useToast } from '../../hooks/use-toast';
 
 interface Chat {
   id: string;
@@ -46,6 +48,9 @@ export default function Messages() {
   const [showMassMessageModal, setShowMassMessageModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportContext, setReportContext] = useState<{ reportedId: string; messageId: string } | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { toast } = useToast();
+  const targetUserId = searchParams.get('to');
 
   // State für Tastatur-Erkennung, um Padding unten zu steuern
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
@@ -96,6 +101,74 @@ export default function Messages() {
     };
     fetchChatList();
   }, []);
+
+  // NEU: Logik zum Auslesen der URL und Prüfen der DM-Erlaubnis
+  useEffect(() => {
+    const targetUserId = searchParams.get('to');
+    if (!targetUserId || !currentUser) return;
+
+    const initChatFromUrl = async () => {
+      try {
+        // 1. Profil des Ziel-Users aus der Datenbank abrufen
+        const targetProfile = await userService.getUserById(targetUserId);
+
+        if (!targetProfile) {
+          console.error("Ziel-Profil nicht gefunden");
+          return;
+        }
+
+        // 2. Erlaubnis prüfen: Ist der aktuelle User ein Fan und der Creator hat DMs deaktiviert?
+        if (currentRole === 'fan' && targetProfile.allow_direct_messages === false) {
+          toast({
+            title: 'Nicht möglich',
+            description: 'Dieser Creator empfängt derzeit keine Direktnachrichten.',
+            variant: 'destructive'
+          });
+          
+          // URL-Parameter entfernen, damit die Fehlermeldung nicht bei jedem Rerender kommt
+          const newParams = new URLSearchParams(searchParams);
+          newParams.delete('to');
+          setSearchParams(newParams);
+          return;
+        }
+
+        // 3. Wenn erlaubt: Chat temporär aufbauen und auswählen
+        const newChat: Chat = {
+          id: targetUserId,
+          user: {
+            id: targetUserId,
+            name: targetProfile.displayName,
+            avatar: targetProfile.avatarUrl || 'https://placehold.co/100x100',
+            username: targetProfile.username
+          },
+          lastMessage: '',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          unread: 0
+        };
+
+        // Prüfen, ob der Chat schon in der Liste links ist. Wenn nicht, fügen wir ihn oben an.
+        setChats(prev => {
+          if (!prev.find(c => c.id === targetUserId)) {
+            return [newChat, ...prev];
+          }
+          return prev;
+        });
+
+        // Chat als aktiv setzen, damit sich das rechte Fenster öffnet
+        setSelectedChat(newChat);
+
+        // URL aufräumen (entfernt das ?to=... aus der Adresszeile)
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete('to');
+        setSearchParams(newParams);
+
+      } catch (error) {
+        console.error("Fehler beim Laden des Ziel-Profils", error);
+      }
+    };
+
+    initChatFromUrl();
+  }, [searchParams, currentUser, currentRole, setSearchParams, toast]);
 
   // Lade Nachrichten, wenn ein Chat ausgewählt wird
   useEffect(() => {

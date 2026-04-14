@@ -9,6 +9,26 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      followers: {
+        Row: {
+          id: string
+          follower_id: string
+          creator_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          follower_id: string
+          creator_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          follower_id?: string
+          creator_id?: string
+          created_at?: string
+        }
+      }
       users: {
         Row: {
           id: string
@@ -30,6 +50,8 @@ export type Database = {
           is_suspended: boolean
           has_pending_appeal: boolean
           is_banned: boolean
+          email_notifications_enabled: boolean
+          allow_direct_messages: boolean
         }
         Insert: {
           id: string
@@ -51,6 +73,8 @@ export type Database = {
           is_suspended?: boolean
           has_pending_appeal?: boolean
           is_banned?: boolean
+          email_notifications_enabled?: boolean
+          allow_direct_messages?: boolean
         }
         Update: {
           id?: string
@@ -72,6 +96,8 @@ export type Database = {
           is_suspended?: boolean
           has_pending_appeal?: boolean
           is_banned?: boolean
+          email_notifications_enabled?: boolean
+          allow_direct_messages?: boolean
         }
       }
       subscription_tiers: {

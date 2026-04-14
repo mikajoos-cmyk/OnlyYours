@@ -186,7 +186,17 @@ export class PostService {
       .eq('fan_id', user.id)
       .or(`status.eq.ACTIVE,and(status.eq.CANCELED,end_date.gt.now())`);
 
-    const creatorIds = subscriptions?.map((s: any) => s.creator_id) || [];
+    const { data: follows } = await supabase
+      .from('followers')
+      .select('creator_id')
+      .eq('follower_id', user.id);
+
+    const subscribedCreatorIds = subscriptions?.map((s: any) => s.creator_id) || [];
+    const followedCreatorIds = follows?.map((f: any) => f.creator_id) || [];
+    
+    // Combine and deduplicate
+    const creatorIds = [...new Set([...subscribedCreatorIds, ...followedCreatorIds])];
+    
     if (creatorIds.length === 0) return [];
 
     const { data: posts, error } = await supabase

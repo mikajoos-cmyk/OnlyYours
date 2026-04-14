@@ -107,22 +107,12 @@ export default function ProfilePage() {
           {currentRole === 'creator' ? <CreatorProfile /> : <FanProfile />}
 
           {/* Sektion Rechtliches (Vor allem für Mobile wichtig) */}
-          <div className="mt-8 md:hidden">
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <ShieldIcon className="w-5 h-5" /> Rechtliches
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  <Link to="/impressum" className="p-3 border border-border rounded-lg text-sm hover:bg-neutral transition-colors">Impressum</Link>
-                  <Link to="/datenschutz" className="p-3 border border-border rounded-lg text-sm hover:bg-neutral transition-colors">Datenschutz</Link>
-                  <Link to="/agb" className="p-3 border border-border rounded-lg text-sm hover:bg-neutral transition-colors">AGB</Link>
-                  <Link to="/support" className="p-3 border border-border rounded-lg text-sm hover:bg-neutral transition-colors">Support</Link>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="mt-12 md:hidden flex flex-wrap justify-center gap-4 text-[10px] text-muted-foreground/60">
+            <Link to="/impressum" className="hover:text-foreground transition-colors">Impressum</Link>
+            <Link to="/datenschutz" className="hover:text-foreground transition-colors">Datenschutz</Link>
+            <Link to="/agb" className="hover:text-foreground transition-colors">AGB</Link>
+            <Link to="/creator-vertrag" className="hover:text-foreground transition-colors">Creator Vertrag</Link>
+            <Link to="/support" className="hover:text-foreground transition-colors">Support</Link>
           </div>
         </div>
       </div>

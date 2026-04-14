@@ -44,6 +44,8 @@ export default function FanProfile() {
   const [showCropDialog, setShowCropDialog] = useState(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
+  const [emailNotifications, setEmailNotifications] = useState(user?.email_notifications_enabled ?? true);
+
   const formatCurrency = (value: number) => {
     return `€${value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
@@ -98,6 +100,7 @@ export default function FanProfile() {
       setDisplayName(user.name || '');
       setEmail(user.email || '');
       setInterests(user.interests || []);
+      setEmailNotifications(user.email_notifications_enabled ?? true);
     }
   }, [user]);
 
@@ -162,6 +165,17 @@ export default function FanProfile() {
   };
 
   const handleRemoveInterest = (tag: string) => setInterests(prev => prev.filter(t => t !== tag));
+
+  const handleToggleEmailNotifications = async (checked: boolean) => {
+    setEmailNotifications(checked);
+    try {
+      await updateProfile({ email_notifications_enabled: checked });
+      toast({ title: "Einstellungen aktualisiert", description: "E-Mail-Benachrichtigungen wurden gespeichert." });
+    } catch (error: any) {
+      setEmailNotifications(!checked); // Bei Fehler zurücksetzen
+      toast({ title: "Fehler", description: "Einstellung konnte nicht gespeichert werden.", variant: "destructive" });
+    }
+  };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -386,7 +400,10 @@ export default function FanProfile() {
                   <Label className="text-base">E-Mail Benachrichtigungen</Label>
                   <p className="text-sm text-muted-foreground">Erhalten Sie Updates zu neuen Beiträgen.</p>
                 </div>
-                <Switch checked={true} disabled />
+                <Switch 
+                  checked={emailNotifications} 
+                  onCheckedChange={handleToggleEmailNotifications}
+                />
               </div>
               <div className="border-t border-destructive/20 pt-6 mt-6">
                 <h3 className="text-destructive font-medium mb-2 flex items-center gap-2"><SettingsIcon className="w-4 h-4" /> Gefahrenzone</h3>
