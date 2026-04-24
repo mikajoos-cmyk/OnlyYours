@@ -109,11 +109,6 @@ export class SubscriptionService {
 
         if (error) throw error;
 
-        // Payment nur eintragen, wenn wirklich Geld geflossen ist (Upgrade)
-        // Bei Downgrade ist paymentAmount 0 -> kein Eintrag.
-        if (paymentAmount > 0) {
-          await this.createPaymentRecord(user.id, creatorId, paymentAmount, existingSub.id, creatorName, 'SUBSCRIPTION');
-        }
         return data;
       } else {
         // Reaktivierung falls nur auto-renew aus war
@@ -148,38 +143,12 @@ export class SubscriptionService {
 
       if (error) throw error;
 
-      if (paymentAmount > 0) {
-        await this.createPaymentRecord(user.id, creatorId, paymentAmount, (data as any).id, creatorName, 'SUBSCRIPTION');
-      }
-
       this.sendWelcomeMessage(creatorId, user.id, creatorName);
       return data;
     }
   }
 
-  // --- HELPER: Payment Record (FIXED) ---
-  private async createPaymentRecord(userId: string, creatorId: string, amount: number, subscriptionId: string, creatorName: string, type: 'SUBSCRIPTION') {
-    // WICHTIG: Wir bauen das Objekt manuell und casten zu 'any', 
-    // damit TypeScript nicht meckert, falls 'creator_id' in den generierten Typen fehlt.
-    const paymentData = {
-      user_id: userId,
-      creator_id: creatorId, // Dies ist das kritische Feld!
-      amount: amount,
-      currency: 'EUR',
-      type: type,
-      status: 'SUCCESS',
-      related_id: subscriptionId,
-      metadata: { creatorName: creatorName }
-    };
-
-    // 'as any' umgeht veraltete Typ-Definitionen
-    const { error } = await supabase.from('payments').insert(paymentData as any);
-
-    if (error) {
-      console.error("CRITICAL: Failed to create payment record:", error);
-      // Wir werfen den Fehler nicht weiter, damit der User-Flow (Abo erfolgreich) nicht abbricht.
-    }
-  }
+  // --- HELPER: Payment Record (ENTFERNT - Webhook übernimmt das) ---
 
   // src/services/subscriptionService.ts
 

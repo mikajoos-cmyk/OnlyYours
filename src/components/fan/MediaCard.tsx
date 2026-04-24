@@ -7,6 +7,7 @@ import { useFeedStore } from '../../stores/feedStore';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '../ui/badge';
 import { SecureMedia } from '../ui/SecureMedia';
+import { WatermarkLayer } from '../ui/WatermarkLayer';
 
 interface Post {
   id: string;
@@ -54,17 +55,10 @@ export default function MediaCard({ post }: MediaCardProps) {
 
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" />
 
-      {post.creator.watermark_enabled && (
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden opacity-10 select-none z-10">
-          <div className="grid grid-cols-2 gap-20 rotate-[-35deg] scale-125">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <span key={i} className={i % 2 === 0 ? "text-white text-2xl font-bold whitespace-nowrap" : "text-black text-2xl font-bold whitespace-nowrap"}>
-                @{post.creator.username || 'OnlyYours'}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+      <WatermarkLayer 
+        username={post.creator.username} 
+        enabled={post.creator.watermark_enabled} 
+      />
 
       <div className="absolute top-8 left-4 flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/profile/${post.creator.username}`)}>
         <Avatar className="w-12 h-12 border-2 border-secondary">

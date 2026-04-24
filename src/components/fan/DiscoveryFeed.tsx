@@ -18,6 +18,7 @@ import TipModal from './TipModal';
 import ReportModal from './ReportModal';
 import type { Post as PostData } from '../../services/postService';
 import { SecureMedia } from '../ui/SecureMedia';
+import { WatermarkLayer } from '../ui/WatermarkLayer';
 import FeedPreloader from './FeedPreloader'; // <-- NEU
 
 export default function DiscoveryFeed() {
@@ -327,6 +328,13 @@ export default function DiscoveryFeed() {
           )}
 
           {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
+
+          {hasAccess && (
+            <WatermarkLayer 
+              username={currentPost.creator.username} 
+              enabled={currentPost.creator.watermark_enabled} 
+            />
+          )}
 
           <div className="absolute top-4 left-4 right-20 z-10">
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/profile/${currentPost.creator.username || currentPost.creatorId}`)}>

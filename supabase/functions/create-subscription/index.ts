@@ -103,9 +103,11 @@ Deno.serve(async (req) => {
             metadata: {
               fan_id: user.id,
               creator_id: creatorId,
-              tier_id: tierId || 'null'
+              tier_id: tierId || 'null',
+              userId: user.id,
+              creatorId: creatorId,
+              type: 'SUBSCRIPTION'
             },
-            // FIX: Diese Parameter fehlten beim Update, sind aber wichtig für 3D-Secure
             payment_behavior: 'allow_incomplete',
             expand: ['latest_invoice.payment_intent']
           };
@@ -150,7 +152,8 @@ Deno.serve(async (req) => {
         creator_id: creatorId,
         tier_id: tierId || 'null',
         userId: user.id, // Fallback für Webhook
-        creatorId: creatorId // Fallback für Webhook
+        creatorId: creatorId, // Fallback für Webhook
+        type: 'SUBSCRIPTION'
       };
 
       const subscriptionParams: any = {

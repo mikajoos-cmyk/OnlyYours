@@ -66,9 +66,11 @@ Deno.serve(async (req) => {
         console.log(`🔍 Subscription retrieved: ${subscription.id}`);
 
         // Metadaten-Fallback (Robust gegen camelCase/snake_case)
-        let fan_id = subscription.metadata.fan_id || subscription.metadata.userId || subscription.metadata.fanId;
-        let creator_id = subscription.metadata.creator_id || subscription.metadata.creatorId;
-        let tier_id = subscription.metadata.tier_id || subscription.metadata.tierId;
+        // Wir prüfen erst die Invoice (da sie die Metadaten von der Subscription erben sollte)
+        // und dann die Subscription selbst als Fallback.
+        let fan_id = invoice.metadata?.fan_id || invoice.metadata?.userId || subscription.metadata?.fan_id || subscription.metadata?.userId || subscription.metadata?.fanId;
+        let creator_id = invoice.metadata?.creator_id || invoice.metadata?.creatorId || subscription.metadata?.creator_id || subscription.metadata?.creatorId;
+        let tier_id = invoice.metadata?.tier_id || invoice.metadata?.tierId || subscription.metadata?.tier_id || subscription.metadata?.tierId;
 
         if (!fan_id || !creator_id) {
           console.log("ℹ️ No IDs in subscription metadata, checking invoice lines...");
@@ -90,7 +92,11 @@ Deno.serve(async (req) => {
         // Regulärer Preis aus dem Plan
         const planPrice = subscription.items.data[0]?.price.unit_amount ?? 0;
         const totalAmount = invoice.amount_paid / 100;
-        const creatorShare = totalAmount * 0.8; // 80% gehen an den Creator
+        
+        // Nutze die reale Gebühr von Stripe, falls vorhanden, sonst Fallback auf 20%
+        const appFeeAmount = (invoice.application_fee_amount || 0) / 100;
+        const creatorShare = appFeeAmount > 0 ? (totalAmount - appFeeAmount) : (totalAmount * 0.8);
+        
         const hasDirectTransfer = !!subscription.transfer_data?.destination;
 
         if (fan_id && creator_id) {
@@ -113,18 +119,20 @@ Deno.serve(async (req) => {
           else console.log('✅ Subscription DB synced.');
 
           // Payment Record (Wir speichern den Creator-Anteil als Einnahme)
-          console.log(`💰 Inserting payment record (Creator Share: ${creatorShare}€)...`);
+          console.log(`💰 Inserting payment record (Creator Share: ${creatorShare.toFixed(2)}€)...`);
           const { error: payError } = await supabaseAdmin.from("payments").insert({
             user_id: fan_id,
             creator_id: creator_id,
             amount: creatorShare,
             type: 'SUBSCRIPTION',
             status: 'SUCCESS',
+            related_id: (tier_id === 'null' || !tier_id) ? null : tier_id,
             metadata: { 
                 from_webhook: true, 
                 stripe_sub_id: subscriptionId,
                 stripe_invoice_id: invoice.id,
                 full_amount: totalAmount,
+                application_fee: appFeeAmount,
                 is_destination_charge: hasDirectTransfer
             }
           });
@@ -230,7 +238,11 @@ Deno.serve(async (req) => {
         if (userId && type && type !== 'SUBSCRIPTION') {
           console.log(`💾 Inserting payment record for ${type}...`);
           const totalAmount = pi.amount / 100;
-          const creatorShare = totalAmount * 0.8;
+          
+          // Nutze die reale Gebühr von Stripe, falls vorhanden, sonst Fallback auf 20%
+          const appFeeAmount = (pi.application_fee_amount || 0) / 100;
+          const creatorShare = appFeeAmount > 0 ? (totalAmount - appFeeAmount) : (totalAmount * 0.8);
+          
           const hasDirectTransfer = !!pi.transfer_data?.destination;
 
           const { error: payError } = await supabaseAdmin.from("payments").insert({
@@ -243,6 +255,7 @@ Deno.serve(async (req) => {
             metadata: {
                 ...meta,
                 full_amount: totalAmount,
+                application_fee: appFeeAmount,
                 is_destination_charge: hasDirectTransfer
             }
           });
@@ -263,7 +276,11 @@ Deno.serve(async (req) => {
               }
           }
         } else {
-            console.log(`ℹ️ Skipping payment record (either missing data or is SUBSCRIPTION which is handled by invoice.paid)`);
+            if (type === 'SUBSCRIPTION') {
+                console.log(`ℹ️ Skipping payment_intent.succeeded for SUBSCRIPTION (will be handled by invoice.paid)`);
+            } else {
+                console.log(`⚠️ Skipping payment record: Missing data (userId=${userId}, type=${type}) or intentional skip.`);
+            }
         }
         break;
       }

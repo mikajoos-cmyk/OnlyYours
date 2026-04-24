@@ -539,7 +539,7 @@ export class PostService {
         bio: post.creator.bio,
         followers: post.creator.followers_count,
         subscriptionPrice: parseFloat(post.creator.subscription_price),
-        watermark_enabled: post.creator.watermark_enabled
+        watermark_enabled: post.creator.watermark_enabled ?? true
       },
       mediaUrl: await storageService.resolveImageUrl(post.media_url),
       mediaType: post.media_type.toLowerCase() as 'image' | 'video',

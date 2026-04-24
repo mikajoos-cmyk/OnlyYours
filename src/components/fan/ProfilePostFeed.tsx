@@ -5,6 +5,7 @@ import { XIcon } from 'lucide-react';
 import MediaCard from './MediaCard'; // Importiere die MediaCard
 import CommentsSheet from './CommentsSheet';
 import { SecureMedia } from '../ui/SecureMedia';
+import { WatermarkLayer } from '../ui/WatermarkLayer';
 
 // Typdefinitionen (ggf. anpassen oder auslagern)
 interface Creator {
@@ -152,6 +153,12 @@ export default function ProfilePostFeed({ isOpen, onClose, creator, allPosts, in
         >
           {/* Verwende MediaCard zur Anzeige des Posts */}
           <MediaCard post={currentPost} />
+          
+          <WatermarkLayer 
+            username={currentPost.creator.username} 
+            enabled={currentPost.creator.watermark_enabled} 
+          />
+
            {/* Override oder anpassen der Icons in MediaCard, falls nötig,
                oder füge hier die Kommentar-Button-Logik hinzu */}
             <button

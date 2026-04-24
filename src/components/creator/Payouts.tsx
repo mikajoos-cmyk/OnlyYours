@@ -61,26 +61,23 @@ export default function Payouts() {
   };
 
   // --- NEU: Fängt den Nutzer ab, wenn er von Stripe zurückkommt ---
+  // HINWEIS: Diese Logik ist jetzt auch im CreatorAddressGate vorhanden, 
+  // das diese Komponente umschließt. Wir lassen sie hier als Fallback,
+  // falls Payouts mal ohne Gate verwendet wird.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('connected') === 'true') {
-      // 1. Erfolgsmeldung anzeigen
-      toast({
-        title: "Erfolgreich verbunden!",
-        description: "Dein Stripe-Konto wurde erfolgreich eingerichtet. Du kannst nun Auszahlungen empfangen.",
-      });
-      
-      // 2. Den Parameter aus der URL löschen, damit es beim Neuladen sauber aussieht
-      window.history.replaceState({}, document.title, window.location.pathname);
-      
-      // 3. User-Profil neu laden, damit isStripeConnected sofort auf true springt
+    if (params.get('connected') === 'true' && user?.id) {
+      // Profil neu laden, falls Gate es noch nicht getan hat
       authService.getCurrentUserFullProfile().then(profile => {
         if (profile) {
           setUser(profile as any);
         }
       });
+      
+      // Parameter aus der URL löschen
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, []);
+  }, [user?.id, setUser]);
 
   useEffect(() => {
     fetchPayouts();
@@ -89,6 +86,14 @@ export default function Payouts() {
   // Handler für Stripe Connect (angepasst an Pfotencard Logik)
   const handleConnectStripe = async () => {
     setIsConnectingStripe(true);
+    
+    // Wir öffnen das Fenster sofort, um Pop-up-Blocker zu vermeiden
+    const stripeWindow = window.open('', '_blank');
+    if (stripeWindow) {
+      stripeWindow.document.title = "Stripe Dashboard wird geladen...";
+      stripeWindow.document.body.innerHTML = "<div style='display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;'>Lade Stripe Dashboard...</div>";
+    }
+
     try {
       const { data, error } = await supabase.functions.invoke('connect-stripe-account', {
         body: {
@@ -100,18 +105,25 @@ export default function Payouts() {
       if (error) throw error;
       
       if (data?.url) {
-        window.location.href = data.url; // Leitet den User zu Stripe weiter
+        if (stripeWindow) {
+          stripeWindow.location.href = data.url;
+        } else {
+          // Fallback falls Pop-up-Blocker das Fenster verhindert hat
+          window.location.href = data.url;
+        }
       } else {
         throw new Error("Keine Weiterleitungs-URL erhalten.");
       }
     } catch (err: any) {
+      if (stripeWindow) stripeWindow.close();
       console.error("Fehler beim Verbinden mit Stripe:", err);
       toast({ 
         title: "Fehler", 
         description: "Verbindung zu Stripe fehlgeschlagen. Bitte versuche es später erneut.", 
         variant: "destructive" 
       });
-      setIsConnectingStripe(false); // Spinner nur bei Fehler zurücksetzen
+    } finally {
+      setIsConnectingStripe(false);
     }
   };
 
@@ -167,7 +179,7 @@ export default function Payouts() {
   };
 
   // Prüfen, ob der User mit Stripe verbunden ist
-  const isStripeConnected = !!user?.stripe_account_id;
+  const isStripeConnected = !!user?.stripe_onboarding_complete;
 
   return (
     <div className="min-h-screen py-8 px-4">

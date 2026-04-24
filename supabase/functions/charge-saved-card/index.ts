@@ -30,19 +30,50 @@ Deno.serve(async (req) => {
 
     if (!customerId) throw new Error("Kein Customer gefunden");
 
-    // Zahlung erstellen
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100),
+    const { creatorId } = metadata;
+    const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+
+    // Creator Account ID für Stripe Connect holen
+    let creatorStripeAccountId = null;
+    if (creatorId) {
+        const { data: creator } = await supabaseAdmin
+            .from("users")
+            .select("stripe_account_id, stripe_onboarding_complete")
+            .eq("id", creatorId)
+            .single();
+        
+        if (creator?.stripe_account_id && creator?.stripe_onboarding_complete) {
+            creatorStripeAccountId = creator.stripe_account_id;
+        }
+    }
+
+    const totalAmount = Math.round(amount * 100);
+    const params: any = {
+      amount: totalAmount,
       currency: "eur",
       customer: customerId,
       payment_method: paymentMethodId,
       confirm: true,
       return_url: returnUrl || "https://example.com/return",
-      // FIX: off_session: true nutzen, um das gespeicherte Mandat zu verwenden
-      // Das verhindert den PayPal-Fehler mit der fehlenden risk_correlation_id
       off_session: true,
-      metadata: { ...metadata, userId: user.id }
-    });
+      metadata: { 
+        ...metadata, 
+        userId: user.id,
+        fan_id: user.id,
+        creator_id: creatorId
+      }
+    };
+
+    if (creatorStripeAccountId) {
+        params.transfer_data = {
+            destination: creatorStripeAccountId,
+        };
+        // 20% Gebühr für die Plattform
+        params.application_fee_amount = Math.round(totalAmount * 0.2);
+    }
+
+    // Zahlung erstellen
+    const paymentIntent = await stripe.paymentIntents.create(params);
 
     // Prüfen ob Action nötig ist (SCA / Redirect)
     if (['requires_action', 'requires_source_action'].includes(paymentIntent.status)) {

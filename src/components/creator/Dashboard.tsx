@@ -2,13 +2,15 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
-import { UsersIcon, DollarSignIcon, BellIcon, PlusSquareIcon, RadioIcon, SendIcon } from 'lucide-react';
+import { UsersIcon, DollarSignIcon, BellIcon, PlusSquareIcon, RadioIcon, SendIcon, CreditCardIcon, Loader2Icon } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useNavigate } from 'react-router-dom';
 import { notificationService } from '../../services/notificationService';
 import type { Database } from '../../lib/database.types';
 import { payoutService } from '../../services/payoutService';
-import StreamConfigModal from './StreamConfigModal'; // <-- NEUER IMPORT
+import StreamConfigModal from './StreamConfigModal';
+import { supabase } from '../../lib/supabase';
+import { useToast } from '../../hooks/use-toast';
 
 type NotificationRow = Database['public']['Tables']['notifications']['Row'];
 
@@ -22,15 +24,56 @@ interface StatData {
 export default function Dashboard() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const [stats, setStats] = useState<StatData[]>([]);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isOpeningStripe, setIsOpeningStripe] = useState(false);
 
   // --- NEUER STATE FÜR DAS MODAL ---
   const [showStreamConfigModal, setShowStreamConfigModal] = useState(false);
   // --- ENDE ---
+
+  const handleOpenStripeDashboard = async () => {
+    setIsOpeningStripe(true);
+    const stripeWindow = window.open('', '_blank');
+    if (stripeWindow) {
+      stripeWindow.document.title = "Stripe Dashboard wird geladen...";
+      stripeWindow.document.body.innerHTML = "<div style='display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;'>Lade Stripe Dashboard...</div>";
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('connect-stripe-account', {
+        body: {
+          return_url: window.location.href.split('?')[0]
+        }
+      });
+
+      if (error) throw error;
+      
+      if (data?.url) {
+        if (stripeWindow) {
+          stripeWindow.location.href = data.url;
+        } else {
+          window.location.href = data.url;
+        }
+      } else {
+        throw new Error("Keine Weiterleitungs-URL erhalten.");
+      }
+    } catch (err: any) {
+      if (stripeWindow) stripeWindow.close();
+      console.error("Fehler beim Öffnen des Stripe Dashboards:", err);
+      toast({
+        title: "Fehler",
+        description: "Das Stripe Dashboard konnte nicht geladen werden.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsOpeningStripe(false);
+    }
+  };
 
   const formatCurrency = (value: number) => {
     return `€${value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -85,8 +128,14 @@ export default function Dashboard() {
   // --- SCHNELLAKTIONEN AKTUALISIERT ---
   const quickActions = [
     { label: 'Neuer Beitrag', icon: PlusSquareIcon, onClick: () => navigate('/post/new') },
-    { label: 'Live gehen', icon: RadioIcon, onClick: () => setShowStreamConfigModal(true) }, // <-- GEÄNDERT
+    { label: 'Live gehen', icon: RadioIcon, onClick: () => setShowStreamConfigModal(true) },
     { label: 'Massen-Nachricht', icon: SendIcon, onClick: () => navigate('/messages') },
+    { 
+      label: 'Stripe Dashboard', 
+      icon: isOpeningStripe ? Loader2Icon : CreditCardIcon, 
+      onClick: handleOpenStripeDashboard,
+      disabled: isOpeningStripe
+    },
   ];
   // --- ENDE ---
 
@@ -168,10 +217,11 @@ export default function Dashboard() {
                   return (
                     <Button
                       key={action.label}
-                      onClick={action.onClick} // <-- GEÄNDERT
+                      onClick={action.onClick}
+                      disabled={(action as any).disabled}
                       className="bg-secondary text-secondary-foreground hover:bg-secondary/90 h-auto py-6 flex-col gap-2 font-normal"
                     >
-                      <Icon className="w-6 h-6" strokeWidth={1.5} />
+                      <Icon className={`w-6 h-6 ${(action as any).disabled ? 'animate-spin' : ''}`} strokeWidth={1.5} />
                       <span>{action.label}</span>
                     </Button>
                   );

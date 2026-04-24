@@ -55,62 +55,33 @@ export default function CreatorShop() {
     };
 
     const handlePaymentSuccess = async () => {
-        // Debugging: Startzustand prüfen
-        console.log('--- KAUF PROZESS START ---');
-
-        if (!selectedProduct || !creator || !currentUser) {
-            console.error('Fehlende Daten für den Kaufabschluss');
-            return;
-        }
+        if (!selectedProduct || !creator || !currentUser) return;
 
         try {
-            // SCHRITT 1: Zahlung in DB speichern
-            toast({ title: "Verarbeite...", description: "Speichere Kauf in Datenbank..." });
-
-            await paymentService.purchaseProduct(
-                creator.id,
-                selectedProduct.id,
-                selectedProduct.price,
-                selectedProduct.title
-            );
-            console.log('Schritt 1 (Payment DB) OK');
-
-            // SCHRITT 2: Info-Nachricht vom FAN an CREATOR (ZUERST)
-            // "Ich habe X gekauft..."
+            // Die Zahlung wird vom Webhook in die DB eingetragen.
+            // Wir senden hier nur die Benachrichtigungs-Nachrichten.
+            
+            // SCHRITT 1: Info-Nachricht vom FAN an CREATOR
             const fanToCreatorMessage = `📦 Neuer Einkauf: Ich habe "${selectedProduct.title}" für ${selectedProduct.price.toFixed(2)}€ gekauft.`;
-
             await messageService.sendMessage(creator.id, fanToCreatorMessage);
-            console.log('Schritt 2 (Fan-Message) OK');
 
-            // SCHRITT 3: Auto-Antwort vom CREATOR an den FAN (DANACH)
-            // "Danke für den Einkauf..."
-            // Hinweis: Stellen Sie sicher, dass messageService.sendAutomatedShopMessage in messageService.ts existiert (siehe vorheriger Schritt)
+            // SCHRITT 2: Auto-Antwort vom CREATOR an den FAN
             await messageService.sendAutomatedShopMessage(
                 creator.id,
                 currentUser.id,
                 selectedProduct.title
             );
-            console.log('Schritt 3 (Auto-Message) OK');
 
-            // ERFOLG
             toast({
                 title: "Kauf erfolgreich!",
                 description: "Der Creator wurde benachrichtigt. Bitte kläre die Versanddetails im Chat.",
-                duration: 5000
             });
 
-            // Zum Chat weiterleiten
             navigate('/messages');
-
         } catch (e: any) {
-            console.error("KAUF PROZESS FEHLER:", e);
-
-            toast({
-                title: "Fehler beim Abschluss",
-                description: `Technischer Fehler: ${e.message || JSON.stringify(e)}. Bitte Support kontaktieren.`,
-                variant: "destructive",
-                duration: 10000
-            });
+            console.error("Fehler nach Zahlung:", e);
+            // Wir zeigen keinen harten Fehler, da die Zahlung bei Stripe bereits durch ist.
+            navigate('/messages');
         }
     };
 

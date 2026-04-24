@@ -231,6 +231,7 @@ export default function SearchPage() {
         bio: post.creator.bio || '',
         followers: post.creator.followers || 0,
         subscriptionPrice: post.creator.subscriptionPrice || 0,
+        watermark_enabled: post.creator.watermark_enabled
       },
     })), [postResults]);
 

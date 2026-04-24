@@ -19,6 +19,7 @@ import { tierService, Tier } from '../../services/tierService';
 import SubscriptionModal from './SubscriptionModal';
 import ReportModal from './ReportModal';
 import { SecureMedia } from '../ui/SecureMedia';
+import { WatermarkLayer } from '../ui/WatermarkLayer';
 import FeedPreloader from './FeedPreloader'; // <-- NEU
 
 interface SubscriberFeedProps {
@@ -425,6 +426,13 @@ export default function SubscriberFeed({
           )}
 
           {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
+
+          {hasAccess && (
+            <WatermarkLayer 
+              username={currentPost.creator.username} 
+              enabled={currentPost.creator.watermark_enabled} 
+            />
+          )}
 
           <div className="absolute top-4 left-4 right-20 z-10">
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => !isProfileView && navigate(`/profile/${currentPost.creator.username || currentPost.creatorId}`)}>
