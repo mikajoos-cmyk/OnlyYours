@@ -281,6 +281,7 @@ export default function CreatorProfile() {
       username: creator.username,
       avatar: creator.avatarUrl || '',
       isVerified: creator.isVerified,
+      watermark_enabled: creator.watermark_enabled
     },
   }));
 

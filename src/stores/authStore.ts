@@ -9,6 +9,8 @@ interface AuthState {
   isAuthenticated: boolean;
   user: AppUser | null;
   isLoading: boolean;
+  isRecoveringPassword: boolean;
+  setRecoveringPassword: (value: boolean) => void;
   initialize: () => () => void;
   login: (email: string, password: string) => Promise<void>;
   loginWithOAuth: (provider: 'google' | 'apple') => Promise<void>;
@@ -21,6 +23,7 @@ interface AuthState {
   checkEmailAvailability: (email: string) => Promise<boolean>;
   verifyOtp: (email: string, token: string) => Promise<any>;
   resendOtp: (email: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
 }
 
 let authListenerSubscription: Subscription | null = null;
@@ -30,13 +33,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   user: null,
   isLoading: true,
+  isRecoveringPassword: false,
+
+  setRecoveringPassword: (value: boolean) => set({ isRecoveringPassword: value }),
 
   initialize: () => {
     if (initializationEnsured && authListenerSubscription) {
       return () => { };
     }
     if (!authListenerSubscription) {
-      const authSubscription = authService.onAuthStateChange(async (userFullProfile: AppUser | null) => {
+      const authSubscription = authService.onAuthStateChange(async (userFullProfile: AppUser | null, event?: string) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          set({ isRecoveringPassword: true });
+        }
+
         if (userFullProfile) {
           // NEU: Wenn der User gebannt ist, sofort wieder ausloggen
           if (userFullProfile.is_banned) {
@@ -151,5 +161,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   resendOtp: async (email: string) => {
     return authService.resendOtp(email);
+  },
+  resetPassword: async (email: string) => {
+    try {
+      await authService.resetPassword(email);
+    } catch (error) {
+      console.error('Password reset request failed:', error);
+      throw error;
+    }
   }
 }));

@@ -46,11 +46,10 @@ export default function Dashboard() {
       setLoading(true);
       setError(null);
       try {
-        const [summaryData, unreadCount, recentNotifications] = await Promise.all([
-          payoutService.getPayoutSummary(user.id),
-          notificationService.getUnreadNotificationCount(user.id),
-          notificationService.getRecentNotifications(user.id, 3)
-        ]);
+        const summaryData = await payoutService.getPayoutSummary(user.id);
+        const unreadCount = await notificationService.getUnreadNotificationCount(user.id);
+        const recentNotifications = await notificationService.getRecentNotifications(user.id, 3);
+
         const loadedStats: StatData[] = [
           {
             label: 'Abonnenten',

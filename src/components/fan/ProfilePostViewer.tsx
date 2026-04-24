@@ -27,6 +27,7 @@ export interface CreatorInfo {
   bio: string;
   followers: number;
   subscriptionPrice: number;
+  watermark_enabled?: boolean;
 }
 
 export interface PostData extends Omit<ServicePostData, 'creator'> {
@@ -251,6 +252,18 @@ export default function ProfilePostViewer({
           )}
 
           {hasAccess && <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60 pointer-events-none" />}
+
+          {hasAccess && currentPost.creator.watermark_enabled && (
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden opacity-10 select-none z-10">
+              <div className="grid grid-cols-2 gap-20 rotate-[-35deg] scale-125">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <span key={i} className={i % 2 === 0 ? "text-white text-2xl font-bold whitespace-nowrap" : "text-black text-2xl font-bold whitespace-nowrap"}>
+                    @{currentPost.creator.username || 'OnlyYours'}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="absolute top-4 left-4 right-20 z-10">
             <div className="flex items-center gap-3 cursor-pointer group" onClick={() => { onClose(); navigate(`/profile/${currentPost.creator.username}`); }}>

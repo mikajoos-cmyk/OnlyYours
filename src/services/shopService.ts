@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { storageService } from './storageService';
 
 export interface Product {
     id: string;
@@ -25,17 +26,17 @@ export class ShopService {
 
         if (error) throw error;
 
-        return (data || []).map((p: any) => ({
+        return Promise.all((data || []).map(async (p: any) => ({
             id: p.id,
             creatorId: p.creator_id,
             title: p.title,
             description: p.description,
-            imageUrl: p.image_url,
+            imageUrl: await storageService.resolveImageUrl(p.image_url),
             price: p.price,
             shippingCost: p.shipping_cost || 0,
             shippingIncluded: p.shipping_included || false,
             isActive: p.is_active
-        }));
+        })));
     }
 
     // Eigene Produkte laden (inkl. inaktive)
@@ -51,17 +52,17 @@ export class ShopService {
 
         if (error) throw error;
 
-        return (data || []).map((p: any) => ({
+        return Promise.all((data || []).map(async (p: any) => ({
             id: p.id,
             creatorId: p.creator_id,
             title: p.title,
             description: p.description,
-            imageUrl: p.image_url,
+            imageUrl: await storageService.resolveImageUrl(p.image_url),
             price: p.price,
             shippingCost: p.shipping_cost || 0,
             shippingIncluded: p.shipping_included || false,
             isActive: p.is_active
-        }));
+        })));
     }
 
     // Produkt erstellen

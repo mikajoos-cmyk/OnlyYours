@@ -13,6 +13,7 @@ interface Creator {
   avatarUrl: string; // Angepasst an CreatorProfile Daten
   username: string;
   isVerified?: boolean; // Optional hinzugefügt
+  watermark_enabled?: boolean;
 }
 
 interface Post {
@@ -56,6 +57,7 @@ export default function ProfilePostFeed({ isOpen, onClose, creator, allPosts, in
       avatar: creator.avatarUrl,
       isVerified: creator.isVerified,
       username: creator.username,
+      watermark_enabled: creator.watermark_enabled
     }
   }));
 

@@ -18,6 +18,7 @@ export interface Post {
     followers: number;
     subscriptionPrice: number;
     username?: string;
+    watermark_enabled?: boolean;
   };
   mediaUrl: string;
   mediaType: 'image' | 'video';
@@ -115,7 +116,8 @@ export class PostService {
                 bio,
                 followers_count,
                 subscription_price,
-                is_suspended
+                is_suspended,
+                watermark_enabled
               )
             `)
             .in('id', postIds);
@@ -146,8 +148,9 @@ export class PostService {
             bio,
             followers_count,
             subscription_price,
-            is_suspended
-          ) StandardPosts
+            is_suspended,
+            watermark_enabled
+          )
         `)
         .eq('is_published', true)
         .eq('moderation_status', 'ACTIVE')
@@ -212,8 +215,9 @@ export class PostService {
           bio,
           followers_count,
           subscription_price,
-          is_suspended
-        ) SubscriberFeed
+          is_suspended,
+          watermark_enabled
+        )
       `)
       .in('creator_id', creatorIds)
       .eq('is_published', true)
@@ -250,7 +254,8 @@ export class PostService {
           is_verified,
           bio,
           followers_count,
-          subscription_price
+          subscription_price,
+          watermark_enabled
         )
       `)
       .eq('creator_id', creatorId)
@@ -293,7 +298,8 @@ export class PostService {
           bio,
           followers_count,
           subscription_price,
-          is_suspended
+          is_suspended,
+          watermark_enabled
         )
       `)
       .eq('id', postId)
@@ -350,7 +356,8 @@ export class PostService {
           is_verified,
           bio,
           followers_count,
-          subscription_price
+          subscription_price,
+          watermark_enabled
         ),
         user_reports:user_reports!related_post_id (
           appeal_status
@@ -451,7 +458,8 @@ export class PostService {
           is_verified,
           bio,
           followers_count,
-          subscription_price
+          subscription_price,
+          watermark_enabled
         )
       `)
       .eq('is_published', true)
@@ -531,10 +539,11 @@ export class PostService {
         bio: post.creator.bio,
         followers: post.creator.followers_count,
         subscriptionPrice: parseFloat(post.creator.subscription_price),
+        watermark_enabled: post.creator.watermark_enabled
       },
-      mediaUrl: post.media_url,
+      mediaUrl: await storageService.resolveImageUrl(post.media_url),
       mediaType: post.media_type.toLowerCase() as 'image' | 'video',
-      thumbnail_url: post.thumbnail_url,
+      thumbnail_url: await storageService.resolveImageUrl(post.thumbnail_url),
       caption: post.caption,
       hashtags: post.hashtags,
       likes: post.likes_count,

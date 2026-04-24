@@ -82,9 +82,26 @@ export class StorageService {
    */
   async resolveImageUrl(filePath: string | null | undefined): Promise<string> {
     if (!filePath) return 'https://placehold.co/100x100';
-    if (filePath.startsWith('http') || filePath.startsWith('blob:') || filePath.startsWith('data:')) {
+    
+    // Blob- und Data-URLs (lokale Vorschau) direkt zurückgeben
+    if (filePath.startsWith('blob:') || filePath.startsWith('data:')) {
       return filePath;
     }
+
+    // Wenn es eine HTTP-URL ist, prüfen wir ob sie zu unserem Supabase Storage gehört
+    if (filePath.startsWith('http')) {
+      const path = this.extractPathFromUrl(filePath);
+      // Wenn der Pfad extrahiert werden konnte (d.h. er ist kürzer als die URL)
+      // ODER wenn die URL explizit unseren Bucket-Namen enthält
+      if (path !== filePath || filePath.includes(`/${this.bucketName}/`)) {
+        const signedUrl = await this.getSignedUrl(path);
+        return signedUrl || 'https://placehold.co/100x100';
+      }
+      // Externe URL
+      return filePath;
+    }
+
+    // Es ist bereits ein relativer Pfad
     const signedUrl = await this.getSignedUrl(filePath);
     return signedUrl || 'https://placehold.co/100x100';
   }

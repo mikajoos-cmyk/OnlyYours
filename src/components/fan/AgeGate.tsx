@@ -20,12 +20,20 @@ export default function AgeGate({ children }: AgeGateProps) {
   const startVerification = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-verification-session');
+      const { data, error } = await supabase.functions.invoke('create-verification-session', {
+        body: { userId: user?.id }
+      });
+      
+      // Das zeigt uns den genauen Inhalt in der Chrome Entwicklerkonsole
+      console.log("Antwort der Edge Function:", data);
+      
       if (error) throw error;
-      if (data?.url) {
-        window.location.href = data.url;
+
+      if (data?.redirectUrl) {
+        window.location.href = data.redirectUrl;
       } else {
-        throw new Error('Keine Verifizierungs-URL erhalten');
+        // HIER werfen wir den Fehler, aber drucken den gesamten Ondato-Inhalt mit aus!
+        throw new Error(`Keine Verifizierungs-URL gefunden. Ondato schickte: ${JSON.stringify(data?.rawOndatoData)}`);
       }
     } catch (err: any) {
       console.error('Verification error:', err);
@@ -52,7 +60,7 @@ export default function AgeGate({ children }: AgeGateProps) {
       <div className="space-y-2">
         <h2 className="text-2xl font-bold text-foreground">Altersverifikation erforderlich</h2>
         <p className="text-muted-foreground text-sm">
-          Um 18+ Inhalte sehen oder Abonnements abschließen zu können, musst du einmalig dein Alter verifizieren. Dies ist eine gesetzliche Vorgabe.
+          Um 18+ Inhalte sehen oder Abonnements abschließen zu können, musst du einmalig dein Alter verifizieren. Dies ist eine gesetzliche Vorgabe (KJM-konform).
         </p>
       </div>
 
@@ -84,12 +92,12 @@ export default function AgeGate({ children }: AgeGateProps) {
           ) : (
             <LockIcon className="w-5 h-5 mr-2" />
           )}
-          Jetzt Alter bestätigen
+          Jetzt Identität & Alter bestätigen
         </Button>
       )}
 
       <p className="text-[10px] text-muted-foreground">
-        Sicher & Diskret: Wir nutzen <strong>Yoti</strong>. Deine Ausweisdaten werden nicht bei uns gespeichert. Es erfolgt lediglich ein Abgleich deines Alters.
+        Sicher & Diskret: Wir nutzen <strong>Ondato</strong>. Deine Ausweisdaten werden nicht bei uns gespeichert.
       </p>
     </div>
   );

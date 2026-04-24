@@ -26,15 +26,27 @@ Deno.serve(async (req) => {
     const { creatorId, tierId, paymentMethodId } = await req.json();
 
     // 1. Customer ID holen/erstellen
+    const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+    
     const { data: profile } = await supabase.from("users").select("stripe_customer_id").eq("id", user.id).single();
     let customerId = profile?.stripe_customer_id;
 
     if (!customerId) {
       const c = await stripe.customers.create({ email: user.email, metadata: { supabase_uid: user.id } });
       customerId = c.id;
-      const sa = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
-      await sa.from("users").update({ stripe_customer_id: customerId }).eq("id", user.id);
+      await supabaseAdmin.from("users").update({ stripe_customer_id: customerId }).eq("id", user.id);
     }
+
+    // Creator Info laden für Stripe Connect
+    const { data: creatorProfile } = await supabaseAdmin
+        .from("users")
+        .select("stripe_account_id, stripe_onboarding_complete")
+        .eq("id", creatorId)
+        .single();
+
+    const creatorStripeAccountId = (creatorProfile?.stripe_account_id && creatorProfile?.stripe_onboarding_complete)
+        ? creatorProfile.stripe_account_id
+        : null;
 
     // 2. Preis ermitteln
     let priceAmount = 0;
@@ -98,6 +110,13 @@ Deno.serve(async (req) => {
             expand: ['latest_invoice.payment_intent']
           };
 
+          if (creatorStripeAccountId) {
+            updateParams.transfer_data = {
+              destination: creatorStripeAccountId,
+            };
+            updateParams.application_fee_percent = 20;
+          }
+
           if (sub.items.data[0].price.id !== targetPriceId) {
             updateParams.items = [{
               id: currentItemId,
@@ -129,7 +148,9 @@ Deno.serve(async (req) => {
       const metadataObj = {
         fan_id: user.id,
         creator_id: creatorId,
-        tier_id: tierId || 'null'
+        tier_id: tierId || 'null',
+        userId: user.id, // Fallback für Webhook
+        creatorId: creatorId // Fallback für Webhook
       };
 
       const subscriptionParams: any = {
@@ -140,6 +161,13 @@ Deno.serve(async (req) => {
         expand: ['latest_invoice.payment_intent'],
         metadata: metadataObj
       };
+
+      if (creatorStripeAccountId) {
+        subscriptionParams.transfer_data = {
+          destination: creatorStripeAccountId,
+        };
+        subscriptionParams.application_fee_percent = 20;
+      }
 
       if (paymentMethodId) {
         subscriptionParams.default_payment_method = paymentMethodId;
@@ -157,7 +185,7 @@ Deno.serve(async (req) => {
         fan_id: user.id,
         creator_id: creatorId,
         tier_id: tierId || null,
-        status: stripeSubscription.status === 'active' ? 'ACTIVE' : 'EXPIRED',
+        status: (stripeSubscription.status === 'active' || stripeSubscription.status === 'incomplete') ? 'ACTIVE' : 'EXPIRED',
         price: priceAmount / 100,
         start_date: new Date(stripeSubscription.start_date * 1000).toISOString(),
         end_date: new Date(stripeSubscription.current_period_end * 1000).toISOString(),

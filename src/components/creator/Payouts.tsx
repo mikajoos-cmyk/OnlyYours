@@ -4,6 +4,7 @@ import { Button } from '../ui/button';
 import { DollarSignIcon, TrendingUpIcon, CalendarIcon, Loader2Icon, Building2Icon, SettingsIcon } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { payoutService, PayoutSummary, PayoutTransaction } from '../../services/payoutService';
+import { authService } from '../../services/authService';
 import { useToast } from '../../hooks/use-toast';
 import {
   AlertDialog,
@@ -20,7 +21,7 @@ import { Input } from '../ui/input';
 import { supabase } from '../../lib/supabase'; // Supabase für Function Call
 
 export default function Payouts() {
-  const { user } = useAuthStore();
+  const { user, setUser } = useAuthStore();
   const { toast } = useToast();
 
   const [summary, setSummary] = useState<PayoutSummary | null>(null);
@@ -59,29 +60,58 @@ export default function Payouts() {
     }
   };
 
+  // --- NEU: Fängt den Nutzer ab, wenn er von Stripe zurückkommt ---
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('connected') === 'true') {
+      // 1. Erfolgsmeldung anzeigen
+      toast({
+        title: "Erfolgreich verbunden!",
+        description: "Dein Stripe-Konto wurde erfolgreich eingerichtet. Du kannst nun Auszahlungen empfangen.",
+      });
+      
+      // 2. Den Parameter aus der URL löschen, damit es beim Neuladen sauber aussieht
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // 3. User-Profil neu laden, damit isStripeConnected sofort auf true springt
+      authService.getCurrentUserFullProfile().then(profile => {
+        if (profile) {
+          setUser(profile as any);
+        }
+      });
+    }
+  }, []);
+
   useEffect(() => {
     fetchPayouts();
   }, [user?.id]);
 
-  // Handler für Stripe Connect (Bankkonto verbinden ODER Dashboard öffnen)
+  // Handler für Stripe Connect (angepasst an Pfotencard Logik)
   const handleConnectStripe = async () => {
     setIsConnectingStripe(true);
     try {
-      // Ruft die Edge Function auf.
-      // Das Backend entscheidet: Onboarding-Link (Neu) oder Dashboard-Link (Login)
-      const { data, error } = await supabase.functions.invoke('connect-stripe-account');
+      const { data, error } = await supabase.functions.invoke('connect-stripe-account', {
+        body: {
+          // Wir senden die aktuelle URL mit, damit Stripe genau hierhin zurückleitet!
+          return_url: window.location.href.split('?')[0] 
+        }
+      });
 
       if (error) throw error;
+      
       if (data?.url) {
-        // Weiterleitung zu Stripe (entweder Onboarding oder Dashboard zum Bearbeiten)
-        window.location.href = data.url;
+        window.location.href = data.url; // Leitet den User zu Stripe weiter
       } else {
         throw new Error("Keine Weiterleitungs-URL erhalten.");
       }
     } catch (err: any) {
       console.error("Fehler beim Verbinden mit Stripe:", err);
-      toast({ title: "Fehler", description: "Verbindung zu Stripe fehlgeschlagen.", variant: "destructive" });
-      setIsConnectingStripe(false); // Nur im Fehlerfall zurücksetzen, sonst leiten wir eh weiter
+      toast({ 
+        title: "Fehler", 
+        description: "Verbindung zu Stripe fehlgeschlagen. Bitte versuche es später erneut.", 
+        variant: "destructive" 
+      });
+      setIsConnectingStripe(false); // Spinner nur bei Fehler zurücksetzen
     }
   };
 

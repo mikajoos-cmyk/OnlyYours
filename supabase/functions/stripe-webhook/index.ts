@@ -39,6 +39,7 @@ Deno.serve(async (req) => {
         // --- 1. ABO ZAHLUNG / UPDATE ---
       case 'invoice.paid': {
         const invoice = event.data.object as any;
+        console.log(`📄 Processing invoice.paid: ${invoice.id}`);
 
         // ID finden
         let subscriptionId = typeof invoice.subscription === 'string'
@@ -52,46 +53,52 @@ Deno.serve(async (req) => {
               subscriptionId = line.subscription;
               break;
             }
-            if (line.parent?.subscription_item_details?.subscription) {
-              subscriptionId = line.parent.subscription_item_details.subscription;
-              break;
-            }
           }
         }
 
         if (!subscriptionId) {
-          console.log("Skipping: No subscription ID found in invoice.");
+          console.log("⚠️ Skipping: No subscription ID found in invoice.");
           break;
         }
 
         // Abo laden für Metadaten & Laufzeiten
         const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        console.log(`🔍 Subscription retrieved: ${subscription.id}`);
 
-        // Metadaten-Fallback
-        let { fan_id, creator_id, tier_id } = subscription.metadata;
+        // Metadaten-Fallback (Robust gegen camelCase/snake_case)
+        let fan_id = subscription.metadata.fan_id || subscription.metadata.userId || subscription.metadata.fanId;
+        let creator_id = subscription.metadata.creator_id || subscription.metadata.creatorId;
+        let tier_id = subscription.metadata.tier_id || subscription.metadata.tierId;
+
         if (!fan_id || !creator_id) {
+          console.log("ℹ️ No IDs in subscription metadata, checking invoice lines...");
           if (invoice.lines && invoice.lines.data) {
             for (const line of invoice.lines.data) {
-              if (line.metadata && line.metadata.fan_id) {
-                fan_id = line.metadata.fan_id;
-                creator_id = line.metadata.creator_id;
-                tier_id = line.metadata.tier_id;
+              const meta = line.metadata || {};
+              if (meta.fan_id || meta.userId || meta.fanId) {
+                fan_id = meta.fan_id || meta.userId || meta.fanId;
+                creator_id = meta.creator_id || meta.creatorId;
+                tier_id = meta.tier_id || meta.tierId;
                 break;
               }
             }
           }
         }
 
+        console.log(`👥 Metadata extracted -> Fan: ${fan_id}, Creator: ${creator_id}, Tier: ${tier_id}`);
+
         // Regulärer Preis aus dem Plan
         const planPrice = subscription.items.data[0]?.price.unit_amount ?? 0;
-
-        console.log(`Processing Sub ${subscriptionId} -> Fan: ${fan_id}, Plan Price: ${planPrice/100}`);
+        const totalAmount = invoice.amount_paid / 100;
+        const creatorShare = totalAmount * 0.8; // 80% gehen an den Creator
+        const hasDirectTransfer = !!subscription.transfer_data?.destination;
 
         if (fan_id && creator_id) {
+          console.log(`💾 Upserting subscription for fan ${fan_id}...`);
           const { error: subError } = await supabaseAdmin.from("subscriptions").upsert({
             fan_id: fan_id,
             creator_id: creator_id,
-            tier_id: tier_id === 'null' ? null : tier_id,
+            tier_id: (tier_id === 'null' || !tier_id) ? null : tier_id,
             status: 'ACTIVE',
             price: planPrice / 100,
             start_date: new Date(subscription.start_date * 1000).toISOString(),
@@ -105,15 +112,41 @@ Deno.serve(async (req) => {
           if (subError) console.error('❌ Sub Upsert Error:', subError);
           else console.log('✅ Subscription DB synced.');
 
-          // Payment Record
-          await supabaseAdmin.from("payments").insert({
+          // Payment Record (Wir speichern den Creator-Anteil als Einnahme)
+          console.log(`💰 Inserting payment record (Creator Share: ${creatorShare}€)...`);
+          const { error: payError } = await supabaseAdmin.from("payments").insert({
             user_id: fan_id,
             creator_id: creator_id,
-            amount: invoice.amount_paid / 100,
+            amount: creatorShare,
             type: 'SUBSCRIPTION',
             status: 'SUCCESS',
-            metadata: { from_webhook: true, stripe_sub_id: subscriptionId }
+            metadata: { 
+                from_webhook: true, 
+                stripe_sub_id: subscriptionId,
+                stripe_invoice_id: invoice.id,
+                full_amount: totalAmount,
+                is_destination_charge: hasDirectTransfer
+            }
           });
+          
+          if (payError) console.error('❌ Payment Insert Error:', payError);
+          else {
+              console.log('✅ Payment recorded.');
+              
+              // Wenn es eine Destination Charge war, markieren wir es sofort als ausgezahlt
+              if (hasDirectTransfer) {
+                  await supabaseAdmin.from("payouts").insert({
+                      creator_id: creator_id,
+                      amount: creatorShare,
+                      status: 'COMPLETED',
+                      payout_method: 'STRIPE_DIRECT',
+                      completed_at: new Date().toISOString()
+                  });
+                  console.log('✅ Automatic payout record created (Destination Charge).');
+              }
+          }
+        } else {
+            console.error("❌ Missing fan_id or creator_id. Cannot save to DB.");
         }
         break;
       }
@@ -121,6 +154,7 @@ Deno.serve(async (req) => {
         // --- 2. ABO ÄNDERUNG (Upgrade/Downgrade/Kündigung/Reaktivierung) ---
       case 'customer.subscription.updated': {
         const sub = event.data.object as any;
+        console.log(`🔄 Processing subscription.updated: ${sub.id}`);
         if (sub.id) {
           const currentPrice = sub.items?.data?.[0]?.price?.unit_amount ?? 0;
 
@@ -128,8 +162,6 @@ Deno.serve(async (req) => {
           if (sub.status === 'canceled') newStatus = 'CANCELED';
           if (sub.status === 'unpaid' || sub.status === 'past_due') newStatus = 'EXPIRED';
 
-          // FIX: Kein Fallback auf "Heute" mehr!
-          // Wir schreiben das Enddatum nur, wenn wir es sicher von Stripe bekommen.
           let endDateStr;
           if (sub.current_period_end) {
             endDateStr = new Date(sub.current_period_end * 1000).toISOString();
@@ -141,21 +173,20 @@ Deno.serve(async (req) => {
             status: newStatus,
           };
 
-          // Nur updaten, wenn Datum vorhanden. Sonst DB-Wert behalten.
           if (endDateStr) {
             updateData.end_date = endDateStr;
           }
 
-          // Tier ID nur updaten, wenn explizit vorhanden
           if (sub.metadata?.tier_id && sub.metadata.tier_id !== 'null') {
             updateData.tier_id = sub.metadata.tier_id;
           }
 
-          await supabaseAdmin.from("subscriptions")
+          const { error: updateError } = await supabaseAdmin.from("subscriptions")
               .update(updateData)
               .eq("stripe_subscription_id", sub.id);
 
-          console.log(`ℹ️ Subscription ${sub.id} updated via webhook (Auto-Renew: ${!sub.cancel_at_period_end})`);
+          if (updateError) console.error('❌ Sub Update Error:', updateError);
+          else console.log(`ℹ️ Subscription ${sub.id} updated via webhook.`);
         }
         break;
       }
@@ -187,18 +218,68 @@ Deno.serve(async (req) => {
         // --- 5. EINMALZAHLUNGEN ---
       case 'payment_intent.succeeded': {
         const pi = event.data.object as any;
-        const { userId, type, postId } = pi.metadata || {};
+        console.log(`💰 Processing payment_intent.succeeded: ${pi.id}`);
+        const meta = pi.metadata || {};
+        const userId = meta.userId || meta.fan_id || meta.fanId;
+        const type = meta.type;
+        const postId = meta.postId || meta.post_id;
+        const creatorId = meta.creatorId || meta.creator_id;
+
+        console.log(`🏷️ Meta: userId=${userId}, type=${type}, creatorId=${creatorId}`);
 
         if (userId && type && type !== 'SUBSCRIPTION') {
-          await supabaseAdmin.from("payments").insert({
+          console.log(`💾 Inserting payment record for ${type}...`);
+          const totalAmount = pi.amount / 100;
+          const creatorShare = totalAmount * 0.8;
+          const hasDirectTransfer = !!pi.transfer_data?.destination;
+
+          const { error: payError } = await supabaseAdmin.from("payments").insert({
             user_id: userId,
-            creator_id: pi.metadata.creatorId || null,
-            amount: pi.amount / 100,
+            creator_id: creatorId || null,
+            amount: creatorShare,
             type: type,
             status: 'SUCCESS',
-            related_id: postId || pi.metadata.productId || null,
-            metadata: pi.metadata
+            related_id: (postId && postId !== 'null') ? postId : (meta.productId || null),
+            metadata: {
+                ...meta,
+                full_amount: totalAmount,
+                is_destination_charge: hasDirectTransfer
+            }
           });
+
+          if (payError) console.error('❌ Payment Insert Error:', payError);
+          else {
+              console.log('✅ Payment recorded.');
+
+              if (hasDirectTransfer && creatorId) {
+                  await supabaseAdmin.from("payouts").insert({
+                      creator_id: creatorId,
+                      amount: creatorShare,
+                      status: 'COMPLETED',
+                      payout_method: 'STRIPE_DIRECT',
+                      completed_at: new Date().toISOString()
+                  });
+                  console.log('✅ Automatic payout record created (Destination Charge).');
+              }
+          }
+        } else {
+            console.log(`ℹ️ Skipping payment record (either missing data or is SUBSCRIPTION which is handled by invoice.paid)`);
+        }
+        break;
+      }
+
+        // --- 6. CONNECT ACCOUNT UPDATE ---
+      case 'account.updated': {
+        const account = event.data.object as any;
+        const onboardingComplete = account.details_submitted && 
+                                  account.charges_enabled && 
+                                  account.payouts_enabled;
+        
+        if (account.id) {
+          await supabaseAdmin.from("users")
+            .update({ stripe_onboarding_complete: onboardingComplete })
+            .eq("stripe_account_id", account.id);
+          console.log(`👤 Account ${account.id} updated: Onboarding Complete = ${onboardingComplete}`);
         }
         break;
       }

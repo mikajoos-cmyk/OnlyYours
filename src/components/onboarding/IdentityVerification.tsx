@@ -13,12 +13,11 @@ export default function IdentityVerification() {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-verification-session', {
-        body: { userId: user?.id, type: 'creator' }
+        body: { userId: user?.id }
       });
 
       if (error) throw error;
 
-      // Leitet den Nutzer zum KJM-konformen Flow des Anbieters weiter
       if (data.redirectUrl) {
         window.location.href = data.redirectUrl;
       }
@@ -49,7 +48,7 @@ export default function IdentityVerification() {
         <div className="space-y-2">
           <h2 className="text-2xl font-bold text-foreground">Identität & Alter bestätigen</h2>
           <p className="text-muted-foreground text-sm">
-            Um den deutschen Jugendschutzrichtlinien (KJM) zu entsprechen, müssen wir dich kurz verifizieren. Halte deine Kamera bereit.
+            Um den deutschen Jugendschutzrichtlinien (KJM) zu entsprechen, müssen wir dich kurz verifizieren. Halte deinen Ausweis bereit.
           </p>
         </div>
 
@@ -59,7 +58,7 @@ export default function IdentityVerification() {
             <div>
               <p className="text-sm font-medium text-yellow-700 dark:text-yellow-400">Prüfung läuft...</p>
               <p className="text-xs text-yellow-600 dark:text-yellow-500/80">
-                Ihre Dokumente werden gerade geprüft. Dies kann einige Minuten dauern. Bitte laden Sie die Seite später neu.
+                Deine Dokumente werden gerade geprüft. Dies kann einige Minuten dauern. Bitte lade die Seite später neu.
               </p>
             </div>
           </div>
@@ -71,7 +70,7 @@ export default function IdentityVerification() {
             <div>
               <p className="text-sm font-medium text-destructive">Verifizierung fehlgeschlagen</p>
               <p className="text-xs text-destructive/80">
-                Leider konnten wir Ihre Identität nicht bestätigen. Bitte versuchen Sie es erneut mit einem deutlichen Foto Ihres Ausweises.
+                Leider konnten wir deine Identität nicht bestätigen. Bitte versuche es erneut mit einem gut lesbaren Foto deines Ausweises.
               </p>
             </div>
           </div>
@@ -84,11 +83,7 @@ export default function IdentityVerification() {
               disabled={loading}
               className="w-full h-12 text-lg font-semibold"
             >
-              {loading ? (
-                <Loader2Icon className="w-5 h-5 animate-spin mr-2" />
-              ) : (
-                null
-              )}
+              {loading && <Loader2Icon className="w-5 h-5 animate-spin mr-2" />}
               {loading ? 'Sitzung wird erstellt...' : 'Verifizierung starten'}
             </Button>
           ) : (
@@ -102,7 +97,7 @@ export default function IdentityVerification() {
           )}
           
           <p className="text-[10px] text-muted-foreground">
-            Wir nutzen einen sicheren Drittanbieter für die Verifizierung. Ihre Ausweisdaten werden nicht auf unseren Servern gespeichert.
+            Sicher & Diskret: Wir nutzen <strong>Ondato</strong> für die Verifizierung. Deine Ausweisdaten werden nicht auf unseren Servern gespeichert.
           </p>
         </div>
       </div>

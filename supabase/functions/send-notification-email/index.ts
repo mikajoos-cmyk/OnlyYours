@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
+const SITE_URL = Deno.env.get('PUBLIC_SITE_URL') || 'https://only-yours.vercel.app';
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -58,7 +59,7 @@ serve(async (req) => {
                 htmlContent = `
                   <p>Hallo ${userProfile.display_name},</p>
                   <p>Dein abonnierter Creator <b>${data.creatorName}</b> hat gerade etwas Neues gepostet!</p>
-                  <p><a href="https://deine-domain.com/post/${data.postId}">Jetzt ansehen</a></p>
+                  <p><a href="${SITE_URL}/post/${data.postId}">Jetzt ansehen</a></p>
                 `;
                 break;
             case 'new_message':
@@ -78,7 +79,7 @@ serve(async (req) => {
             <div style="font-family: sans-serif; line-height: 1.5;">
               ${htmlContent}
               <hr />
-              <small>Du erhältst diese E-Mail, weil du Benachrichtigungen in deinem Profil aktiviert hast. Du kannst diese jederzeit in deinen <a href="https://deine-domain.com/profile">Profileinstellungen</a> deaktivieren.</small>
+              <small>Du erhältst diese E-Mail, weil du Benachrichtigungen in deinem Profil aktiviert hast. Du kannst diese jederzeit in deinen <a href="${SITE_URL}/profile">Profileinstellungen</a> deaktivieren.</small>
             </div>`
         };
 

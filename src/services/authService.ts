@@ -43,6 +43,7 @@ export interface AuthUser {
   birthdate?: string | null;
   email_notifications_enabled?: boolean;
   allow_direct_messages?: boolean;
+  watermark_enabled?: boolean;
 }
 
 export class AuthService {
@@ -58,6 +59,7 @@ export class AuthService {
       email,
       password,
       options: {
+        emailRedirectTo: window.location.origin,
         data: {
           username: cleanUsername,
           full_name: username,
@@ -252,14 +254,21 @@ export class AuthService {
     if (error) throw error;
   }
 
-  onAuthStateChange(callback: (user: AuthUser | null) => void) {
-    return supabase.auth.onAuthStateChange((_event, session) => {
+  async resetPassword(email: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}`,
+    });
+    if (error) throw error;
+  }
+
+  onAuthStateChange(callback: (user: AuthUser | null, event?: string) => void) {
+    return supabase.auth.onAuthStateChange((event, session) => {
       (async () => {
         if (session?.user) {
           const user = await this.getCurrentUserFullProfile();
-          callback(user);
+          callback(user, event);
         } else {
-          callback(null);
+          callback(null, event);
         }
       })();
     });
@@ -305,7 +314,8 @@ export class AuthService {
       // @ts-ignore
       appeal_status: appealStatus,
       email_notifications_enabled: userData.email_notifications_enabled,
-      allow_direct_messages: userData.allow_direct_messages
+      allow_direct_messages: userData.allow_direct_messages,
+      watermark_enabled: userData.watermark_enabled
     };
   }
 }

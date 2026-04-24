@@ -1,3 +1,4 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0"
 import Stripe from "npm:stripe@^14.25.0"
 
@@ -10,21 +11,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-Deno.serve(async (req) => {
-  // CORS Preflight
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // 1. Supabase Client erstellen
+    // 1. Hole die dynamische return_url aus dem Body (falls mitgesendet)
+    const body = await req.json().catch(() => ({}));
+    const origin = req.headers.get('origin') || 'https://only-yours.vercel.app';
+    const returnUrl = body.return_url || `${origin}/payouts`;
+
+    // 2. Supabase Auth Check
     const supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
         Deno.env.get('SUPABASE_ANON_KEY') ?? '',
         { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
     )
 
-    // 2. User authentifizieren
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
     if (userError || !user) throw new Error("Nicht authentifiziert")
 
@@ -44,20 +48,17 @@ Deno.serve(async (req) => {
 
     // --- FALL A: USER HAT BEREITS EINEN STRIPE ACCOUNT ---
     if (accountId) {
-      // Wir erstellen einen Login-Link zum Express Dashboard
-      // Dort kann der User seine Bankdaten (IBAN) ändern
+      // Login-Link zum Express Dashboard (um IBAN zu ändern etc.)
       const loginLink = await stripe.accounts.createLoginLink(accountId);
-
-      return new Response(
-          JSON.stringify({ url: loginLink.url }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return new Response(JSON.stringify({ url: loginLink.url }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
     }
 
     // --- FALL B: USER HAT NOCH KEINEN ACCOUNT (NEU ERSTELLEN) ---
     const account = await stripe.accounts.create({
       type: 'express',
-      country: 'DE', // Könnte man auch aus dem User-Profil lesen oder als Parameter übergeben
+      country: 'DE',
       email: user.email,
       capabilities: {
         card_payments: { requested: true },
@@ -66,30 +67,29 @@ Deno.serve(async (req) => {
     })
     accountId = account.id
 
-    // ID in DB speichern
+    // ID sofort in der DB speichern
     await supabaseAdmin
         .from('users')
         .update({ stripe_account_id: accountId })
         .eq('id', user.id)
 
-    // Onboarding Link erstellen
+    // Onboarding Link erstellen und den Nutzer danach zur returnUrl zurückschicken
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${req.headers.get('origin')}/payouts`,
-      return_url: `${req.headers.get('origin')}/payouts?connected=true`,
+      refresh_url: returnUrl, // Wohin, wenn er abbricht
+      return_url: `${returnUrl}?connected=true`, // Wohin, wenn er fertig ist (wir hängen connected=true an!)
       type: 'account_onboarding',
     })
 
-    return new Response(
-        JSON.stringify({ url: accountLink.url }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(JSON.stringify({ url: accountLink.url }), { 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
 
   } catch (error: any) {
     console.error(error)
-    return new Response(
-        JSON.stringify({ error: error.message }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(JSON.stringify({ error: error.message }), { 
+      status: 400, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    })
   }
 })

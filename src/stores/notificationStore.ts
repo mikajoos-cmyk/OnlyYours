@@ -31,10 +31,10 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
    */
   fetchNotifications: async (userId: string) => {
     try {
-      const [count, recent] = await Promise.all([
-        notificationService.getUnreadNotificationCount(userId),
-        notificationService.getRecentNotifications(userId, 5)
-      ]);
+      // Sequenzieller Abruf statt Promise.all, um "Failed to fetch" besser zu isolieren/vermeiden
+      const count = await notificationService.getUnreadNotificationCount(userId);
+      const recent = await notificationService.getRecentNotifications(userId, 5);
+      
       set({ unreadCount: count, recentNotifications: recent });
     } catch (error) {
       console.error("Fehler beim Abrufen der Benachrichtigungen:", error);

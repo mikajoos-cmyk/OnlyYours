@@ -2,7 +2,7 @@ import Stripe from "npm:stripe@^14.25.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") as string, {
-  apiVersion: "2022-11-15",
+  apiVersion: "2023-10-16",
 });
 
 const corsHeaders = {
@@ -24,6 +24,9 @@ Deno.serve(async (req) => {
     if (!user) throw new Error("Nicht authentifiziert");
 
     const { amount, setupFutureUsage, ...metadata } = await req.json();
+    const creatorId = metadata.creatorId || metadata.creator_id;
+
+    const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
 
     let { data: profile } = await supabase
         .from("users")
@@ -39,17 +42,44 @@ Deno.serve(async (req) => {
         metadata: { supabase_uid: user.id },
       });
       customerId = customer.id;
-      const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
       await supabaseAdmin.from("users").update({ stripe_customer_id: customerId }).eq("id", user.id);
     }
 
+    // Creator Account ID für Stripe Connect holen
+    let creatorStripeAccountId = null;
+    if (creatorId) {
+        const { data: creator } = await supabaseAdmin
+            .from("users")
+            .select("stripe_account_id, stripe_onboarding_complete")
+            .eq("id", creatorId)
+            .single();
+        
+        if (creator?.stripe_account_id && creator?.stripe_onboarding_complete) {
+            creatorStripeAccountId = creator.stripe_account_id;
+        }
+    }
+
+    const totalAmount = Math.round(amount * 100);
     const params: any = {
-      amount: Math.round(amount * 100),
+      amount: totalAmount,
       currency: "eur",
       customer: customerId,
       automatic_payment_methods: { enabled: true },
-      metadata: { ...metadata, userId: user.id },
+      metadata: { 
+        ...metadata, 
+        userId: user.id, 
+        fan_id: user.id,
+        creator_id: creatorId
+      },
     };
+
+    if (creatorStripeAccountId) {
+        params.transfer_data = {
+            destination: creatorStripeAccountId,
+        };
+        // 20% Gebühr für die Plattform
+        params.application_fee_amount = Math.round(totalAmount * 0.2);
+    }
 
     if (setupFutureUsage) {
       params.setup_future_usage = "off_session";

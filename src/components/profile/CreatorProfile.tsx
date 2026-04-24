@@ -66,6 +66,13 @@ export default function CreatorProfile() {
   const [welcomeMessage, setWelcomeMessage] = useState(user?.welcomeMessage || '');
   const [allowDMs, setAllowDMs] = useState(user?.allow_direct_messages ?? true);
 
+  // States für Formular "Rechnungsadresse"
+  const [addressStreet, setAddressStreet] = useState(user?.address_street || '');
+  const [addressCity, setAddressCity] = useState(user?.address_city || '');
+  const [addressZip, setAddressZip] = useState(user?.address_zip || '');
+  const [addressCountry, setAddressCountry] = useState(user?.address_country || '');
+  const [isAddressLoading, setIsAddressLoading] = useState(false);
+
   // Daten synchronisieren, wenn sich der User im Store ändert
   useEffect(() => {
     if (user) {
@@ -75,6 +82,11 @@ export default function CreatorProfile() {
       setWelcomeMessage(user.welcomeMessage || '');
       setAllowDMs(user.allow_direct_messages ?? true);
       setProfileHashtags(user.profileHashtags || []);
+      setAddressStreet(user.address_street || '');
+      setAddressCity(user.address_city || '');
+      setAddressZip(user.address_zip || '');
+      setAddressCountry(user.address_country || '');
+      setWatermarkEnabled(user.watermark_enabled ?? true);
     }
   }, [user]);
 
@@ -155,6 +167,7 @@ export default function CreatorProfile() {
     try {
       await updateProfile({
         display_name: displayName,
+        watermark_enabled: watermarkEnabled
       });
       toast({ title: "Branding gespeichert!" });
     } catch (error: any) {
@@ -221,6 +234,24 @@ export default function CreatorProfile() {
       toast({ title: "Speichern fehlgeschlagen", description: error.message, variant: "destructive" });
     } finally {
       setIsCommunicationLoading(false);
+    }
+  };
+
+  const handleAddressSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAddressLoading(true);
+    try {
+      await updateProfile({
+        address_street: addressStreet,
+        address_city: addressCity,
+        address_zip: addressZip,
+        address_country: addressCountry
+      });
+      toast({ title: "Rechnungsadresse gespeichert!" });
+    } catch (error: any) {
+      toast({ title: "Speichern fehlgeschlagen", description: error.message, variant: "destructive" });
+    } finally {
+      setIsAddressLoading(false);
     }
   };
 
@@ -309,6 +340,9 @@ export default function CreatorProfile() {
             </TabsTrigger>
             <TabsTrigger value="communication" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">
               Kommunikation
+            </TabsTrigger>
+            <TabsTrigger value="address" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">
+              Rechnungsadresse
             </TabsTrigger>
           </TabsList>
 
@@ -409,13 +443,12 @@ export default function CreatorProfile() {
                     <div>
                       <h3 className="text-foreground font-medium">Wasserzeichen aktivieren</h3>
                       <p className="text-sm text-muted-foreground">
-                        (Derzeit nicht implementiert)
+                        Ein dezentes Wasserzeichen mit Ihrem @username über Ihre Medien legen.
                       </p>
                     </div>
                     <Switch
                       checked={watermarkEnabled}
                       onCheckedChange={setWatermarkEnabled}
-                      disabled
                     />
                   </div>
                   {/* ... (Speichern Button) ... */}
@@ -643,6 +676,78 @@ export default function CreatorProfile() {
                   >
                     {isCommunicationLoading && <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />}
                     Änderungen speichern
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* --- RECHNUNGSADRESSE-TAB --- */}
+          <TabsContent value="address" className="mt-6">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-foreground">Rechnungsadresse</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleAddressSave} className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="address-street" className="text-foreground">Straße und Hausnummer</Label>
+                    <Input
+                      id="address-street"
+                      value={addressStreet}
+                      onChange={(e) => setAddressStreet(e.target.value)}
+                      placeholder="Musterstraße 1"
+                      className="bg-background text-foreground border-border"
+                      disabled={isAddressLoading}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="address-zip" className="text-foreground">PLZ</Label>
+                      <Input
+                        id="address-zip"
+                        value={addressZip}
+                        onChange={(e) => setAddressZip(e.target.value)}
+                        placeholder="12345"
+                        className="bg-background text-foreground border-border"
+                        disabled={isAddressLoading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="address-city" className="text-foreground">Stadt</Label>
+                      <Input
+                        id="address-city"
+                        value={addressCity}
+                        onChange={(e) => setAddressCity(e.target.value)}
+                        placeholder="Berlin"
+                        className="bg-background text-foreground border-border"
+                        disabled={isAddressLoading}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="address-country" className="text-foreground">Land</Label>
+                    <Input
+                      id="address-country"
+                      value={addressCountry}
+                      onChange={(e) => setAddressCountry(e.target.value)}
+                      placeholder="Deutschland"
+                      className="bg-background text-foreground border-border"
+                      disabled={isAddressLoading}
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-normal"
+                    disabled={isAddressLoading || (
+                      addressStreet === (user?.address_street || '') &&
+                      addressCity === (user?.address_city || '') &&
+                      addressZip === (user?.address_zip || '') &&
+                      addressCountry === (user?.address_country || '')
+                    )}
+                  >
+                    {isAddressLoading && <Loader2Icon className="w-5 h-5 mr-2 animate-spin" />}
+                    Adresse speichern
                   </Button>
                 </form>
               </CardContent>

@@ -32,9 +32,10 @@ import AGB from './components/legal/AGB';
 import CreatorVertrag from './components/legal/CreatorVertrag';
 import AdminDashboard from './pages/AdminDashboard';
 import SupportPage from './pages/SupportPage';
+import CreatorAddressGate from './components/creator/CreatorAddressGate';
 
 function App() {
-  const { isAuthenticated, isLoading, initialize, user } = useAuthStore();
+  const { isAuthenticated, isLoading, initialize, user, isRecoveringPassword } = useAuthStore();
   const { hasCompletedOnboarding } = useAppStore();
   const { loadSubscriptions, clearSubscriptions } = useSubscriptionStore();
   const { startPolling, stopPolling } = useNotificationStore.getState();
@@ -114,7 +115,7 @@ function App() {
     );
   }
 
-  const showOnboarding = !isAuthenticated || !hasCompletedOnboarding;
+  const showOnboarding = !isAuthenticated || !hasCompletedOnboarding || isRecoveringPassword;
 
   return (
     <Router>
@@ -137,15 +138,15 @@ function App() {
             <Route path="/feed" element={<AgeGate><SubscriberFeed /></AgeGate>} />
             <Route path="/search" element={<AgeGate><SearchPage /></AgeGate>} />
             <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/vault" element={<ContentVault />} />
-            <Route path="/post/new" element={<PostEditor />} />
+            <Route path="/dashboard" element={<CreatorAddressGate><Dashboard /></CreatorAddressGate>} />
+            <Route path="/vault" element={<CreatorAddressGate><ContentVault /></CreatorAddressGate>} />
+            <Route path="/post/new" element={<CreatorAddressGate><PostEditor /></CreatorAddressGate>} />
             <Route path="/messages" element={<AgeGate><Messages /></AgeGate>} />
-            <Route path="/statistics" element={<Statistics />} />
-            <Route path="/payouts" element={<Payouts />} />
+            <Route path="/statistics" element={<CreatorAddressGate><Statistics /></CreatorAddressGate>} />
+            <Route path="/payouts" element={<CreatorAddressGate><Payouts /></CreatorAddressGate>} />
             <Route path="/post/:postId" element={<AgeGate><PostPage /></AgeGate>} />
 
-            <Route path="/live" element={<AgeGate><LiveStreamWrapper /></AgeGate>} />
+            <Route path="/live" element={<AgeGate><CreatorAddressGate><LiveStreamWrapper /></CreatorAddressGate></AgeGate>} />
             <Route path="/live/:username" element={<AgeGate><LiveStreamWrapper /></AgeGate>} />
 
             {/* Rechtliche Routen */}

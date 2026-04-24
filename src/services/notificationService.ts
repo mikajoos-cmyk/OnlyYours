@@ -11,35 +11,47 @@ export class NotificationService {
    * Ruft die ANZAHL der ungelesenen Benachrichtigungen für einen Benutzer ab.
    */
   async getUnreadNotificationCount(userId: string): Promise<number> {
-    const { count, error } = await supabase
-      .from('notifications')
-      .select('id', { count: 'exact', head: true }) // Zählt effizient
-      .eq('user_id', userId)
-      .eq('is_read', false);
+    if (!userId) return 0;
+    try {
+      const { count, error } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true }) // Zählt effizient
+        .eq('user_id', userId)
+        .eq('is_read', false);
 
-    if (error) {
-      console.error('Error fetching unread notification count:', error);
-      throw error;
+      if (error) {
+        console.error('Error fetching unread notification count:', error);
+        return 0; // Rückfallwert statt Throw
+      }
+      return count || 0;
+    } catch (e) {
+      console.error('Network error fetching unread count:', e);
+      return 0;
     }
-    return count || 0;
   }
 
   /**
    * Ruft die neuesten Benachrichtigungen für einen Benutzer ab.
    */
   async getRecentNotifications(userId: string, limit: number = 5): Promise<NotificationRow[]> {
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false }) // Neueste zuerst
-      .limit(limit);
+    if (!userId) return [];
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false }) // Neueste zuerst
+        .limit(limit);
 
-    if (error) {
-      console.error('Error fetching recent notifications:', error);
-      throw error;
+      if (error) {
+        console.error('Error fetching recent notifications:', error);
+        return []; // Rückfallwert
+      }
+      return data || [];
+    } catch (e) {
+      console.error('Network error fetching recent notifications:', e);
+      return [];
     }
-    return data || [];
   }
 
   /**

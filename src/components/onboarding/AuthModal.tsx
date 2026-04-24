@@ -55,9 +55,9 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLogin, setIsLogin] = useState(true);
-  const [step, setStep] = useState<'auth' | 'verify' | 'forgot'>('auth');
+  const [step, setStep] = useState<'auth' | 'verify' | 'forgot' | 'reset'>('auth');
 
-  const { login, register, verifyOtp, checkUsernameAvailability, checkEmailAvailability } = useAuthStore();
+  const { login, register, verifyOtp, checkUsernameAvailability, checkEmailAvailability, resetPassword, changePassword, isRecoveringPassword, setRecoveringPassword } = useAuthStore();
   const { toast } = useToast();
 
   const [username, setUsername] = useState('');
@@ -76,6 +76,15 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
 
   const [verificationCode, setVerificationCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Recovery-Link in URL oder Store prüfen
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (isRecoveringPassword || (hash && (hash.includes('type=recovery') || hash.includes('access_token=')))) {
+      // Kurze Verzögerung, um sicherzustellen, dass das Modal bereit ist
+      setTimeout(() => setStep('reset'), 500);
+    }
+  }, [isRecoveringPassword]);
 
   // Username Validierung
   useEffect(() => {
@@ -224,6 +233,70 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
       onComplete();
     } catch (err: any) {
       toast({ title: "Fehler", description: "Ungültiger Code", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) {
+      toast({
+        title: "E-Mail fehlt",
+        description: "Bitte gib deine E-Mail-Adresse ein.",
+        variant: "destructive"
+      });
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await resetPassword(email);
+      toast({
+        title: "E-Mail gesendet",
+        description: "Bitte überprüfe dein Postfach für den Reset-Link.",
+      });
+      setStep('auth');
+    } catch (error: any) {
+      toast({
+        title: "Fehler",
+        description: error.message || "E-Mail konnte nicht gesendet werden.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password) return;
+    if (password !== confirmPassword) {
+      toast({
+        title: "Fehler",
+        description: "Passwörter stimmen nicht überein.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await changePassword(password);
+      toast({
+        title: "Passwort geändert",
+        description: "Dein Passwort wurde erfolgreich aktualisiert.",
+      });
+      // Hash aus URL entfernen
+      window.location.hash = '';
+      setRecoveringPassword(false);
+      setStep('auth');
+      setIsLogin(true);
+      onComplete(); // Onboarding abschließen, falls der Nutzer bereits eingeloggt war
+    } catch (error: any) {
+      toast({
+        title: "Fehler",
+        description: error.message || "Passwort konnte nicht geändert werden.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -390,9 +463,43 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
               <button onClick={() => setStep('auth')} className="text-muted-foreground hover:text-foreground"><ArrowLeftIcon className="w-5 h-5" /></button>
               <h2 className="text-2xl font-serif ml-4">Passwort vergessen?</h2>
             </div>
-            <div className="text-center py-8 text-muted-foreground">
-              Funktion wird gewartet. Bitte Support kontaktieren.
+            <p className="text-sm text-muted-foreground mb-4">Gib deine E-Mail-Adresse ein, um einen Reset-Link zu erhalten.</p>
+            <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label>E-Mail</Label>
+                <div className="relative">
+                  <MailIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="pl-10 bg-background border-border" placeholder="deine@email.de" />
+                </div>
+              </div>
+              <Button type="submit" className="w-full bg-secondary text-secondary-foreground" disabled={isLoading}>{isLoading ? <Loader2Icon className="animate-spin" /> : "Link senden"}</Button>
+            </form>
+          </>
+        )}
+
+        {step === 'reset' && (
+          <>
+            <div className="flex items-center mb-4">
+              <h2 className="text-2xl font-serif ml-4">Neues Passwort festlegen</h2>
             </div>
+            <p className="text-sm text-muted-foreground mb-4">Wähle jetzt ein neues Passwort für dein Konto.</p>
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Neues Passwort</Label>
+                <div className="relative">
+                  <LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input type="password" value={password} onChange={e => setPassword(e.target.value)} className="pl-10 bg-background border-border" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Passwort bestätigen</Label>
+                <div className="relative">
+                  <LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="pl-10 bg-background border-border" />
+                </div>
+              </div>
+              <Button type="submit" className="w-full bg-secondary text-secondary-foreground" disabled={isLoading}>{isLoading ? <Loader2Icon className="animate-spin" /> : "Passwort speichern"}</Button>
+            </form>
           </>
         )}
 
