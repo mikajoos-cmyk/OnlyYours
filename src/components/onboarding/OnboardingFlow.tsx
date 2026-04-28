@@ -8,9 +8,11 @@ import { useAppStore } from '../../stores/appStore';
 import { useAuthStore } from '../../stores/authStore';
 
 export default function OnboardingFlow() {
-  const [showSplash, setShowSplash] = useState(true);
   const { completeOnboarding } = useAppStore();
   const { isAuthenticated, user, isRecoveringPassword } = useAuthStore();
+  
+  // Splash nur zeigen, wenn nicht eingeloggt
+  const [showSplash, setShowSplash] = useState(!isAuthenticated);
 
   const handleSplashComplete = () => {
     setShowSplash(false);

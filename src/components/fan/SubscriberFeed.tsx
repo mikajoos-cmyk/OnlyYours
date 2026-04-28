@@ -68,6 +68,36 @@ export default function SubscriberFeed({
 
   const [showReportModal, setShowReportModal] = useState(false);
 
+  // URL Parameter Synchronisierung
+  useEffect(() => {
+    if (isProfileView) return; // CreatorProfile übernimmt das
+    if (!posts || posts.length === 0 || currentIndex < 0) return;
+    
+    const currentPost = posts[currentIndex];
+    if (!currentPost) return;
+
+    const newUrl = new URL(window.location.href);
+    if (newUrl.searchParams.get('post') !== currentPost.id) {
+      newUrl.searchParams.set('post', currentPost.id);
+      window.history.replaceState({}, '', newUrl.toString());
+    }
+  }, [currentIndex, posts, isProfileView]);
+
+  // Wiederherstellung aus URL beim Laden
+  useEffect(() => {
+    if (isProfileView) return;
+    if (!isLoading && posts.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const postId = params.get('post');
+      if (postId) {
+        const index = posts.findIndex(p => p.id === postId);
+        if (index > -1 && index !== currentIndex) {
+          useFeedStore.getState().setCurrentIndex(index);
+        }
+      }
+    }
+  }, [isLoading, posts, isProfileView]);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const isScrolling = useRef(false);
 

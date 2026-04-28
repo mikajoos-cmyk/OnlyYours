@@ -18,6 +18,7 @@ interface FeedState {
   loadCreatorPosts: (creatorId: string) => Promise<void>;
   nextPost: () => void;
   previousPost: () => void;
+  setCurrentIndex: (index: number) => void;
   toggleLike: (postId: string) => Promise<void>;
   incrementCommentCount: (postId: string) => void;
 }
@@ -127,6 +128,8 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     set((state) => ({
       currentIndex: Math.max(state.currentIndex - 1, 0),
     })),
+  
+  setCurrentIndex: (index: number) => set({ currentIndex: index }),
 
   toggleLike: async (postId: string) => {
     const state = get();

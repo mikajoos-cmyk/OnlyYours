@@ -41,6 +41,9 @@ function App() {
   const { startPolling, stopPolling } = useNotificationStore.getState();
 
   useEffect(() => {
+    console.log('[App] Initializing app...');
+    console.log('[App] Current URL:', window.location.href);
+    console.log('[App] Auth state:', { isAuthenticated, isLoading, hasCompletedOnboarding, userId: user?.id });
     const unsubscribeAuth = initialize();
     return () => {
       unsubscribeAuth();

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { PasswordInput } from '../ui/password-input';
 import { Label } from '../ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -12,7 +13,7 @@ import { subscriptionService } from '../../services/subscriptionService';
 import { storageService } from '../../services/storageService';
 import { paymentService, PaymentTransaction, SavedPaymentMethod } from '../../services/paymentService';
 import { useToast } from '../../hooks/use-toast';
-import { CameraIcon, CreditCardIcon, Loader2Icon, Trash2Icon, PlusIcon, XIcon, SettingsIcon, RefreshCwIcon } from 'lucide-react';
+import { CameraIcon, CreditCardIcon, Loader2Icon, Trash2Icon, PlusIcon, XIcon, SettingsIcon, RefreshCwIcon, BellIcon } from 'lucide-react';
 import AddPaymentMethodModal from '../fan/AddPaymentMethodModal';
 import ImageCropDialog from './ImageCropDialog';
 
@@ -45,6 +46,10 @@ export default function FanProfile() {
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   const [emailNotifications, setEmailNotifications] = useState(user?.email_notifications_enabled ?? true);
+  const [notifyNewPostInApp, setNotifyNewPostInApp] = useState(user?.notify_new_post_in_app ?? true);
+  const [notifyNewPostEmail, setNotifyNewPostEmail] = useState(user?.notify_new_post_email ?? true);
+  const [notifyNewMessageInApp, setNotifyNewMessageInApp] = useState(user?.notify_new_message_in_app ?? true);
+  const [notifyNewMessageEmail, setNotifyNewMessageEmail] = useState(user?.notify_new_message_email ?? true);
 
   const formatCurrency = (value: number) => {
     return `€${value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -101,6 +106,10 @@ export default function FanProfile() {
       setEmail(user.email || '');
       setInterests(user.interests || []);
       setEmailNotifications(user.email_notifications_enabled ?? true);
+      setNotifyNewPostInApp(user.notify_new_post_in_app ?? true);
+      setNotifyNewPostEmail(user.notify_new_post_email ?? true);
+      setNotifyNewMessageInApp(user.notify_new_message_in_app ?? true);
+      setNotifyNewMessageEmail(user.notify_new_message_email ?? true);
     }
   }, [user]);
 
@@ -177,6 +186,17 @@ export default function FanProfile() {
     }
   };
 
+  const handleToggleNotification = async (field: string, value: boolean, setter: (val: boolean) => void) => {
+    setter(value);
+    try {
+      await updateProfile({ [field]: value });
+      toast({ title: "Einstellungen aktualisiert", description: "Deine Benachrichtigungseinstellungen wurden gespeichert." });
+    } catch (error: any) {
+      setter(!value);
+      toast({ title: "Fehler", description: "Einstellung konnte nicht gespeichert werden.", variant: "destructive" });
+    }
+  };
+
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) return toast({ title: "Fehler", description: "Passwörter stimmen nicht überein.", variant: "destructive" });
@@ -240,6 +260,9 @@ export default function FanProfile() {
           <TabsTrigger value="security" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">Sicherheit</TabsTrigger>
           <TabsTrigger value="subscriptions" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">Abos</TabsTrigger>
           <TabsTrigger value="payments" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">Zahlungen</TabsTrigger>
+          <TabsTrigger value="notifications" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">
+            <BellIcon className="w-4 h-4 mr-2 hidden md:inline" /> Benachrichtigungen
+          </TabsTrigger>
           <TabsTrigger value="settings" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">Einstellungen</TabsTrigger>
         </TabsList>
 
@@ -280,8 +303,14 @@ export default function FanProfile() {
             <CardHeader><CardTitle className="text-foreground">Sicherheit</CardTitle></CardHeader>
             <CardContent>
               <form onSubmit={handlePasswordChange} className="space-y-4">
-                <div className="grid gap-2"><Label>Neues Passwort</Label><Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="bg-background border-border" /></div>
-                <div className="grid gap-2"><Label>Bestätigen</Label><Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="bg-background border-border" /></div>
+                <div className="grid gap-2">
+                  <Label>Neues Passwort</Label>
+                  <PasswordInput value={newPassword} onChange={e => setNewPassword(e.target.value)} className="bg-background border-border" />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Bestätigen</Label>
+                  <PasswordInput value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="bg-background border-border" />
+                </div>
                 <Button type="submit" className="bg-secondary text-secondary-foreground" disabled={isPasswordLoading}>{isPasswordLoading ? <Loader2Icon className="animate-spin mr-2" /> : "Passwort ändern"}</Button>
               </form>
             </CardContent>
@@ -383,6 +412,68 @@ export default function FanProfile() {
               </div>
               <div className="border-t border-border pt-6"><h3 className="font-medium mb-4">Historie</h3>
                 <div className="space-y-3">{transactions.map(t => (<div key={t.id} className="flex justify-between border-b border-border py-2"><div><p>{t.description}</p><p className="text-xs text-muted-foreground">{new Date(t.created_at).toLocaleDateString()}</p></div><span>-{formatCurrency(t.amount)}</span></div>))}</div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="notifications" className="mt-6">
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="text-foreground flex items-center gap-2">
+                <BellIcon className="w-5 h-5" /> Benachrichtigungen
+              </CardTitle>
+              <CardDescription>
+                Wählen Sie aus, wie Sie über Aktivitäten informiert werden möchten.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Neue Beiträge</h3>
+                <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">In-App Benachrichtigung</Label>
+                    <p className="text-sm text-muted-foreground">In der App benachrichtigt werden, wenn ein gefolgter Creator postet.</p>
+                  </div>
+                  <Switch 
+                    checked={notifyNewPostInApp} 
+                    onCheckedChange={(val) => handleToggleNotification('notify_new_post_in_app', val, setNotifyNewPostInApp)}
+                  />
+                </div>
+                <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">E-Mail Benachrichtigung</Label>
+                    <p className="text-sm text-muted-foreground">E-Mail erhalten, wenn ein gefolgter Creator postet.</p>
+                  </div>
+                  <Switch 
+                    checked={notifyNewPostEmail} 
+                    onCheckedChange={(val) => handleToggleNotification('notify_new_post_email', val, setNotifyNewPostEmail)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-4 border-t border-border">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Nachrichten</h3>
+                <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">In-App Benachrichtigung</Label>
+                    <p className="text-sm text-muted-foreground">Benachrichtigung bei neuen Direktnachrichten.</p>
+                  </div>
+                  <Switch 
+                    checked={notifyNewMessageInApp} 
+                    onCheckedChange={(val) => handleToggleNotification('notify_new_message_in_app', val, setNotifyNewMessageInApp)}
+                  />
+                </div>
+                <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">E-Mail Benachrichtigung</Label>
+                    <p className="text-sm text-muted-foreground">E-Mail bei neuen Direktnachrichten erhalten.</p>
+                  </div>
+                  <Switch 
+                    checked={notifyNewMessageEmail} 
+                    onCheckedChange={(val) => handleToggleNotification('notify_new_message_email', val, setNotifyNewMessageEmail)}
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { PasswordInput } from '../ui/password-input';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -57,7 +58,7 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [step, setStep] = useState<'auth' | 'verify' | 'forgot' | 'reset'>('auth');
 
-  const { login, register, verifyOtp, checkUsernameAvailability, checkEmailAvailability, resetPassword, changePassword, isRecoveringPassword, setRecoveringPassword } = useAuthStore();
+  const { login, loginWithOAuth, register, verifyOtp, checkUsernameAvailability, checkEmailAvailability, resetPassword, changePassword, isRecoveringPassword, setRecoveringPassword } = useAuthStore();
   const { toast } = useToast();
 
   const [username, setUsername] = useState('');
@@ -80,7 +81,9 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
   // Recovery-Link in URL oder Store prüfen
   useEffect(() => {
     const hash = window.location.hash;
-    if (isRecoveringPassword || (hash && (hash.includes('type=recovery') || hash.includes('access_token=')))) {
+    // Wir prüfen spezifisch auf type=recovery, da access_token= auch bei normalem Google Login vorkommt
+    if (isRecoveringPassword || (hash && hash.includes('type=recovery'))) {
+      console.log('[AuthModal] Recovery mode detected via hash or store');
       // Kurze Verzögerung, um sicherzustellen, dass das Modal bereit ist
       setTimeout(() => setStep('reset'), 500);
     }
@@ -157,6 +160,25 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
     }, 500);
   }, [email, isLogin, checkEmailAvailability]);
 
+
+  const handleGoogleLogin = async () => {
+    console.log('[AuthModal] Google login button clicked');
+    setIsLoading(true);
+    try {
+      await loginWithOAuth('google');
+      console.log('[AuthModal] loginWithOAuth initiated successfully');
+      // Hinweis: Die Weiterleitung erfolgt durch Supabase,
+      // das Modal muss hier nicht manuell geschlossen werden.
+    } catch (error: any) {
+      console.error('[AuthModal] Google login error:', error);
+      toast({
+        title: 'Google Login Fehler',
+        description: error.message,
+        variant: 'destructive'
+      });
+      setIsLoading(false);
+    }
+  };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -374,10 +396,12 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
                   <Label>Passwort</Label>
                   {isLogin && <span className="text-xs text-secondary cursor-pointer hover:underline" onClick={() => setStep('forgot')}>Vergessen?</span>}
                 </div>
-                <div className="relative">
-                  <LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input type="password" value={password} onChange={e => setPassword(e.target.value)} className="pl-10 bg-background border-border" />
-                </div>
+                <PasswordInput 
+                  value={password} 
+                  onChange={e => setPassword(e.target.value)} 
+                  className="bg-background border-border" 
+                  icon={<LockIcon className="w-5 h-5 text-muted-foreground" />}
+                />
               </div>
 
               {!isLogin && (
@@ -412,7 +436,12 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
 
                   <div className="space-y-2">
                     <Label>Passwort bestätigen</Label>
-                    <div className="relative"><LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" /><Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="pl-10 bg-background border-border" /></div>
+                    <PasswordInput 
+                      value={confirmPassword} 
+                      onChange={e => setConfirmPassword(e.target.value)} 
+                      className="bg-background border-border" 
+                      icon={<LockIcon className="w-5 h-5 text-muted-foreground" />}
+                    />
                   </div>
 
                   <div className="flex items-start space-x-2">
@@ -430,9 +459,15 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
             <div className="relative"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">Oder fortfahren mit</span></div></div>
 
             <div className="grid grid-cols-1 gap-4">
-              <Button type="button" variant="outline" className="bg-background text-foreground border-border hover:bg-neutral py-6" disabled>
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="bg-background text-foreground border-border hover:bg-neutral py-6"
+                onClick={handleGoogleLogin}
+                disabled={isLoading}
+              >
                 <ChromeIcon className="mr-2 w-5 h-5" />
-                Mit Google fortfahren (Wartung)
+                Mit Google fortfahren
               </Button>
             </div>
 
@@ -486,17 +521,21 @@ export default function AuthModal({ onComplete }: AuthModalProps) {
             <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label>Neues Passwort</Label>
-                <div className="relative">
-                  <LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input type="password" value={password} onChange={e => setPassword(e.target.value)} className="pl-10 bg-background border-border" />
-                </div>
+                <PasswordInput 
+                  value={password} 
+                  onChange={e => setPassword(e.target.value)} 
+                  className="bg-background border-border" 
+                  icon={<LockIcon className="w-5 h-5 text-muted-foreground" />}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Passwort bestätigen</Label>
-                <div className="relative">
-                  <LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="pl-10 bg-background border-border" />
-                </div>
+                <PasswordInput 
+                  value={confirmPassword} 
+                  onChange={e => setConfirmPassword(e.target.value)} 
+                  className="bg-background border-border" 
+                  icon={<LockIcon className="w-5 h-5 text-muted-foreground" />}
+                />
               </div>
               <Button type="submit" className="w-full bg-secondary text-secondary-foreground" disabled={isLoading}>{isLoading ? <Loader2Icon className="animate-spin" /> : "Passwort speichern"}</Button>
             </form>

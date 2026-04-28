@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Switch } from '../ui/switch';
 import { useAuthStore } from '../../stores/authStore';
-import { CameraIcon, ImageIcon, DollarSignIcon, MessageSquareIcon, Loader2Icon, PlusIcon, Trash2Icon, EditIcon, XIcon } from 'lucide-react';
+import { CameraIcon, ImageIcon, DollarSignIcon, MessageSquareIcon, Loader2Icon, PlusIcon, Trash2Icon, EditIcon, XIcon, BellIcon } from 'lucide-react';
 import { storageService } from '../../services/storageService';
 import { useToast } from '../../hooks/use-toast';
 import { tierService, Tier } from '../../services/tierService';
@@ -66,6 +66,12 @@ export default function CreatorProfile() {
   const [welcomeMessage, setWelcomeMessage] = useState(user?.welcomeMessage || '');
   const [allowDMs, setAllowDMs] = useState(user?.allow_direct_messages ?? true);
 
+  // States für Benachrichtigungen
+  const [notifyNewPostInApp, setNotifyNewPostInApp] = useState(user?.notify_new_post_in_app ?? true);
+  const [notifyNewPostEmail, setNotifyNewPostEmail] = useState(user?.notify_new_post_email ?? true);
+  const [notifyNewMessageInApp, setNotifyNewMessageInApp] = useState(user?.notify_new_message_in_app ?? true);
+  const [notifyNewMessageEmail, setNotifyNewMessageEmail] = useState(user?.notify_new_message_email ?? true);
+
   // States für Formular "Rechnungsadresse"
   const [addressStreet, setAddressStreet] = useState(user?.address_street || '');
   const [addressCity, setAddressCity] = useState(user?.address_city || '');
@@ -87,6 +93,10 @@ export default function CreatorProfile() {
       setAddressZip(user.address_zip || '');
       setAddressCountry(user.address_country || '');
       setWatermarkEnabled(user.watermark_enabled ?? true);
+      setNotifyNewPostInApp(user.notify_new_post_in_app ?? true);
+      setNotifyNewPostEmail(user.notify_new_post_email ?? true);
+      setNotifyNewMessageInApp(user.notify_new_message_in_app ?? true);
+      setNotifyNewMessageEmail(user.notify_new_message_email ?? true);
     }
   }, [user]);
 
@@ -237,6 +247,17 @@ export default function CreatorProfile() {
     }
   };
 
+  const handleToggleNotification = async (field: string, value: boolean, setter: (val: boolean) => void) => {
+    setter(value);
+    try {
+      await updateProfile({ [field]: value });
+      toast({ title: "Einstellungen aktualisiert", description: "Deine Benachrichtigungseinstellungen wurden gespeichert." });
+    } catch (error: any) {
+      setter(!value);
+      toast({ title: "Fehler", description: "Einstellung konnte nicht gespeichert werden.", variant: "destructive" });
+    }
+  };
+
   const handleAddressSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsAddressLoading(true);
@@ -340,6 +361,9 @@ export default function CreatorProfile() {
             </TabsTrigger>
             <TabsTrigger value="communication" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">
               Kommunikation
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">
+              <BellIcon className="w-4 h-4 mr-2 hidden md:inline" /> Benachrichtigungen
             </TabsTrigger>
             <TabsTrigger value="address" className="data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground flex-1">
               Rechnungsadresse
@@ -678,6 +702,65 @@ export default function CreatorProfile() {
                     Änderungen speichern
                   </Button>
                 </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="notifications" className="mt-6">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-foreground flex items-center gap-2">
+                  <BellIcon className="w-5 h-5" /> Benachrichtigungen
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Neue Beiträge</h3>
+                  <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label className="text-base">In-App Benachrichtigung</Label>
+                      <p className="text-sm text-muted-foreground">In der App benachrichtigt werden, wenn gefolgte Creators posten.</p>
+                    </div>
+                    <Switch 
+                      checked={notifyNewPostInApp} 
+                      onCheckedChange={(val) => handleToggleNotification('notify_new_post_in_app', val, setNotifyNewPostInApp)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label className="text-base">E-Mail Benachrichtigung</Label>
+                      <p className="text-sm text-muted-foreground">E-Mail erhalten, wenn gefolgte Creators posten.</p>
+                    </div>
+                    <Switch 
+                      checked={notifyNewPostEmail} 
+                      onCheckedChange={(val) => handleToggleNotification('notify_new_post_email', val, setNotifyNewPostEmail)}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-border">
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Nachrichten</h3>
+                  <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label className="text-base">In-App Benachrichtigung</Label>
+                      <p className="text-sm text-muted-foreground">Benachrichtigung bei neuen Direktnachrichten.</p>
+                    </div>
+                    <Switch 
+                      checked={notifyNewMessageInApp} 
+                      onCheckedChange={(val) => handleToggleNotification('notify_new_message_in_app', val, setNotifyNewMessageInApp)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label className="text-base">E-Mail Benachrichtigung</Label>
+                      <p className="text-sm text-muted-foreground">E-Mail bei neuen Direktnachrichten erhalten.</p>
+                    </div>
+                    <Switch 
+                      checked={notifyNewMessageEmail} 
+                      onCheckedChange={(val) => handleToggleNotification('notify_new_message_email', val, setNotifyNewMessageEmail)}
+                    />
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

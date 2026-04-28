@@ -42,21 +42,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return () => { };
     }
     if (!authListenerSubscription) {
+      console.log('[AuthStore] Initializing auth listener...');
       const authSubscription = authService.onAuthStateChange(async (userFullProfile: AppUser | null, event?: string) => {
+        console.log(`[AuthStore] Auth event received: ${event}`, userFullProfile ? `User: ${userFullProfile.email}` : 'No profile');
+        
         if (event === 'PASSWORD_RECOVERY') {
+          console.log('[AuthStore] Recovery event detected');
           set({ isRecoveringPassword: true });
         }
 
         if (userFullProfile) {
           // NEU: Wenn der User gebannt ist, sofort wieder ausloggen
           if (userFullProfile.is_banned) {
-            console.warn("User is banned. Logging out.");
+            console.warn("[AuthStore] User is banned. Logging out.");
             await authService.logout();
             set({ isAuthenticated: false, user: null, isLoading: false });
             useAppStore.getState().resetOnboarding();
             return;
           }
 
+          console.log('[AuthStore] Setting authenticated user and completing onboarding');
           set({
             isAuthenticated: true,
             user: userFullProfile,
@@ -64,6 +69,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           });
           useAppStore.getState().completeOnboarding();
         } else {
+          console.log('[AuthStore] No profile, setting unauthenticated');
           set({
             isAuthenticated: false,
             user: null,

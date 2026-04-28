@@ -21,7 +21,7 @@ export default function StripeSetupForm({ onSuccess }: { onSuccess: () => void }
     const { error } = await stripe.confirmSetup({
       elements,
       confirmParams: {
-        return_url: window.location.origin + '/profile', // Redirect URL bei Erfolg (für manche Methoden)
+        return_url: window.location.href,
       },
       redirect: "if_required",
     });

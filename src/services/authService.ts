@@ -44,6 +44,10 @@ export interface AuthUser {
   email_notifications_enabled?: boolean;
   allow_direct_messages?: boolean;
   watermark_enabled?: boolean;
+  notify_new_post_in_app?: boolean;
+  notify_new_post_email?: boolean;
+  notify_new_message_in_app?: boolean;
+  notify_new_message_email?: boolean;
 }
 
 export class AuthService {
@@ -126,17 +130,22 @@ export class AuthService {
   }
 
   async loginWithOAuth(provider: 'google' | 'apple') {
+    console.log(`[AuthService] Initiating OAuth login with provider: ${provider}`);
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: provider,
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: `${window.location.origin}/discover`,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
         },
       },
     });
-    if (error) throw error;
+    if (error) {
+      console.error(`[AuthService] OAuth login error:`, error);
+      throw error;
+    }
+    console.log(`[AuthService] OAuth login response data:`, data);
     return data;
   }
 
@@ -180,27 +189,41 @@ export class AuthService {
     return this.getCurrentUserFullProfile();
   }
 
-  async getCurrentUserFullProfile(): Promise<AuthUser | null> {
+  async getCurrentUserFullProfile(retries = 4): Promise<AuthUser | null> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return null;
 
     const freshUser = session.user;
+    let userData = null;
+    let currentRetries = retries;
 
-    const { data: userData, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', freshUser.id)
-      .single();
+    // Retry-Logik: Wartet kurz, falls der Datenbank-Trigger das Profil noch erstellt (wichtig nach Google OAuth)
+    while (currentRetries > 0 && !userData) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', freshUser.id)
+        .single();
 
-    if (error || !userData) {
+      if (data) {
+        userData = data;
+      } else {
+        // 500ms warten vor dem nächsten Versuch
+        await new Promise(resolve => setTimeout(resolve, 500));
+        currentRetries--;
+      }
+    }
+
+    if (!userData) {
       return null;
     }
 
     // --- FIX: Avatar & Banner URL auflösen ---
-    if ((userData as any).avatar_url) {
+    if ((userData as any).avatar_url && !(userData as any).avatar_url.startsWith('http')) {
+      // Nur über den Storage auflösen, wenn es keine externe URL (wie von Google) ist
       (userData as any).avatar_url = await storageService.resolveImageUrl((userData as any).avatar_url);
     }
-    if ((userData as any).banner_url) {
+    if ((userData as any).banner_url && !(userData as any).banner_url.startsWith('http')) {
       (userData as any).banner_url = await storageService.resolveImageUrl((userData as any).banner_url);
     }
     // --- ENDE FIX ---
@@ -241,7 +264,7 @@ export class AuthService {
       .update(updates)
       .eq('id', userId)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
     return data;
@@ -262,12 +285,35 @@ export class AuthService {
   }
 
   onAuthStateChange(callback: (user: AuthUser | null, event?: string) => void) {
+    console.log('[AuthService] onAuthStateChange listener registered');
     return supabase.auth.onAuthStateChange((event, session) => {
+      console.log(`[AuthService] Auth state changed: ${event}`, session?.user?.email);
       (async () => {
         if (session?.user) {
-          const user = await this.getCurrentUserFullProfile();
+          let user = await this.getCurrentUserFullProfile();
+          console.log(`[AuthService] Initial profile check for ${session.user.email}:`, user ? 'Found' : 'Not found');
+
+          // Wenn Session da, aber Profil noch nicht (z.B. OAuth Erstanmeldung), kurz warten
+          // Wir versuchen es ein paar Mal, falls der DB-Trigger noch läuft
+          if (!user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+            console.log(`[AuthService] Profile missing for ${event}, starting retries (User ID: ${session.user.id})...`);
+            let retries = 10; // Erhöht auf 10 Versuche (5 Sekunden)
+            while (retries > 0 && !user) {
+              console.log(`[AuthService] Retry ${11 - retries}/10 to fetch profile...`);
+              await new Promise(resolve => setTimeout(resolve, 500));
+              user = await this.getCurrentUserFullProfile();
+              retries--;
+            }
+            if (user) {
+              console.log(`[AuthService] Profile found after retries!`);
+            } else {
+              console.warn(`[AuthService] Profile still missing after all retries for user ${session.user.id}`);
+            }
+          }
+
           callback(user, event);
         } else {
+          console.log('[AuthService] No session, calling back with null');
           callback(null, event);
         }
       })();
@@ -315,7 +361,11 @@ export class AuthService {
       appeal_status: appealStatus,
       email_notifications_enabled: userData.email_notifications_enabled,
       allow_direct_messages: userData.allow_direct_messages,
-      watermark_enabled: userData.watermark_enabled
+      watermark_enabled: userData.watermark_enabled,
+      notify_new_post_in_app: userData.notify_new_post_in_app,
+      notify_new_post_email: userData.notify_new_post_email,
+      notify_new_message_in_app: userData.notify_new_message_in_app,
+      notify_new_message_email: userData.notify_new_message_email
     };
   }
 }

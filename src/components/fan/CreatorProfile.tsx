@@ -60,6 +60,61 @@ export default function CreatorProfile() {
   const [mediaTypeFilter, setMediaTypeFilter] = useState<'all' | 'images' | 'videos'>('all');
   const [tierFilter, setTierFilter] = useState<string>('all');
 
+  // URL Parameter Synchronisierung
+  useEffect(() => {
+    if (!posts || posts.length === 0) return;
+    
+    const newUrl = new URL(window.location.href);
+    let changed = false;
+
+    if (showPostFeed && posts[selectedPostIndex]) {
+      if (newUrl.searchParams.get('post') !== posts[selectedPostIndex].id) {
+        newUrl.searchParams.set('post', posts[selectedPostIndex].id);
+        newUrl.searchParams.delete('ppv');
+        changed = true;
+      }
+    } else if (showPpvModal && selectedPostForPpv) {
+      if (newUrl.searchParams.get('ppv') !== selectedPostForPpv.id) {
+        newUrl.searchParams.set('ppv', selectedPostForPpv.id);
+        newUrl.searchParams.delete('post');
+        changed = true;
+      }
+    } else {
+      if (newUrl.searchParams.has('post') || newUrl.searchParams.has('ppv')) {
+        newUrl.searchParams.delete('post');
+        newUrl.searchParams.delete('ppv');
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      window.history.replaceState({}, '', newUrl.toString());
+    }
+  }, [showPostFeed, showPpvModal, selectedPostIndex, selectedPostForPpv, posts]);
+
+  // Wiederherstellung aus URL beim Laden
+  useEffect(() => {
+    if (!isLoadingPosts && posts.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const postId = params.get('post');
+      const ppvId = params.get('ppv');
+      
+      if (postId) {
+        const index = posts.findIndex(p => p.id === postId);
+        if (index > -1) {
+          setSelectedPostIndex(index);
+          setShowPostFeed(true);
+        }
+      } else if (ppvId) {
+        const post = posts.find(p => p.id === ppvId);
+        if (post) {
+          setSelectedPostForPpv(post);
+          setShowPpvModal(true);
+        }
+      }
+    }
+  }, [isLoadingPosts, posts]);
+
   useEffect(() => {
     const fetchCreatorData = async () => {
       if (!username) {
@@ -286,14 +341,18 @@ export default function CreatorProfile() {
   }));
 
   const renderSubscribeButton = () => {
+    const baseButtonClasses = "font-normal transition-colors duration-200 w-full sm:flex-1 sm:min-w-[240px] max-w-[320px] text-lg py-6 px-6 rounded-full shadow-lg h-auto flex items-center justify-center";
+
     if (isOwnProfile) {
       return (
-        <Button
-          onClick={() => navigate('/profile')}
-          className="mt-4 md:mt-0 font-normal text-lg py-6 px-12 bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-full"
-        >
-          Profil bearbeiten
-        </Button>
+        <div className="flex flex-wrap items-center justify-center gap-4 mt-8 w-full max-w-3xl mx-auto">
+          <Button
+            onClick={() => navigate('/profile')}
+            className={cn(baseButtonClasses, "bg-secondary text-secondary-foreground hover:bg-secondary/90")}
+          >
+            Profil bearbeiten
+          </Button>
+        </div>
       );
     }
 
@@ -303,14 +362,12 @@ export default function CreatorProfile() {
       subscribeButton = (
         <Button
           disabled={true}
-          className="font-normal text-lg py-6 px-12 bg-neutral text-muted-foreground rounded-full"
+          className={cn(baseButtonClasses, "bg-neutral text-muted-foreground")}
         >
           Keine Abos verfügbar
         </Button>
       );
     } else {
-      const baseButtonClasses = "font-normal transition-colors duration-200 min-w-[200px] text-lg py-6 px-12 rounded-full shadow-lg";
-
       switch (subscriptionStatus) {
         case 'ACTIVE':
           subscribeButton = (
@@ -349,50 +406,57 @@ export default function CreatorProfile() {
       }
     }
 
-    if (creator.is_live) {
-      return (
-        <div className="flex flex-col md:flex-row items-center gap-4 mt-8">
-          <Button
-            onClick={() => navigate(`/live/${creator.username}`)}
-            className="font-normal text-lg py-6 px-12 bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-full shadow-lg animate-pulse"
-          >
-            <RadioIcon className="w-5 h-5 mr-2" />
-            JETZT LIVE
-          </Button>
-          {subscribeButton}
-        </div>
-      );
-    }
+    const followButton = !isOwnProfile && (
+      <Button
+        onClick={handleFollowToggle}
+        disabled={isFollowLoading}
+        variant={isFollowing ? "outline" : "secondary"}
+        className={cn(
+          baseButtonClasses,
+          isFollowing ? "border-2 border-secondary text-secondary hover:bg-secondary/10" : ""
+        )}
+      >
+        {isFollowLoading ? <Loader2Icon className="w-5 h-5 animate-spin" /> : (isFollowing ? 'Gefolgt' : 'Folgen')}
+      </Button>
+    );
+
+    const messageButton = !isOwnProfile && creator.allow_direct_messages && (
+      <Button 
+        variant="outline" 
+        className={cn(baseButtonClasses, "border-2 border-border hover:bg-neutral")}
+        onClick={() => navigate(`/messages?to=${creator.id}`)}
+      >
+        <MessageCircleIcon className="w-5 h-5 mr-2" />
+        Nachricht
+      </Button>
+    );
+
+    const shopButton = !isOwnProfile && (
+      <Button
+        onClick={() => navigate(`/shop/${creator.username}`)}
+        variant="outline"
+        className={cn(baseButtonClasses, "border-2 border-border hover:bg-neutral")}
+      >
+        <ShoppingBagIcon className="w-5 h-5 mr-2" />
+        Shop
+      </Button>
+    );
 
     return (
-      <div className="mt-8 flex flex-col items-center">
-        <div className="flex flex-col md:flex-row items-center gap-4">
-          {subscribeButton}
-          {!isOwnProfile && (
-            <Button
-              onClick={handleFollowToggle}
-              disabled={isFollowLoading}
-              variant={isFollowing ? "outline" : "secondary"}
-              className={cn(
-                "font-normal transition-colors duration-200 min-w-[150px] text-lg py-6 px-10 rounded-full shadow-lg",
-                isFollowing ? "border-2 border-secondary text-secondary hover:bg-secondary/10" : ""
-              )}
-            >
-              {isFollowLoading ? <Loader2Icon className="w-5 h-5 animate-spin" /> : (isFollowing ? 'Gefolgt' : 'Folgen')}
-            </Button>
-          )}
-        </div>
-
-        {!isOwnProfile && (
+      <div className="flex flex-wrap items-center justify-center gap-4 mt-8 w-full max-w-3xl mx-auto">
+        {creator.is_live && (
           <Button
-            onClick={() => navigate(`/shop/${creator.username}`)}
-            variant="outline"
-            className="mt-4 w-full md:w-auto border-foreground hover:bg-neutral"
+            onClick={() => navigate(`/live/${creator.username}`)}
+            className={cn(baseButtonClasses, "bg-destructive text-destructive-foreground hover:bg-destructive/90 animate-pulse")}
           >
-            <ShoppingBagIcon className="w-4 h-4 mr-2" />
-            Zum Shop
+            <RadioIcon className="w-5 h-5 mr-2" />
+            LIVE
           </Button>
         )}
+        {subscribeButton}
+        {followButton}
+        {messageButton}
+        {shopButton}
       </div>
     );
   };
@@ -417,43 +481,57 @@ export default function CreatorProfile() {
             </AvatarFallback>
           </Avatar>
 
-          <h1 className="text-4xl font-extrabold font-serif text-foreground mt-4 flex items-center gap-2">
-            {creator.displayName}
-            {creator.isVerified && <Badge className="bg-secondary text-secondary-foreground rounded-full px-3 py-1 text-sm">Verifiziert</Badge>}
-          </h1>
-          <p className="text-lg text-muted-foreground mt-1 font-semibold">{creator.bio}</p>
-
-          <div className="flex items-center gap-2 text-foreground mt-4 text-lg">
-            <UsersIcon className="w-5 h-5 text-secondary" />
-            <span className="font-bold">{creator.followersCount?.toLocaleString() || '0'}</span>
-            <span className="text-muted-foreground">Follower</span>
+          <div className="flex items-center justify-center gap-3 mt-4 flex-wrap">
+            <h1 className="text-4xl font-extrabold font-serif text-foreground">
+              {creator.displayName}
+            </h1>
+            <div className="flex items-center gap-2">
+              {creator.isVerified && (
+                <Badge className="bg-secondary text-secondary-foreground rounded-full px-4 py-1.5 text-sm font-bold shadow-sm">
+                  Verifiziert
+                </Badge>
+              )}
+              {!isOwnProfile && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowReportModal(true)}
+                  className="text-muted-foreground hover:text-destructive transition-colors h-10 w-10 bg-secondary/5 rounded-full"
+                  title="Profil melden"
+                >
+                  <FlagIcon className="w-5 h-5" />
+                </Button>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-4 mt-4">
-            {renderSubscribeButton()}
-            
-            {!isOwnProfile && creator.allow_direct_messages && (
-              <Button 
-                variant="outline" 
-                className="font-normal text-lg py-6 px-10 rounded-full shadow-lg border-2 border-border hover:bg-neutral"
-                onClick={() => navigate(`/messages?to=${creator.id}`)}
-              >
-                <MessageCircleIcon className="w-5 h-5 mr-2" />
-                Nachricht senden
-              </Button>
-            )}
+          <div className="flex items-center gap-8 mt-6">
+            <div className="flex flex-col items-center">
+              <span className="text-2xl font-bold text-foreground">
+                {creator.followersCount?.toLocaleString() || '0'}
+              </span>
+              <span className="text-xs text-muted-foreground uppercase tracking-widest font-bold">
+                Follower
+              </span>
+            </div>
+            <div className="flex flex-col items-center">
+              <span className="text-2xl font-bold text-foreground">
+                {posts.length.toLocaleString()}
+              </span>
+              <span className="text-xs text-muted-foreground uppercase tracking-widest font-bold">
+                Beiträge
+              </span>
+            </div>
+          </div>
 
-            {!isOwnProfile && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowReportModal(true)}
-                className="text-muted-foreground hover:text-destructive transition-colors"
-                title="Profil melden"
-              >
-                <FlagIcon className="w-5 h-5" />
-              </Button>
-            )}
+          {creator.bio && (
+            <p className="text-lg text-muted-foreground mt-6 font-medium max-w-2xl leading-relaxed whitespace-pre-wrap">
+              {creator.bio}
+            </p>
+          )}
+
+          <div className="w-full">
+            {renderSubscribeButton()}
           </div>
         </div>
 
